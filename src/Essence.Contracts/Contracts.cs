@@ -1,4 +1,4 @@
-namespace Essence.Api;
+namespace Essence.Contracts;
 
 public sealed record PagedList<T>(IReadOnlyList<T> Items, int Page, int PageSize, int Total);
 

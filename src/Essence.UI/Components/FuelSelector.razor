@@ -1,0 +1,18 @@
+@inject IStringLocalizer<Strings> L
+
+<div class="fuel" role="radiogroup" aria-label="@L["FuelLabel"]">
+    @foreach (var fuel in Fuels.All)
+    {
+        var active = string.Equals(fuel, Value, StringComparison.OrdinalIgnoreCase);
+        <button type="button" role="radio" aria-checked="@(active ? "true" : "false")" class="@(active ? "is-active" : null)"
+                @onclick="() => ValueChanged.InvokeAsync(fuel)">@fuel</button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Value { get; set; } = Fuels.Default;
+
+    [Parameter]
+    public EventCallback<string> ValueChanged { get; set; }
+}

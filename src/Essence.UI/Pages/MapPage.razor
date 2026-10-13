@@ -1,0 +1,433 @@
+@page "/"
+@implements IMapListener
+@implements IAsyncDisposable
+@inject EssenceApiClient Api
+@inject IDeviceLocation DeviceLocation
+@inject IPreferenceStore Preferences
+@inject EssenceUIOptions Options
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject IStringLocalizer<Strings> L
+
+<PageTitle>Essence</PageTitle>
+
+<div class="page">
+    <div class="map" @ref="_mapElement" role="region" aria-label="@L["MapLabel"]"></div>
+
+    <div class="toolbar">
+        <FuelSelector Value="@_fuel" ValueChanged="SetFuelAsync" />
+        <button type="button" class="locate" @onclick="() => LocateAsync(moveMap: true, fallBackToMontreal: false)"
+                aria-label="@L["LocateMe"]" title="@L["LocateMe"]">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round"><circle cx="12" cy="12" r="3" /><circle cx="12" cy="12" r="8" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3" /></svg>
+        </button>
+    </div>
+
+    <div class="status-slot">
+        <StatusChip Message="@StatusMessage" Busy="@(_locating || _loading)" />
+    </div>
+
+    @if (Station is { } stationId)
+    {
+        <StationDetails StationId="stationId" Fuel="@_fuel" UserLocation="_userLocation" OnClose="CloseDetailsAsync"
+                        OnLoaded="OnStationLoadedAsync" />
+    }
+</div>
+
+@code {
+    private const string FuelPreferenceKey = "essence.fuel";
+    private const double CompactBelowZoom = 12;
+    private const double OverviewZoom = 5.5;
+    private const double UserZoom = 13;
+    private const double FallbackZoom = 11;
+    private const double StationZoom = 14;
+    private static readonly GeoPoint Overview = new(46.6, -72.3);
+    private static readonly GeoPoint Montreal = new(45.5017, -73.5673);
+    private static readonly TimeSpan NoticeDuration = TimeSpan.FromSeconds(6);
+    private static readonly TimeSpan FailedRetryDelay = TimeSpan.FromSeconds(15);
+
+    /// <summary>Prices change at most every 5 minutes; an identical request within this window is skipped.</summary>
+    private static readonly TimeSpan FetchFreshness = TimeSpan.FromSeconds(30);
+
+    private readonly StationViewport _stations = new();
+    private MapInterop? _map;
+    private ElementReference _mapElement;
+    private string _fuel = Fuels.Default;
+    private Viewport? _viewport;
+    private GeoPoint? _userLocation;
+    private bool _mapReady;
+    private bool _locating;
+    private bool _loading;
+    private bool _loaded;
+    private int _visibleCount;
+    private ApiError _loadError;
+    private TimeSpan _retryDelay;
+    private string? _notice;
+    private (string Key, DateTimeOffset At)? _lastFetch;
+    private CancellationTokenSource? _loadCts;
+    private CancellationTokenSource? _retryCts;
+    private CancellationTokenSource? _noticeCts;
+
+    /// <summary>Set when this page pushed the <c>?station=</c> history entry, so closing goes back instead of forward.</summary>
+    private bool _openedHere;
+
+    /// <summary>A cold load with <c>?station=</c> centers on that station once it's loaded, instead of on the user.</summary>
+    private bool _centerOnStation;
+    private StationDetail? _pendingStation;
+
+    [SupplyParameterFromQuery(Name = "station")]
+    public long? Station { get; set; }
+
+    /// <summary>The one message worth showing right now, most important first.</summary>
+    private string? StatusMessage
+    {
+        get
+        {
+            if (_notice is not null)
+            {
+                return _notice;
+            }
+
+            if (_locating)
+            {
+                return L["Locating"];
+            }
+
+            if (_loadError != ApiError.None)
+            {
+                return _loadError == ApiError.RateLimited ? L["RateLimited", (int)Math.Ceiling(_retryDelay.TotalSeconds)] : L["LoadFailed"];
+            }
+
+            if (_viewport is { } viewport && !StationViewport.ShouldFetch(viewport))
+            {
+                return L["ZoomIn"];
+            }
+
+            if (_visibleCount == 0 && (_loading || _loaded))
+            {
+                return _loading ? L["LoadingStations"] : L["NoStations"];
+            }
+
+            return null;
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Station is null)
+        {
+            _openedHere = false;
+            _pendingStation = null;
+        }
+
+        if (_map is not null)
+        {
+            await _map.SetSelectedAsync(Station);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender)
+        {
+            return;
+        }
+
+        _fuel = Fuels.Normalize(await Preferences.GetAsync(FuelPreferenceKey));
+        _stations.SetFuel(_fuel);
+        var openedOnStation = Station is not null;
+        _centerOnStation = openedOnStation;
+
+        _map = new MapInterop(JS);
+        await _map.CreateAsync(
+            _mapElement,
+            new MapOptions(
+                Options.MapStyleUrl, Options.MapDarkStyleUrl, Overview.Latitude, Overview.Longitude, OverviewZoom, CompactBelowZoom,
+                CultureInfo.CurrentUICulture.TwoLetterISOLanguageName),
+            this);
+        _mapReady = true;
+        await _map.SetSelectedAsync(Station);
+        if (_pendingStation is not null)
+        {
+            await ShowStationAsync(_pendingStation);
+        }
+
+        StateHasChanged();
+
+        // Opened on a station: that's where the map goes, and the location only adds the user's dot.
+        await LocateAsync(moveMap: !openedOnStation, fallBackToMontreal: true);
+    }
+
+    /// <summary>
+    /// Shows where the user is and, with <paramref name="moveMap"/>, flies there. When the location isn't available,
+    /// <paramref name="fallBackToMontreal"/> (page load) shows Montréal instead of leaving the province overview.
+    /// </summary>
+    private async Task LocateAsync(bool moveMap, bool fallBackToMontreal)
+    {
+        _locating = true;
+        StateHasChanged();
+        var location = await DeviceLocation.GetCurrentAsync();
+        _locating = false;
+
+        if (location.Status == LocationStatus.Ok)
+        {
+            _userLocation = location.Point;
+            await _map!.ShowUserLocationAsync(location.Point);
+            if (moveMap)
+            {
+                await _map.FlyToAsync(location.Point, Math.Max(UserZoom, _viewport?.Zoom ?? 0));
+            }
+        }
+        else
+        {
+            string problem = location.Status == LocationStatus.Denied ? L["LocationDenied"] : L["LocationUnavailable"];
+            if (moveMap && fallBackToMontreal)
+            {
+                ShowNotice($"{problem} {L["ShowingMontreal"]}");
+                await _map!.FlyToAsync(Montreal, FallbackZoom);
+            }
+            else
+            {
+                ShowNotice(problem);
+            }
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task SetFuelAsync(string fuel)
+    {
+        if (!_stations.SetFuel(fuel))
+        {
+            return;
+        }
+
+        _fuel = fuel;
+        await Preferences.SetAsync(FuelPreferenceKey, fuel);
+        await RenderMarkersAsync();
+        if (_viewport is { } viewport)
+        {
+            await LoadAsync(viewport);
+        }
+    }
+
+    public async Task OnViewportChangedAsync(Viewport viewport)
+    {
+        _viewport = viewport;
+        await RenderMarkersAsync();
+        await LoadAsync(viewport);
+    }
+
+    /// <summary>
+    /// Fetches the stations around the viewport. A newer call cancels an older one still in flight, and the same request
+    /// isn't repeated while it's in flight or fresh (map events often report the same view twice).
+    /// </summary>
+    private async Task LoadAsync(Viewport viewport)
+    {
+        if (!StationViewport.ShouldFetch(viewport))
+        {
+            _retryCts?.Cancel();
+            _loadCts?.Cancel();
+            _lastFetch = null;
+            _loading = false;
+            _loadError = ApiError.None;
+            StateHasChanged();
+            return;
+        }
+
+        var fuel = _fuel;
+        var radiusKm = StationViewport.FetchRadiusKm(viewport);
+        var key = string.Create(CultureInfo.InvariantCulture, $"{fuel}|{viewport.CenterLat:0.0000}|{viewport.CenterLon:0.0000}|{radiusKm}");
+        if (_lastFetch is { } last && last.Key == key && DateTimeOffset.UtcNow - last.At < FetchFreshness)
+        {
+            return;
+        }
+
+        _retryCts?.Cancel();
+        _loadCts?.Cancel();
+        var cts = _loadCts = new CancellationTokenSource();
+        _lastFetch = (key, DateTimeOffset.UtcNow);
+        _loading = true;
+        StateHasChanged();
+
+        ApiResult<List<NearbyStation>> result;
+        try
+        {
+            result = await Api.GetNearbyAsync(viewport.CenterLat, viewport.CenterLon, radiusKm, fuel, StationViewport.FetchLimit, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (cts.IsCancellationRequested || fuel != _fuel)
+        {
+            return;
+        }
+
+        _loading = false;
+        _loadError = result.Error;
+        if (result.Value is { } stations)
+        {
+            _loaded = true;
+            _stations.Merge(stations, viewport.Center);
+            await RenderMarkersAsync();
+        }
+        else
+        {
+            _lastFetch = null;
+            _retryDelay = result.Error == ApiError.RateLimited ? result.RetryAfter ?? FailedRetryDelay : FailedRetryDelay;
+            _ = RetryLaterAsync(_retryDelay, (_retryCts = new CancellationTokenSource()).Token);
+        }
+
+        StateHasChanged();
+    }
+
+    private async Task RetryLaterAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(delay, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (_viewport is { } viewport)
+        {
+            await InvokeAsync(() => LoadAsync(viewport));
+        }
+    }
+
+    private async Task RenderMarkersAsync()
+    {
+        if (!_mapReady || _viewport is null)
+        {
+            return;
+        }
+
+        var visible = _stations.Visible(_viewport);
+        _visibleCount = visible.Count;
+        await _map!.SetMarkersAsync(visible.Select(ToMarker).ToList());
+    }
+
+    private MarkerModel ToMarker(VisibleStation visible)
+    {
+        var station = visible.Station;
+        var brand = BrandCatalog.For(station.Brand);
+        var name = $"{brand.Name ?? L["Independent"]}, {station.Address}";
+        var price = Formatting.Price(visible.HasPrice ? visible.Price!.PriceCents : null, CultureInfo.CurrentCulture);
+        var label = visible.HasPrice ? L["MarkerPrice", name, price] : L["MarkerUnavailable", name, _fuel];
+        var tone = visible.Tone switch
+        {
+            PriceTone.Low => "low",
+            PriceTone.Mid => "mid",
+            PriceTone.High => "high",
+            _ => "",
+        };
+        return new MarkerModel(
+            station.Id, station.Latitude, station.Longitude, label, price, !visible.HasPrice, tone, visible.ZIndex,
+            brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
+    }
+
+    public Task OnMarkerClickedAsync(long id)
+    {
+        if (Station != id)
+        {
+            // Switching stations replaces the entry, so Back still closes the pane instead of walking through stations.
+            var replace = Station is not null;
+            _openedHere |= !replace;
+            _centerOnStation = false;
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", id), replace: replace);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    public Task OnDismissAsync() => CloseDetailsAsync();
+
+    private async Task CloseDetailsAsync()
+    {
+        if (Station is null)
+        {
+            return;
+        }
+
+        if (_openedHere)
+        {
+            _openedHere = false;
+            await JS.InvokeVoidAsync("history.back");
+        }
+        else
+        {
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", (long?)null), replace: true);
+        }
+    }
+
+    private async Task OnStationLoadedAsync(StationDetail station)
+    {
+        if (_mapReady)
+        {
+            await ShowStationAsync(station);
+        }
+        else
+        {
+            _pendingStation = station;
+        }
+    }
+
+    private async Task ShowStationAsync(StationDetail station)
+    {
+        _pendingStation = null;
+        if (station is not { Latitude: { } lat, Longitude: { } lon })
+        {
+            return;
+        }
+
+        var point = new GeoPoint(lat, lon);
+        if (_centerOnStation)
+        {
+            _centerOnStation = false;
+            await _map!.FlyToAsync(point, StationZoom, besidePane: true);
+        }
+        else
+        {
+            await _map!.EnsureVisibleAsync(point);
+        }
+    }
+
+    private void ShowNotice(string message)
+    {
+        _noticeCts?.Cancel();
+        var cts = _noticeCts = new CancellationTokenSource();
+        _notice = message;
+        _ = ClearNoticeAsync(cts.Token);
+    }
+
+    private async Task ClearNoticeAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(NoticeDuration, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        _notice = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _loadCts?.Cancel();
+        _retryCts?.Cancel();
+        _noticeCts?.Cancel();
+        if (_map is not null)
+        {
+            await _map.DisposeAsync();
+        }
+    }
+}

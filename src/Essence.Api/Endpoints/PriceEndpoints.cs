@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using Essence.Contracts;
 using Essence.Data;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;

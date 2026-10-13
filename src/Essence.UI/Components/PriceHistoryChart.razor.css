@@ -1,0 +1,103 @@
+.chart {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.readout {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 12px;
+    min-height: 20px;
+    margin: 0;
+    font: 400 12px/20px var(--ess-font);
+    color: var(--ess-text-muted);
+}
+
+.readout .when {
+    color: var(--ess-text);
+    font-weight: 500;
+}
+
+.readout .item {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+
+.readout strong {
+    color: var(--ess-text);
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--fuel-color);
+}
+
+.plot {
+    position: relative;
+    height: 140px;
+    padding-left: 32px;
+}
+
+svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    touch-action: pan-y;
+}
+
+.grid {
+    stroke: var(--ess-border);
+    stroke-width: 1;
+}
+
+.line {
+    fill: none;
+    stroke: var(--fuel-color);
+    stroke-width: 1.5;
+    stroke-linejoin: round;
+    opacity: 0.55;
+}
+
+.line.is-highlighted {
+    stroke-width: 2.5;
+    opacity: 1;
+}
+
+.guide {
+    stroke: var(--ess-text-muted);
+    stroke-width: 1;
+    stroke-dasharray: 3 3;
+}
+
+.slice {
+    fill: transparent;
+}
+
+.ylabel {
+    position: absolute;
+    left: 0;
+    transform: translateY(-50%);
+    font: 400 11px/1 var(--ess-font);
+    color: var(--ess-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.xlabels {
+    display: flex;
+    justify-content: space-between;
+    padding-left: 32px;
+    font: 400 11px/1 var(--ess-font);
+    color: var(--ess-text-muted);
+}
+
+.fuel-0 { --fuel-color: var(--ess-fuel-0); }
+.fuel-1 { --fuel-color: var(--ess-fuel-1); }
+.fuel-2 { --fuel-color: var(--ess-fuel-2); }
+.fuel-3 { --fuel-color: var(--ess-fuel-3); }

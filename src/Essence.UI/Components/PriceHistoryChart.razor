@@ -1,0 +1,93 @@
+@inject IStringLocalizer<Strings> L
+
+@* Stepped price lines drawn in SVG, without a chart library or JS so it renders the same in the browser and in MAUI.
+   Text sits in HTML around the SVG because the SVG stretches to the panel's width. *@
+<div class="chart">
+    <p class="readout">
+        @if (_hover is { } time)
+        {
+            <span class="when">@time.ToLocalTime().ToString("d MMM HH:mm", CultureInfo.CurrentCulture)</span>
+            @foreach (var series in Data.Series)
+            {
+                <span class="item">
+                    <i class="swatch fuel-@Fuels.IndexOf(series.Fuel)"></i>@series.Fuel
+                    <strong>@Formatting.Price(series.At(time)?.PriceCents, CultureInfo.CurrentCulture)</strong>
+                </span>
+            }
+        }
+        else
+        {
+            <span class="item">@L["HistoryLow", Formatting.Price(Data.MinPrice, CultureInfo.CurrentCulture)]</span>
+            <span class="item">@L["HistoryHigh", Formatting.Price(Data.MaxPrice, CultureInfo.CurrentCulture)]</span>
+        }
+    </p>
+
+    <div class="plot">
+        <svg viewBox="0 0 @Width @Height" preserveAspectRatio="none" role="img" aria-label="@L["PriceHistory"]"
+             @onpointerleave="() => _hover = null">
+            @foreach (var tick in _ticks)
+            {
+                <line class="grid" x1="0" x2="@Width" y1="@Num(_scale.Y(tick))" y2="@Num(_scale.Y(tick))" vector-effect="non-scaling-stroke" />
+            }
+            @foreach (var series in Data.Series)
+            {
+                var highlighted = string.Equals(series.Fuel, HighlightFuel, StringComparison.OrdinalIgnoreCase);
+                <path class="line fuel-@Fuels.IndexOf(series.Fuel) @(highlighted ? "is-highlighted" : null)" d="@_scale.Path(series)"
+                      vector-effect="non-scaling-stroke" />
+            }
+            @if (_hover is { } hovered)
+            {
+                <line class="guide" x1="@Num(_scale.X(hovered))" x2="@Num(_scale.X(hovered))" y1="0" y2="@Height" vector-effect="non-scaling-stroke" />
+            }
+            @for (var i = 0; i < Slices; i++)
+            {
+                var sliceTime = SliceTime(i);
+                <rect class="slice" x="@Num(Width * i / (double)Slices)" y="0" width="@Num(Width / (double)Slices)" height="@Height"
+                      @onpointerenter="() => _hover = sliceTime" />
+            }
+        </svg>
+        @foreach (var tick in _ticks)
+        {
+            <span class="ylabel" style="top: @Num(_scale.Y(tick) / Height * 100)%">@tick.ToString("0", CultureInfo.CurrentCulture)</span>
+        }
+    </div>
+
+    <div class="xlabels">
+        <span>@Data.From.ToLocalTime().ToString(_axisFormat, CultureInfo.CurrentCulture)</span>
+        <span>@Data.To.ToLocalTime().ToString(_axisFormat, CultureInfo.CurrentCulture)</span>
+    </div>
+</div>
+
+@code {
+    private const double Width = 360;
+    private const double Height = 140;
+    private const int Slices = 60;
+
+    private ChartScale _scale = null!;
+    private decimal[] _ticks = [];
+    private string _axisFormat = "d MMM";
+    private DateTimeOffset? _hover;
+
+    /// <summary>Not empty: the parent shows its own message when there's no data.</summary>
+    [Parameter, EditorRequired]
+    public PriceChartData Data { get; set; } = null!;
+
+    /// <summary>Drawn thicker than the others: the fuel selected on the map.</summary>
+    [Parameter]
+    public string? HighlightFuel { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _scale = new ChartScale(Data, Width, Height, padTop: 10, padBottom: 10);
+        var middle = Math.Round((_scale.YMin + _scale.YMax) / 2);
+        _ticks = [_scale.YMax, middle, _scale.YMin];
+        _axisFormat = Data.To - Data.From < TimeSpan.FromDays(2) ? "d MMM HH:mm" : "d MMM";
+        _hover = null;
+    }
+
+    /// <summary>The middle of slice <paramref name="index"/> of the range.</summary>
+    private DateTimeOffset SliceTime(int index) =>
+        Data.From + (Data.To - Data.From) * ((index + 0.5) / Slices);
+
+    private static string Num(double value) => value.ToString("0.##", CultureInfo.InvariantCulture);
+}

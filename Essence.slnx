@@ -9,11 +9,15 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Essence.Api/Essence.Api.csproj" />
+    <Project Path="src/Essence.Contracts/Essence.Contracts.csproj" />
     <Project Path="src/Essence.Data/Essence.Data.csproj" />
     <Project Path="src/Essence.Ingest/Essence.Ingest.csproj" />
     <Project Path="src/Essence.Migrator/Essence.Migrator.csproj" />
+    <Project Path="src/Essence.UI/Essence.UI.csproj" />
+    <Project Path="src/Essence.Web/Essence.Web.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Essence.Ingest.Tests/Essence.Ingest.Tests.csproj" />
+    <Project Path="tests/Essence.UI.Tests/Essence.UI.Tests.csproj" />
   </Folder>
 </Solution>

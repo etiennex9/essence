@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="MapLabel" xml:space="preserve">
+    <value>Map of fuel stations</value>
+  </data>
+  <data name="Locating" xml:space="preserve">
+    <value>Finding your location…</value>
+  </data>
+  <data name="LocateMe" xml:space="preserve">
+    <value>Show my location</value>
+  </data>
+  <data name="ZoomIn" xml:space="preserve">
+    <value>Zoom in to see stations</value>
+  </data>
+  <data name="LocationDenied" xml:space="preserve">
+    <value>Location access is off.</value>
+  </data>
+  <data name="LocationUnavailable" xml:space="preserve">
+    <value>Your location isn’t available.</value>
+  </data>
+  <data name="ShowingMontreal" xml:space="preserve">
+    <value>Showing Montréal.</value>
+  </data>
+  <data name="LoadingStations" xml:space="preserve">
+    <value>Loading stations…</value>
+  </data>
+  <data name="NoStations" xml:space="preserve">
+    <value>No stations in this area</value>
+  </data>
+  <data name="RateLimited" xml:space="preserve">
+    <value>Too many requests. Retrying in {0} s.</value>
+  </data>
+  <data name="LoadFailed" xml:space="preserve">
+    <value>Couldn’t load stations. Retrying shortly.</value>
+  </data>
+  <data name="FuelLabel" xml:space="preserve">
+    <value>Fuel</value>
+  </data>
+  <data name="Close" xml:space="preserve">
+    <value>Close</value>
+  </data>
+  <data name="Directions" xml:space="preserve">
+    <value>Directions</value>
+  </data>
+  <data name="CurrentPrices" xml:space="preserve">
+    <value>Current prices</value>
+  </data>
+  <data name="PriceHistory" xml:space="preserve">
+    <value>Price history</value>
+  </data>
+  <data name="Unavailable" xml:space="preserve">
+    <value>Unavailable</value>
+  </data>
+  <data name="PeriodDays" xml:space="preserve">
+    <value>{0} days</value>
+  </data>
+  <data name="Changed" xml:space="preserve">
+    <value>Changed {0}</value>
+  </data>
+  <data name="AgoJustNow" xml:space="preserve">
+    <value>just now</value>
+  </data>
+  <data name="AgoMinutes" xml:space="preserve">
+    <value>{0} min ago</value>
+  </data>
+  <data name="AgoHours" xml:space="preserve">
+    <value>{0} h ago</value>
+  </data>
+  <data name="AgoDays" xml:space="preserve">
+    <value>{0} d ago</value>
+  </data>
+  <data name="StationNotFound" xml:space="preserve">
+    <value>This station isn’t in the data anymore.</value>
+  </data>
+  <data name="DetailsFailed" xml:space="preserve">
+    <value>Couldn’t load this station.</value>
+  </data>
+  <data name="HistoryFailed" xml:space="preserve">
+    <value>Couldn’t load the price history.</value>
+  </data>
+  <data name="Retry" xml:space="preserve">
+    <value>Retry</value>
+  </data>
+  <data name="HistoryEmpty" xml:space="preserve">
+    <value>No prices in this period.</value>
+  </data>
+  <data name="HistoryLow" xml:space="preserve">
+    <value>Low {0}</value>
+  </data>
+  <data name="HistoryHigh" xml:space="preserve">
+    <value>High {0}</value>
+  </data>
+  <data name="Independent" xml:space="preserve">
+    <value>Independent</value>
+  </data>
+  <data name="DistanceKm" xml:space="preserve">
+    <value>{0} km away</value>
+  </data>
+  <data name="Inactive" xml:space="preserve">
+    <value>No longer in the Régie’s data</value>
+  </data>
+  <data name="MarkerPrice" xml:space="preserve">
+    <value>{0}, {1} ¢/L</value>
+  </data>
+  <data name="MarkerUnavailable" xml:space="preserve">
+    <value>{0}, {1} unavailable</value>
+  </data>
+  <data name="NotFoundTitle" xml:space="preserve">
+    <value>Page not found</value>
+  </data>
+  <data name="BackToMap" xml:space="preserve">
+    <value>Back to the map</value>
+  </data>
+</root>

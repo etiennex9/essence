@@ -2,7 +2,8 @@
 
 Continuously ingests Québec fuel prices published by the Régie de l'énergie
 (`https://regieessencequebec.ca/stations.geojson.gz`, about 2,460 stations, regenerated every 5 minutes)
-into PostgreSQL, keeping the station list and a full price-change history, and serves them through a read-only HTTP API.
+into PostgreSQL, keeping the station list and a full price-change history, serves them through a read-only HTTP API,
+and shows them on a map of nearby stations.
 
 | Project | What it does |
 |---|---|
@@ -10,8 +11,11 @@ into PostgreSQL, keeping the station list and a full price-change history, and s
 | `src/Essence.Ingest` | Worker: polls the feed, archives each new file, diffs it against the database and writes only the changes. Backfills missed versions from the Régie's xlsx files. |
 | `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. |
 | `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
-| `src/Essence.Web` | Placeholder for the future front-end. |
+| `src/Essence.Contracts` | The API's response records, shared by the API and the UI. |
+| `src/Essence.UI` | Razor class library: the map page, the station details pane and everything behind them. Shared with a future MAUI app. |
+| `src/Essence.Web` | Blazor WebAssembly host for `Essence.UI`, served as static files by nginx. See [its README](src/Essence.Web/README.md). |
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. |
+| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, translations. |
 
 The full design and its rationale are in [docs/PLAN.md](docs/PLAN.md).
 
@@ -24,8 +28,8 @@ cp .env.example .env    # then edit the passwords
 docker compose up --build
 ```
 
-Compose starts `postgres`, then `migrate` (exits 0 once the schema and roles are in place), then `ingest` and `api`.
-The API listens on <http://localhost:8080>; the interactive docs are at <http://localhost:8080/scalar>.
+Compose starts `postgres`, then `migrate` (exits 0 once the schema and roles are in place), then `ingest` and `api`, and `web`.
+The map is at <http://localhost:8081>. The API listens on <http://localhost:8080>; the interactive docs are at <http://localhost:8080/scalar>.
 
 ```bash
 curl localhost:8080/health
@@ -52,6 +56,17 @@ To add a migration after changing the model:
 ```bash
 dotnet tool restore
 dotnet ef migrations add <Name> --project src/Essence.Data --startup-project src/Essence.Data
+```
+
+To work on the map, run the back end in Docker and the web app with hot reload; it opens on <http://localhost:5173>,
+an origin the API already allows:
+
+```bash
+docker compose up -d postgres migrate ingest api
+```
+
+```bash
+dotnet watch --project src/Essence.Web
 ```
 
 To run an app outside Docker, give it a connection string, e.g.
@@ -108,7 +123,7 @@ In the Development environment, logs are plain text and the ingest archive goes 
 
 Fuel names accept or omit accents (`Regulier` = `Régulier`). Errors are ProblemDetails. Requests are rate limited per client IP
 (`RateLimiting:PermitLimit` per `RateLimiting:WindowSeconds`, 120/60 s by default). Allowed CORS origins come from
-`Cors:AllowedOrigins` (`CORS_ORIGIN` in `.env`).
+`Cors:AllowedOrigins`: in Compose, `CORS_ORIGIN` from `.env` and the web container's origin (`http://localhost:WEB_PORT`).
 
 ## Configuration
 

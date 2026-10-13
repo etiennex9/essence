@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!-- The map page and everything behind it, shared by the Blazor WebAssembly host (Essence.Web) and a future MAUI Blazor Hybrid app. -->
+
+  <ItemGroup>
+    <SupportedPlatform Include="browser" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+    <PackageReference Include="Microsoft.Extensions.Localization" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Essence.Contracts\Essence.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

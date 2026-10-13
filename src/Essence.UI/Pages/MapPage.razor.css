@@ -1,0 +1,76 @@
+.page {
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    background: var(--ess-bg);
+}
+
+/* z-index makes the map its own stacking context, so marker z-indexes can't rise above the toolbar or the details pane. */
+.map {
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+}
+
+/* The toolbar and status float over the map; only their own controls take clicks. */
+.toolbar {
+    position: absolute;
+    z-index: 10;
+    top: max(12px, env(safe-area-inset-top));
+    left: 12px;
+    right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    pointer-events: none;
+}
+
+.toolbar > ::deep * {
+    pointer-events: auto;
+}
+
+.locate {
+    display: grid;
+    place-items: center;
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    border: 0.5px solid var(--ess-border);
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    box-shadow: var(--ess-shadow);
+    cursor: pointer;
+}
+
+.locate:hover {
+    color: var(--ess-accent);
+}
+
+.locate:focus-visible {
+    outline: 2px solid var(--ess-accent);
+    outline-offset: 2px;
+}
+
+.status-slot {
+    position: absolute;
+    z-index: 10;
+    top: calc(max(12px, env(safe-area-inset-top)) + 54px);
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: center;
+    pointer-events: none;
+}
+
+/* On wide screens the details panel takes the right edge: the controls group on the left and the status moves to the bottom. */
+@media (min-width: 768px) {
+    .toolbar {
+        justify-content: flex-start;
+    }
+
+    .status-slot {
+        top: auto;
+        bottom: 28px;
+    }
+}

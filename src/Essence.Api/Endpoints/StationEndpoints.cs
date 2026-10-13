@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq.Expressions;
+using Essence.Contracts;
 using Essence.Data;
 using Essence.Data.Entities;
 using Microsoft.AspNetCore.Http.HttpResults;

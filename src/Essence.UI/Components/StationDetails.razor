@@ -1,0 +1,256 @@
+@implements IDisposable
+@inject EssenceApiClient Api
+@inject IStringLocalizer<Strings> L
+
+@* A side panel on wide screens, a bottom sheet on narrow ones (see the CSS). data-ess-pane lets the map pan the
+   selected station out from under it. *@
+<aside class="details" data-ess-pane role="dialog" aria-labelledby="ess-details-title">
+    <div class="handle" aria-hidden="true"></div>
+
+    <header>
+        <span class="logo @(_brand.Monogram.Length > 1 ? "is-wide" : null)" style="--logo-bg: @_brand.Background; --logo-fg: @_brand.Foreground">
+            @if (_brand.LogoUrl is { } logoUrl)
+            {
+                <img src="@logoUrl" alt="" />
+            }
+            else
+            {
+                @_brand.Monogram
+            }
+        </span>
+        <div class="titles">
+            <h2 id="ess-details-title">@(_station is null ? (_error == ApiError.None ? "…" : "") : Title)</h2>
+            @if (_station is not null)
+            {
+                <p>@_station.Address</p>
+            }
+        </div>
+        <button type="button" class="close" @onclick="OnClose" aria-label="@L["Close"]" title="@L["Close"]">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
+        </button>
+    </header>
+
+    <div class="body">
+        @if (_error != ApiError.None)
+        {
+            <p class="message">@(_error == ApiError.NotFound ? L["StationNotFound"] : L["DetailsFailed"])</p>
+            @if (_error != ApiError.NotFound)
+            {
+                <button type="button" class="link" @onclick="LoadAsync">@L["Retry"]</button>
+            }
+        }
+        else if (_station is null)
+        {
+            <div class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+        }
+        else
+        {
+            <p class="meta">
+                @_station.PostalCode · @_station.Region
+                @if (Distance is { } km)
+                {
+                    <span> · @L["DistanceKm", km.ToString("0.0", CultureInfo.CurrentCulture)]</span>
+                }
+            </p>
+            @if (!string.IsNullOrWhiteSpace(_station.Name) && !string.Equals(_station.Name, _station.Brand, StringComparison.OrdinalIgnoreCase))
+            {
+                <p class="operator">@_station.Name</p>
+            }
+            @if (!_station.IsActive)
+            {
+                <p class="notice">@L["Inactive"]</p>
+            }
+            else if (_station.Status != "En opération")
+            {
+                <p class="notice">@_station.Status</p>
+            }
+
+            <section aria-labelledby="ess-current-prices">
+                <h3 id="ess-current-prices">@L["CurrentPrices"]</h3>
+                <ul class="prices">
+                    @foreach (var price in _station.Prices)
+                    {
+                        var selected = string.Equals(price.Fuel, Fuel, StringComparison.OrdinalIgnoreCase);
+                        <li class="@(selected ? "is-selected" : null)">
+                            <span class="fuel"><i class="swatch fuel-@Fuels.IndexOf(price.Fuel)"></i>@price.Fuel</span>
+                            @if (price is { IsAvailable: true, PriceCents: { } cents })
+                            {
+                                <span class="price">@Formatting.Price(cents, CultureInfo.CurrentCulture)<small> ¢/L</small></span>
+                            }
+                            else
+                            {
+                                <span class="price is-unavailable">@L["Unavailable"]</span>
+                            }
+                            <span class="since">@L["Changed", L.Ago(price.Since, _now)]</span>
+                        </li>
+                    }
+                </ul>
+            </section>
+
+            <section aria-labelledby="ess-price-history">
+                <div class="section-head">
+                    <h3 id="ess-price-history">@L["PriceHistory"]</h3>
+                    <div class="periods" role="radiogroup" aria-label="@L["PriceHistory"]">
+                        @foreach (var days in Periods)
+                        {
+                            <button type="button" role="radio" aria-checked="@(days == _days ? "true" : "false")"
+                                    class="@(days == _days ? "is-active" : null)" @onclick="() => SetPeriodAsync(days)">
+                                @L["PeriodDays", days]
+                            </button>
+                        }
+                    </div>
+                </div>
+                @if (_historyError != ApiError.None)
+                {
+                    <p class="message">@L["HistoryFailed"]</p>
+                    <button type="button" class="link" @onclick="LoadHistoryAsync">@L["Retry"]</button>
+                }
+                else if (_history is null)
+                {
+                    <div class="skeleton chart-skeleton" aria-hidden="true"><span></span></div>
+                }
+                else if (_history.IsEmpty)
+                {
+                    <p class="message">@L["HistoryEmpty"]</p>
+                }
+                else
+                {
+                    <PriceHistoryChart Data="_history" HighlightFuel="@Fuel" />
+                }
+            </section>
+
+            @if (_station is { Latitude: { } lat, Longitude: { } lon })
+            {
+                <a class="directions" target="_blank" rel="noopener"
+                   href="@string.Create(CultureInfo.InvariantCulture, $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}")">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z" /></svg>
+                    @L["Directions"]
+                </a>
+            }
+        }
+    </div>
+</aside>
+
+@code {
+    private static readonly int[] Periods = [7, 30, 90];
+
+    private CancellationTokenSource? _stationCts;
+    private CancellationTokenSource? _historyCts;
+    private long _loadedId;
+    private StationDetail? _station;
+    private ApiError _error;
+    private PriceChartData? _history;
+    private ApiError _historyError;
+    private int _days = 30;
+    private DateTimeOffset _now = DateTimeOffset.UtcNow;
+    private BrandStyle _brand = BrandCatalog.For(null);
+
+    [Parameter, EditorRequired]
+    public long StationId { get; set; }
+
+    /// <summary>The fuel selected on the map, highlighted in the prices and the chart.</summary>
+    [Parameter]
+    public string? Fuel { get; set; }
+
+    [Parameter]
+    public GeoPoint? UserLocation { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>Raised with the station once it's loaded, so the map can bring it into view.</summary>
+    [Parameter]
+    public EventCallback<StationDetail> OnLoaded { get; set; }
+
+    private string Title => _station?.Brand ?? _station?.Name ?? L["Independent"];
+
+    private double? Distance => (UserLocation, _station) is ({ } user, { Latitude: { } lat, Longitude: { } lon })
+        ? Geo.DistanceKm(user, new GeoPoint(lat, lon))
+        : null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (StationId != _loadedId)
+        {
+            _loadedId = StationId;
+            await LoadAsync();
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        _station = null;
+        _error = ApiError.None;
+        _brand = BrandCatalog.For(null);
+        _now = DateTimeOffset.UtcNow;
+
+        _stationCts?.Cancel();
+        var cts = _stationCts = new CancellationTokenSource();
+        var history = LoadHistoryAsync();
+        try
+        {
+            var result = await Api.GetStationAsync(StationId, cts.Token);
+            if (cts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _station = result.Value;
+            _error = result.Error;
+            if (_station is not null)
+            {
+                _brand = BrandCatalog.For(_station.Brand);
+                StateHasChanged();
+                await OnLoaded.InvokeAsync(_station);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await history;
+    }
+
+    private async Task SetPeriodAsync(int days)
+    {
+        if (days != _days)
+        {
+            _days = days;
+            await LoadHistoryAsync();
+        }
+    }
+
+    private async Task LoadHistoryAsync()
+    {
+        _history = null;
+        _historyError = ApiError.None;
+        _historyCts?.Cancel();
+        var cts = _historyCts = new CancellationTokenSource();
+        var to = DateTimeOffset.UtcNow;
+        var from = to.AddDays(-_days);
+        try
+        {
+            var result = await Api.GetPriceHistoryAsync(StationId, from, to, cts.Token);
+            if (cts.IsCancellationRequested)
+            {
+                return;
+            }
+
+            _historyError = result.Error;
+            _history = result.Value is { } rows ? HistorySeries.Build(rows, from, to) : null;
+        }
+        catch (OperationCanceledException)
+        {
+            // A newer request replaced this one.
+        }
+    }
+
+    public void Dispose()
+    {
+        _stationCts?.Cancel();
+        _historyCts?.Cancel();
+    }
+}

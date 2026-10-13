@@ -1,0 +1,349 @@
+/* Global styles for the Essence map: theme tokens, the page shell, and the map markers. The markers are created by
+   essenceMap.js outside Blazor's render tree, so they can't use component-scoped CSS. */
+
+:root {
+    color-scheme: light dark;
+    --ess-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --ess-bg: #f2f0ea;
+    --ess-surface: #ffffff;
+    --ess-text: #1d1d1b;
+    --ess-text-muted: #5f5e5a;
+    --ess-border: rgba(0, 0, 0, 0.12);
+    --ess-border-strong: rgba(0, 0, 0, 0.22);
+    --ess-hover: rgba(0, 0, 0, 0.05);
+    --ess-selected: rgba(24, 95, 165, 0.07);
+    --ess-accent: #185fa5;
+    --ess-on-accent: #ffffff;
+    --ess-warning-bg: #faeeda;
+    --ess-warning-text: #633806;
+    --ess-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
+    --ess-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.12), 0 12px 32px rgba(0, 0, 0, 0.12);
+    --ess-fuel-0: #0f6e56;
+    --ess-fuel-1: #534ab7;
+    --ess-fuel-2: #ba7517;
+    --ess-fuel-3: #888780;
+}
+
+@media (prefers-color-scheme: dark) {
+    :root {
+        --ess-bg: #1b1b1a;
+        --ess-surface: #262624;
+        --ess-text: #f1efe8;
+        --ess-text-muted: #b4b2a9;
+        --ess-border: rgba(255, 255, 255, 0.12);
+        --ess-border-strong: rgba(255, 255, 255, 0.24);
+        --ess-hover: rgba(255, 255, 255, 0.07);
+        --ess-selected: rgba(133, 183, 235, 0.1);
+        --ess-accent: #85b7eb;
+        --ess-on-accent: #042c53;
+        --ess-warning-bg: #412402;
+        --ess-warning-text: #fac775;
+        --ess-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
+        --ess-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.4);
+        --ess-fuel-0: #5dcaa5;
+        --ess-fuel-1: #afa9ec;
+        --ess-fuel-2: #ef9f27;
+        --ess-fuel-3: #b4b2a9;
+    }
+}
+
+html,
+body {
+    margin: 0;
+    height: 100%;
+    background: var(--ess-bg);
+    color: var(--ess-text);
+    font-family: var(--ess-font);
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ---- Markers: style B, a callout pill with the brand badge and the price, its tail on the station. ---- */
+
+.ess-marker {
+    /* The tail sits in the bottom padding, so the element's bottom edge (the anchor) is the tip. */
+    padding: 0 0 7px;
+    border: 0;
+    background: none;
+    cursor: pointer;
+    font: 500 12px/16px var(--ess-font);
+    --pill-bg: #ffffff;
+    --pill-text: #1a1a1a;
+}
+
+.ess-marker[data-tone="low"] {
+    --pill-bg: #eaf3de;
+    --pill-text: #27500a;
+}
+
+.ess-marker[data-tone="mid"] {
+    --pill-bg: #faeeda;
+    --pill-text: #633806;
+}
+
+.ess-marker[data-tone="high"] {
+    --pill-bg: #fcebeb;
+    --pill-text: #791f1f;
+}
+
+.ess-pill {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px 2px 2px;
+    border-radius: 999px;
+    background: var(--pill-bg);
+    color: var(--pill-text);
+    border: 0.5px solid rgba(0, 0, 0, 0.28);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+    white-space: nowrap;
+    transform-origin: 50% calc(100% + 7px);
+    transition: transform 120ms ease-out;
+}
+
+/* Tail: an outline triangle with a filled one on top. */
+.ess-pill::before,
+.ess-pill::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    border-style: solid;
+    border-color: transparent;
+}
+
+.ess-pill::before {
+    bottom: -7.5px;
+    border-width: 7px 6px 0;
+    border-top-color: rgba(0, 0, 0, 0.28);
+}
+
+.ess-pill::after {
+    bottom: -6.5px;
+    border-width: 7px 5.5px 0;
+    border-top-color: var(--pill-bg);
+}
+
+.ess-logo {
+    display: grid;
+    place-items: center;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: var(--logo-bg);
+    color: var(--logo-fg);
+    font: 600 11px/1 var(--ess-font);
+    letter-spacing: -0.3px;
+}
+
+.ess-logo.is-wide {
+    font-size: 9px;
+}
+
+.ess-logo.has-image {
+    background: #ffffff;
+}
+
+.ess-logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.ess-price {
+    font-variant-numeric: tabular-nums;
+}
+
+.ess-marker.is-unavailable .ess-price {
+    color: #888780;
+}
+
+.ess-marker:hover .ess-pill {
+    transform: scale(1.06);
+}
+
+.ess-marker.is-selected {
+    z-index: 100000 !important;
+}
+
+.ess-marker.is-selected .ess-pill {
+    transform: scale(1.18);
+    box-shadow: 0 0 0 2px #185fa5, 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
+.ess-marker:focus-visible {
+    outline: none;
+}
+
+.ess-marker:focus-visible .ess-pill {
+    box-shadow: 0 0 0 2px #185fa5;
+}
+
+/* Zoomed out: brand-colored dots, centered on the station. The selected station keeps its full pill. */
+.ess-map--compact .ess-marker:not(.is-selected) {
+    padding: 0;
+    transform-origin: center;
+}
+
+.ess-map--compact .ess-marker:not(.is-selected) .ess-pill {
+    padding: 0;
+    gap: 0;
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    transform: translateY(50%);
+}
+
+.ess-map--compact .ess-marker:not(.is-selected) .ess-pill::before,
+.ess-map--compact .ess-marker:not(.is-selected) .ess-pill::after,
+.ess-map--compact .ess-marker:not(.is-selected) .ess-price {
+    display: none;
+}
+
+.ess-map--compact .ess-marker:not(.is-selected) .ess-logo {
+    width: 12px;
+    height: 12px;
+    font-size: 0;
+    border: 1.5px solid #ffffff;
+    box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35);
+}
+
+.ess-map--compact .ess-marker:not(.is-selected) .ess-logo > * {
+    display: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ess-pill {
+        transition: none;
+    }
+}
+
+/* ---- The user's position ---- */
+
+.ess-user {
+    z-index: 0;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #378add;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+    pointer-events: none;
+}
+
+.ess-user::after {
+    content: "";
+    position: absolute;
+    inset: -8px;
+    border-radius: 50%;
+    background: rgba(55, 138, 221, 0.25);
+    animation: ess-pulse 2.4s ease-out infinite;
+}
+
+@keyframes ess-pulse {
+    from {
+        transform: scale(0.5);
+        opacity: 1;
+    }
+
+    to {
+        transform: scale(1.6);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ess-user::after {
+        animation: none;
+    }
+}
+
+/* ---- MapLibre controls, matched to the theme ---- */
+
+.maplibregl-ctrl-group {
+    border-radius: 10px;
+    box-shadow: var(--ess-shadow) !important;
+}
+
+@media (prefers-color-scheme: dark) {
+    .maplibregl-ctrl-group,
+    .maplibregl-ctrl-attrib {
+        background: var(--ess-surface) !important;
+        color: var(--ess-text);
+    }
+
+    .maplibregl-ctrl-group button + button {
+        border-top-color: var(--ess-border);
+    }
+
+    .maplibregl-ctrl button .maplibregl-ctrl-icon {
+        filter: invert(1);
+    }
+
+    .maplibregl-ctrl-attrib a {
+        color: var(--ess-text-muted);
+    }
+}
+
+/* On wide screens the details panel covers the right edge, so the zoom buttons and attribution move left of it. */
+@media (min-width: 768px) {
+    body:has([data-ess-pane]) .maplibregl-ctrl-bottom-right {
+        right: 424px;
+    }
+}
+
+/* ---- Loading and errors (index.html) ---- */
+
+.ess-splash {
+    position: fixed;
+    inset: 0;
+    display: grid;
+    place-content: center;
+    gap: 12px;
+    justify-items: center;
+    color: var(--ess-text-muted);
+    font: 500 15px var(--ess-font);
+}
+
+.ess-splash::before {
+    content: "";
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 3px solid var(--ess-border-strong);
+    border-top-color: var(--ess-accent);
+    animation: ess-spin 0.9s linear infinite;
+}
+
+@keyframes ess-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+#blazor-error-ui {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    padding: 12px 16px;
+    border-radius: 10px;
+    background: #fcebeb;
+    color: #791f1f;
+    font: 400 14px var(--ess-font);
+    box-shadow: var(--ess-shadow-lg);
+}
+
+#blazor-error-ui .reload {
+    color: inherit;
+    font-weight: 600;
+}
+
+#blazor-error-ui .dismiss {
+    float: right;
+    cursor: pointer;
+}

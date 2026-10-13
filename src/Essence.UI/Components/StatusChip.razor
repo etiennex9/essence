@@ -1,0 +1,19 @@
+@* The live region stays in the DOM so screen readers announce each new message. *@
+<div class="status @(Message is null ? "is-empty" : null)" role="status" aria-live="polite">
+    @if (Message is not null)
+    {
+        @if (Busy)
+        {
+            <span class="spinner" aria-hidden="true"></span>
+        }
+        <span>@Message</span>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string? Message { get; set; }
+
+    [Parameter]
+    public bool Busy { get; set; }
+}
