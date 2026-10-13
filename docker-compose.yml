@@ -1,0 +1,73 @@
+name: essence
+
+# Secrets come from .env (copy .env.example). Passwords go into connection strings: avoid ; = ' and ".
+# "GSS Encryption Mode=Disable": the .NET runtime images have no Kerberos library, so Npgsql's GSS probe only logs an error.
+x-dotnet-env: &dotnet-env
+  DOTNET_ENVIRONMENT: Production
+  TZ: UTC
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: essence
+      POSTGRES_USER: ${POSTGRES_USER:-essence_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    volumes:
+      # PostgreSQL 18 images keep data in a versioned subfolder of /var/lib/postgresql.
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      dockerfile: src/Essence.Migrator/Dockerfile
+    environment:
+      <<: *dotnet-env
+      ConnectionStrings__Admin: Host=postgres;Database=essence;Username=${POSTGRES_USER:-essence_admin};Password=${POSTGRES_PASSWORD};GSS Encryption Mode=Disable
+      Roles__WriterPassword: ${ESSENCE_WRITER_PASSWORD:?Set ESSENCE_WRITER_PASSWORD in .env}
+      Roles__ReaderPassword: ${ESSENCE_READER_PASSWORD:?Set ESSENCE_READER_PASSWORD in .env}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  ingest:
+    build:
+      context: .
+      dockerfile: src/Essence.Ingest/Dockerfile
+    environment:
+      <<: *dotnet-env
+      ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_writer;Password=${ESSENCE_WRITER_PASSWORD};GSS Encryption Mode=Disable
+      Archive__Path: /data/raw
+    volumes:
+      - rawdata:/data/raw
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: src/Essence.Api/Dockerfile
+    environment:
+      <<: *dotnet-env
+      ASPNETCORE_ENVIRONMENT: Production
+      ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_reader;Password=${ESSENCE_READER_PASSWORD};GSS Encryption Mode=Disable
+      Cors__AllowedOrigins__0: ${CORS_ORIGIN:-http://localhost:5173}
+    ports:
+      - "${API_PORT:-8080}:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  rawdata:

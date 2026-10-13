@@ -1,0 +1,19 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".editorconfig" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="docker-compose.yml" />
+    <File Path="global.json" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Essence.Api/Essence.Api.csproj" />
+    <Project Path="src/Essence.Data/Essence.Data.csproj" />
+    <Project Path="src/Essence.Ingest/Essence.Ingest.csproj" />
+    <Project Path="src/Essence.Migrator/Essence.Migrator.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Essence.Ingest.Tests/Essence.Ingest.Tests.csproj" />
+  </Folder>
+</Solution>
