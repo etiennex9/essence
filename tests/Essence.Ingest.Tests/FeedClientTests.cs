@@ -2,6 +2,7 @@ using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Security.Cryptography;
+using Essence.Data.Entities;
 using Essence.Ingest.Feed;
 using Microsoft.Extensions.Options;
 using Microsoft.Extensions.Time.Testing;
@@ -57,7 +58,7 @@ public sealed class FeedClientTests
         Assert.Equal(NewGeneratedAt, imported.GeneratedAt);
         Assert.Equal(_time.GetUtcNow(), imported.FetchedAt);
         Assert.Equal(55, imported.DelaySeconds);
-        Assert.Equal(newJson, Gunzip(imported.GzipBytes));
+        Assert.Equal(newJson, Gunzip(imported.RawBytes));
     }
 
     [Fact]
@@ -83,7 +84,7 @@ public sealed class FeedClientTests
         var result = await CreateClient(handler).FetchAsync(null, TestContext.Current.CancellationToken);
 
         var candidate = Assert.IsType<FetchResult.NewVersion>(result).Candidate;
-        Assert.Equal(json, Gunzip(candidate.GzipBytes));
+        Assert.Equal(json, Gunzip(candidate.RawBytes));
         Assert.Equal(Sha256(json), candidate.Sha256);
     }
 
@@ -119,6 +120,46 @@ public sealed class FeedClientTests
         await Assert.ThrowsAsync<FeedFormatException>(() => client.FetchAsync(null, ct));
     }
 
+    [Fact]
+    public async Task A_missing_xlsx_is_null()
+    {
+        var handler = new XlsxHandler(HttpStatusCode.NotFound, null);
+        var url = new Uri("https://example.test/data/stations-20261013030501.xlsx");
+
+        var candidate = await CreateClient(handler).FetchXlsxAsync(url, TestFeeds.PairGeneratedAt, TestContext.Current.CancellationToken);
+
+        Assert.Null(candidate);
+        Assert.Equal(url, handler.RequestUri);
+    }
+
+    [Fact]
+    public async Task An_xlsx_becomes_a_backfill_candidate()
+    {
+        var xlsx = TestFeeds.PairXlsx();
+        var handler = new XlsxHandler(HttpStatusCode.OK, xlsx);
+        var url = new Uri("https://example.test/data/stations-20261013030501.xlsx");
+
+        var candidate = await CreateClient(handler).FetchXlsxAsync(url, TestFeeds.PairGeneratedAt, TestContext.Current.CancellationToken);
+
+        Assert.NotNull(candidate);
+        Assert.Equal(ImportSource.Xlsx, candidate.Source);
+        Assert.Equal(TestFeeds.PairGeneratedAt, candidate.GeneratedAt);
+        Assert.Equal(2463, candidate.Document.Stations.Count);
+        Assert.Equal(xlsx, candidate.RawBytes);
+        Assert.Equal(Sha256(xlsx), candidate.Sha256);
+        Assert.Null(candidate.ETag);
+        Assert.Null(candidate.DelaySeconds); // Fetched late on purpose: must not feed the learned delay.
+    }
+
+    [Fact]
+    public async Task An_xlsx_server_error_throws()
+    {
+        var client = CreateClient(new XlsxHandler(HttpStatusCode.ServiceUnavailable, null));
+
+        await Assert.ThrowsAsync<HttpRequestException>(() =>
+            client.FetchXlsxAsync(new Uri("https://example.test/x.xlsx"), TestFeeds.PairGeneratedAt, TestContext.Current.CancellationToken));
+    }
+
     private static HttpResponseMessage Gzipped(byte[] json, string etag)
     {
         var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(TestFeeds.Gzip(json)) };
@@ -149,6 +190,19 @@ public sealed class FeedClientTests
             Assert.Equal("gzip", Assert.Single(request.Headers.AcceptEncoding).Value);
             IfNoneMatch.Add(request.Headers.TryGetValues("If-None-Match", out var values) ? string.Join(",", values) : null);
             return Task.FromResult(responses[_next++](request));
+        }
+    }
+
+    private sealed class XlsxHandler(HttpStatusCode status, byte[]? body) : HttpMessageHandler
+    {
+        public Uri? RequestUri { get; private set; }
+
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            // The handler doesn't decompress, so asking for gzip would break the zip bytes.
+            Assert.Empty(request.Headers.AcceptEncoding);
+            RequestUri = request.RequestUri;
+            return Task.FromResult(new HttpResponseMessage(status) { Content = new ByteArrayContent(body ?? []) });
         }
     }
 }

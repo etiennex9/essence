@@ -1,2 +1,4 @@
 # Normalize text files to LF in the repo and the working copy, matching .editorconfig
 * text=auto eol=lf
+# Test fixtures downloaded from the Régie
+*.xlsx binary

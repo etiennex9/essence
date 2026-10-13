@@ -23,6 +23,12 @@ public sealed class ImportWriter(EssenceDbContext db)
 
     private const int MaxErrorLength = 4000;
 
+    /// <summary>
+    /// Status of a new station from a file without a status column (the xlsx): the only value the feed has ever shown.
+    /// If it's wrong, the next JSON import corrects it and logs the change.
+    /// </summary>
+    private const string AssumedStatus = "En opération";
+
     public async Task<IngestState> LoadStateAsync(int delayHistorySize, CancellationToken cancellationToken)
     {
         var succeeded = db.Imports.AsNoTracking().Where(i => i.Status == ImportStatus.Succeeded);
@@ -72,6 +78,7 @@ public sealed class ImportWriter(EssenceDbContext db)
         {
             FetchedAt = candidate.FetchedAt,
             GeneratedAt = generatedAt,
+            Source = candidate.Source,
             Etag = candidate.ETag,
             Sha256 = candidate.Sha256,
             ArchivePath = archivePath,
@@ -94,7 +101,7 @@ public sealed class ImportWriter(EssenceDbContext db)
             var station = new Station
             {
                 NaturalKey = added.NaturalKey,
-                Status = added.Status,
+                Status = added.Status ?? AssumedStatus,
                 Address = added.Address,
                 PostalCode = added.PostalCode,
                 Region = added.Region,
@@ -226,6 +233,7 @@ public sealed class ImportWriter(EssenceDbContext db)
         {
             FetchedAt = candidate.FetchedAt,
             GeneratedAt = candidate.GeneratedAt,
+            Source = candidate.Source,
             Etag = candidate.ETag,
             Sha256 = candidate.Sha256,
             ArchivePath = archivePath,
@@ -245,7 +253,7 @@ public sealed class ImportWriter(EssenceDbContext db)
     {
         target.Name = source.Name;
         target.Brand = source.Brand;
-        target.Status = source.Status;
+        target.Status = source.Status ?? target.Status;
         target.Address = source.Address;
         target.PostalCode = source.PostalCode;
         target.Region = source.Region;

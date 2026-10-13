@@ -68,6 +68,9 @@ public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options)
             e.Property(x => x.Status).HasConversion(
                 v => v.ToString().ToLowerInvariant(),
                 v => Enum.Parse<ImportStatus>(v, true));
+            e.Property(x => x.Source).HasConversion(
+                v => v.ToString().ToLowerInvariant(),
+                v => Enum.Parse<ImportSource>(v, true));
             // Failed attempts may repeat a generated_at; only one successful import per version.
             e.HasIndex(x => x.GeneratedAt).IsUnique().HasFilter("status = 'succeeded'");
             e.HasIndex(x => x.Sha256);

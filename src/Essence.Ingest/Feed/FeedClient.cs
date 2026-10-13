@@ -1,6 +1,7 @@
 using System.IO.Compression;
 using System.Net;
 using System.Security.Cryptography;
+using Essence.Data.Entities;
 using Microsoft.Extensions.Options;
 
 namespace Essence.Ingest.Feed;
@@ -68,6 +69,25 @@ public sealed class FeedClient(HttpClient httpClient, IOptions<FeedOptions> opti
 
         return new FetchResult.NewVersion(
             new FeedCandidate(document, gzipBytes, sha256, response.Headers.ETag?.ToString(), fetchedAt));
+    }
+
+    /// <summary>Downloads and parses a dated xlsx snapshot, to backfill a version the live feed no longer serves.</summary>
+    /// <param name="generatedAt">The time in the file name.</param>
+    /// <returns>Null when the server doesn't have that file (wrong guess, or past its retention).</returns>
+    public async Task<FeedCandidate?> FetchXlsxAsync(Uri url, DateTimeOffset generatedAt, CancellationToken cancellationToken)
+    {
+        using var response = await httpClient.GetAsync(url, HttpCompletionOption.ResponseContentRead, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        response.EnsureSuccessStatusCode();
+        var xlsx = await response.Content.ReadAsByteArrayAsync(cancellationToken);
+        var fetchedAt = timeProvider.GetUtcNow();
+        var document = XlsxParser.Parse(xlsx, generatedAt);
+        return new FeedCandidate(
+            document, xlsx, Convert.ToHexStringLower(SHA256.HashData(xlsx)), ETag: null, fetchedAt, ImportSource.Xlsx);
     }
 
     private static byte[] Decompress(byte[] gzip)

@@ -1,6 +1,7 @@
 using System.Net;
 using Essence.Data;
 using Essence.Ingest;
+using Essence.Ingest.Backfill;
 using Essence.Ingest.Feed;
 using Essence.Ingest.Scheduling;
 using Essence.Ingest.Storage;
@@ -24,6 +25,11 @@ builder.Services.AddOptions<FeedOptions>()
         "Feed intervals must be positive.")
     .Validate(o => o.MinDelay <= o.MaxDelay, "Feed:MinDelay must not exceed Feed:MaxDelay.")
     .Validate(o => o.DelayPercentile is >= 1 and <= 100 && o.DelayHistorySize > 0, "Feed:DelayPercentile must be 1–100 and Feed:DelayHistorySize positive.")
+    .ValidateOnStart();
+builder.Services.AddOptions<BackfillOptions>()
+    .Bind(builder.Configuration.GetSection(BackfillOptions.SectionName))
+    .Validate(o => o.BaseUrl is { IsAbsoluteUri: true } url && url.AbsolutePath.EndsWith('/') && o.MaxAge > TimeSpan.Zero,
+        "Backfill:BaseUrl must be an absolute URL ending with '/' and Backfill:MaxAge must be positive.")
     .ValidateOnStart();
 builder.Services.AddOptions<ArchiveOptions>()
     .Bind(builder.Configuration.GetSection(ArchiveOptions.SectionName))

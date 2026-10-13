@@ -64,6 +64,7 @@ public sealed record PriceHistoryDto(string Fuel, decimal? PriceCents, bool IsAv
 public sealed record ImportDto(
     long Id,
     string Status,
+    string Source,
     DateTimeOffset GeneratedAt,
     DateTimeOffset FetchedAt,
     double? DelaySeconds,

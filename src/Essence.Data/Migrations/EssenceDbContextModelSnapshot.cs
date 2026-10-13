@@ -129,6 +129,11 @@ namespace Essence.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("sha256");
 
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source");
+
                     b.Property<int>("StationsAdded")
                         .HasColumnType("integer")
                         .HasColumnName("stations_added");

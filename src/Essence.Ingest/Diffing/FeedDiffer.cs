@@ -53,7 +53,8 @@ public static class FeedDiffer
             }
 
             var current = pricesByStation.GetValueOrDefault(stored.Id);
-            foreach (var price in station.Prices)
+            var prices = EffectivePrices(station, current);
+            foreach (var price in prices)
             {
                 PriceSnapshot? previous = null;
                 if (current?.TryGetValue(price.FuelType, out previous) == true
@@ -70,7 +71,7 @@ public static class FeedDiffer
             if (current is not null)
             {
                 closures.AddRange(current.Values
-                    .Where(p => !station.Prices.Any(x => x.FuelType == p.FuelType) && !station.SkippedFuelTypes.Contains(p.FuelType))
+                    .Where(p => !prices.Any(x => x.FuelType == p.FuelType) && !station.SkippedFuelTypes.Contains(p.FuelType))
                     .Select(p => new PriceClosure(stored.Id, p.FuelType, p.PriceHistoryId)));
             }
         }
@@ -95,7 +96,11 @@ public static class FeedDiffer
         var changes = new List<FieldChange>();
         Compare("name", stored.Name, station.Name);
         Compare("brand", stored.Brand, station.Brand);
-        Compare("status", stored.Status, station.Status);
+        if (station.Status is not null)
+        {
+            Compare("status", stored.Status, station.Status);
+        }
+
         Compare("address", stored.Address, station.Address);
         Compare("postal_code", stored.PostalCode, station.PostalCode);
         Compare("region", stored.Region, station.Region);
@@ -110,6 +115,29 @@ public static class FeedDiffer
                 changes.Add(new FieldChange(field, oldValue, newValue));
             }
         }
+    }
+
+    /// <summary>
+    /// The file's prices, plus "unavailable" for each <see cref="FeedStation.NotAvailableFuelTypes"/> fuel the station currently has.
+    /// One it doesn't have isn't sold there, so it's left out (and not closed, since it has no price).
+    /// </summary>
+    private static IReadOnlyList<FeedPrice> EffectivePrices(FeedStation station, Dictionary<string, PriceSnapshot>? current)
+    {
+        if (station.NotAvailableFuelTypes.Count == 0 || current is null)
+        {
+            return station.Prices;
+        }
+
+        var prices = station.Prices.ToList();
+        foreach (var fuelType in station.NotAvailableFuelTypes)
+        {
+            if (current.ContainsKey(fuelType) && !prices.Exists(p => p.FuelType == fuelType))
+            {
+                prices.Add(new FeedPrice(fuelType, null, IsAvailable: false));
+            }
+        }
+
+        return prices;
     }
 
     private static string? Format(double? value) => value?.ToString("R", CultureInfo.InvariantCulture);

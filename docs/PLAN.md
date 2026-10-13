@@ -16,7 +16,8 @@ and expose it through a read API that a future web app will use. Everything runs
 - **File**: `{ type, metadata{generated_at (UTC), excel_url, total_stations, excel_size_bytes}, features[] }`. Each feature is a
   `Point [lon,lat]` with `Name, brand, Status, Address, PostalCode, Region, Prices[{GasType, Price:"199.4¢"|null, IsAvailable}]`.
   GasType ∈ Régulier/Super/Diesel, 2–3 per station. **No station ID**. Address+PostalCode is unique; Name is not.
-  Oddities: "Hub Régie" at 0,0; 1 empty Name; 22 empty brands; brand "Aucun" ×19. `excel_url` is ignored.
+  Oddities: "Hub Régie" at 0,0; 1 empty Name; 22 empty brands; brand "Aucun" ×19. `excel_url` names a dated xlsx copy that stays
+  online about an hour; it is used to backfill missed versions (added later, see the README's "Backfill").
 - **Endpoint**: Azure Blob behind Azure Front Door, `max-age=60`, always `Content-Encoding: gzip` (~127 KB → ~2 MB).
   ETag/Last-Modified are supported (304 responses). A query string doesn't bypass the cache.
 - **Timing (30-min watch)**: generated at **:00:01, :05:01, … UTC**. It shows up through the CDN **43–92 s** later.

@@ -7,11 +7,11 @@ into PostgreSQL, keeping the station list and a full price-change history, and s
 | Project | What it does |
 |---|---|
 | `src/Essence.Data` | EF Core model, migrations, `StationKey` normalizer. Shared by every app. |
-| `src/Essence.Ingest` | Worker: polls the feed, archives each new file, diffs it against the database and writes only the changes. |
+| `src/Essence.Ingest` | Worker: polls the feed, archives each new file, diffs it against the database and writes only the changes. Backfills missed versions from the Régie's xlsx files. |
 | `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. |
 | `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
 | `src/Essence.Web` | Placeholder for the future front-end. |
-| `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing, diffing, scheduling, fetch decisions, archive. |
+| `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. |
 
 The full design and its rationale are in [docs/PLAN.md](docs/PLAN.md).
 
@@ -66,8 +66,14 @@ In the Development environment, logs are plain text and the ingest archive goes 
   the next window. After an import it sleeps until the next window. Every poll time gets ±2 s of jitter.
 - **Fetch.** Conditional GET with the ETag of the newest imported file. A response is discarded if its `generated_at` is not newer
   than the last import (the CDN flip-flops between edges) or if its SHA-256 matches the last import.
-- **Archive.** Each new file is saved, gzipped as received, to `/data/raw/yyyy/MM/dd/stations-{generated_at}.geojson.gz`
-  before it is imported. Files older than 30 days are deleted once a day.
+- **Backfill.** Each version is also published as `https://regieessencequebec.ca/data/stations-{generated_at:yyyyMMddHHmmss}.xlsx`
+  (the feed's `excel_url`), and those files stay online for about an hour. When a new version arrives more than one slot after
+  the last import (after a restart, an outage or a hung request), the worker first imports the missed slots from their xlsx,
+  oldest first, then the new version. There is no directory listing, so it guesses each name: the slot time with seconds `01`,
+  then `00`, then `02`. Slots older than `Backfill:MaxAge` (70 min) aren't requested; the log says how many were lost.
+  Backfilled imports have `source = 'xlsx'` and no delay, so they don't affect the learned delay.
+- **Archive.** Each new file is saved as received (gzipped JSON, or xlsx) to
+  `/data/raw/yyyy/MM/dd/stations-{generated_at}.geojson.gz` (or `.xlsx`) before it is imported. Files older than 30 days are deleted once a day.
 - **Import.** One transaction, guarded by a PostgreSQL advisory lock: the current stations and prices are loaded, diffed in memory,
   and only the changes are written. The effective time of every change is the file's `generated_at`.
   A failed import is rolled back, recorded as a `failed` row in `imports` and retried on the next poll; after 3 failures the file
@@ -83,6 +89,10 @@ In the Development environment, logs are plain text and the ingest archive goes 
   availability changes; `current_prices` mirrors the open rows.
 - Coordinates of 0,0 become null. An empty or "Aucun" brand becomes null. An unparsable price skips that one price (its current
   value is kept) and counts as a warning in the import.
+- The xlsx has the same data in another shape, with two gaps. It has no status column, so a backfill keeps the stored status
+  (a brand-new station gets "En opération", the only status ever seen). And "N/D" means either "unavailable" or "not sold":
+  it marks the fuel unavailable if the station currently has a price for it, and is ignored otherwise. With these rules the xlsx
+  and the JSON of the same version produce no changes against each other.
 
 ## API
 
@@ -93,7 +103,7 @@ In the Development environment, logs are plain text and the ingest archive goes 
 | `GET /stations/nearby?lat&lon&radiusKm=5&fuel&limit=20` | Active stations within a radius, closest first. |
 | `GET /stations/{id}/prices?fuel&from&to` | Price history overlapping a range (default: the last 30 days). |
 | `GET /prices/current?fuel&region&brand&sort=price&includeUnavailable&limit=50` | Current prices, cheapest first. |
-| `GET /imports?limit=20` | Recent imports with their statistics. |
+| `GET /imports?limit=20` | Recent imports with their statistics and `source` (`feed` or `xlsx`). |
 | `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. |
 
 Fuel names accept or omit accents (`Regulier` = `Régulier`). Errors are ProblemDetails. Requests are rate limited per client IP
@@ -114,5 +124,8 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Feed:Jitter` | 2 s | |
 | `Feed:RequestTimeout` / `RetryCount` | 30 s / 2 | Per attempt, with `Microsoft.Extensions.Http.Resilience`. |
 | `Feed:MaxImportAttempts` | 3 | Failed imports of one file before it is skipped. |
+| `Backfill:Enabled` | `true` | Backfill missed versions from xlsx. |
+| `Backfill:BaseUrl` | `https://regieessencequebec.ca/data/` | Folder of the xlsx files, ending with `/`. |
+| `Backfill:MaxAge` | `01:10:00` | Older slots aren't requested (the server keeps the files about an hour). |
 | `Archive:Path` / `RetentionDays` | `/data/raw` / 30 | |
 | `Health:MaxImportAgeMinutes` | 15 | API `/health` threshold. |

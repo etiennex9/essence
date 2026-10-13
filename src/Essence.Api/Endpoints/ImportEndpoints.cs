@@ -29,7 +29,7 @@ public static class ImportEndpoints
         var imports = await db.Imports.OrderByDescending(i => i.Id).Take(limit).ToListAsync(cancellationToken);
         return TypedResults.Ok(imports
             .Select(i => new ImportDto(
-                i.Id, i.Status.ToString().ToLowerInvariant(), i.GeneratedAt, i.FetchedAt, i.DelaySeconds,
+                i.Id, i.Status.ToString().ToLowerInvariant(), i.Source.ToString().ToLowerInvariant(), i.GeneratedAt, i.FetchedAt, i.DelaySeconds,
                 i.StationsTotal, i.StationsAdded, i.StationsUpdated, i.StationsDeactivated, i.PricesChanged, i.Warnings,
                 i.Sha256, FirstLine(i.Error)))
             .ToList());

@@ -10,7 +10,7 @@ public sealed class FeedDifferTests
     private const string Address = "500 boul. René-Lévesque Ouest, Montréal";
 
     private static StationSnapshot Stored(FeedStation station, long id = 1, bool isActive = true) =>
-        new(id, station.NaturalKey, station.Name, station.Brand, station.Status, station.Address, station.PostalCode,
+        new(id, station.NaturalKey, station.Name, station.Brand, station.Status ?? "En opération", station.Address, station.PostalCode,
             station.Region, station.Latitude, station.Longitude, isActive);
 
     private static PriceSnapshot StoredPrice(string fuelType, decimal? cents, bool? isAvailable = null, long stationId = 1, long historyId = 100) =>
@@ -186,6 +186,78 @@ public sealed class FeedDifferTests
 
         Assert.Empty(changes.ClosedPrices);
         Assert.Empty(changes.PriceChanges);
+    }
+
+    [Fact]
+    public void A_file_without_status_keeps_the_stored_one()
+    {
+        var stored = Station(Address, status: "Fermé temporairement");
+        var xlsx = Station(Address, status: null);
+
+        var changes = FeedDiffer.Diff([Stored(stored)], [StoredPrice("Régulier", 199.4m)], Document(xlsx));
+
+        Assert.Empty(changes.UpdatedStations);
+        Assert.Empty(changes.PriceChanges);
+    }
+
+    [Fact]
+    public void A_status_change_is_logged()
+    {
+        var before = Station(Address, status: "En opération");
+        var after = Station(Address, status: "Fermé temporairement");
+
+        var changes = FeedDiffer.Diff([Stored(before)], [StoredPrice("Régulier", 199.4m)], Document(after));
+
+        Assert.Equal([new FieldChange("status", "En opération", "Fermé temporairement")], Assert.Single(changes.UpdatedStations).Changes);
+    }
+
+    [Fact]
+    public void Not_available_on_a_fuel_the_station_sells_makes_it_unavailable()
+    {
+        var station = Station(Address, prices: [Price("Régulier", 199.4m)], notAvailableFuelTypes: ["Diesel"]);
+
+        var changes = FeedDiffer.Diff(
+            [Stored(station)],
+            [StoredPrice("Régulier", 199.4m, historyId: 100), StoredPrice("Diesel", 289.9m, historyId: 101)],
+            Document(station));
+
+        Assert.Equal([new PriceChange(station.NaturalKey, 1, "Diesel", null, false, 101)], changes.PriceChanges);
+        Assert.Empty(changes.ClosedPrices);
+    }
+
+    [Fact]
+    public void Not_available_on_an_already_unavailable_fuel_changes_nothing()
+    {
+        var station = Station(Address, prices: [Price("Régulier", 199.4m)], notAvailableFuelTypes: ["Diesel"]);
+
+        var changes = FeedDiffer.Diff(
+            [Stored(station)],
+            [StoredPrice("Régulier", 199.4m, historyId: 100), StoredPrice("Diesel", null, historyId: 101)],
+            Document(station));
+
+        Assert.Empty(changes.PriceChanges);
+        Assert.Empty(changes.ClosedPrices);
+    }
+
+    [Fact]
+    public void Not_available_on_a_fuel_the_station_doesnt_sell_is_ignored()
+    {
+        var station = Station(Address, prices: [Price("Régulier", 199.4m)], notAvailableFuelTypes: ["Super", "Diesel"]);
+
+        var changes = FeedDiffer.Diff([Stored(station)], [StoredPrice("Régulier", 199.4m)], Document(station));
+
+        Assert.Empty(changes.PriceChanges);
+        Assert.Empty(changes.ClosedPrices);
+    }
+
+    [Fact]
+    public void Not_available_on_a_new_station_adds_no_price()
+    {
+        var station = Station(Address, prices: [Price("Régulier", 199.4m)], notAvailableFuelTypes: ["Diesel"]);
+
+        var changes = FeedDiffer.Diff([], [], Document(station));
+
+        Assert.Equal([new PriceChange(station.NaturalKey, null, "Régulier", 199.4m, true, null)], changes.PriceChanges);
     }
 
     [Fact]
