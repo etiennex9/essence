@@ -17,7 +17,8 @@ services:
       # PostgreSQL 18 images keep data in a versioned subfolder of /var/lib/postgresql.
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      # Over TCP: on first start, the server that initializes the database answers on the socket only, and migrate would fail.
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -61,7 +62,6 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_reader;Password=${ESSENCE_READER_PASSWORD};GSS Encryption Mode=Disable
       Cors__AllowedOrigins__0: ${CORS_ORIGIN:-http://localhost:5173}
-      Cors__AllowedOrigins__1: http://localhost:${WEB_PORT:-8081}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:
@@ -69,13 +69,11 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
-  # Static Blazor WebAssembly app. The browser calls the API directly, so this is the API address as the browser sees it.
+  # Static Blazor WebAssembly app. Its nginx also forwards /api/ to the api service, which the app calls (same origin, no CORS).
   web:
     build:
       context: .
       dockerfile: src/Essence.Web/Dockerfile
-    environment:
-      ESSENCE_API_BASE_URL: http://localhost:${API_PORT:-8080}/
     ports:
       - "${WEB_PORT:-8081}:8080"
     restart: unless-stopped

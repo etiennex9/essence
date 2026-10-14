@@ -31,7 +31,7 @@ public static class RateLimiting
 
                 return ValueTask.CompletedTask;
             };
-            // Behind a reverse proxy, configure forwarded headers so RemoteIpAddress is the client's.
+            // Behind Essence.Web's nginx, RemoteIpAddress is the client's: Program.cs applies the forwarded headers.
             limiter.AddPolicy(PolicyName, http => RateLimitPartition.GetFixedWindowLimiter(
                 http.Connection.RemoteIpAddress?.ToString() ?? "unknown",
                 _ => new FixedWindowRateLimiterOptions

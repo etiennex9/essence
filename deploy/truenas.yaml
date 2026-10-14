@@ -1,0 +1,82 @@
+# Essence on TrueNAS: Apps → Discover Apps → ⋮ → Install via YAML, app name "essence".
+#
+# Before pasting, replace:
+#   - every CHANGE_ME_..._PASSWORD (each appears twice). Use letters and digits only: they go into connection strings.
+#   - POOL in the two host paths. Create both folders first; postgres must own its folder (999:999), ingest its own (1654:1654).
+#   - 30180, if that port is taken. Point the reverse proxy for gas.escott.info at http://<NAS address>:30180:
+#     it serves the map and, under /api/, the API.
+#
+# The images come from the GitHub Container Registry, published by .github/workflows/publish.yml on every push to main.
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_DB: essence
+      POSTGRES_USER: essence_admin
+      POSTGRES_PASSWORD: CHANGE_ME_ADMIN_PASSWORD
+    volumes:
+      # PostgreSQL 18 images keep data in a versioned subfolder of /var/lib/postgresql.
+      - type: bind
+        source: /mnt/POOL/apps/essence/postgres
+        target: /var/lib/postgresql
+        bind:
+          create_host_path: false
+    healthcheck:
+      # Over TCP: on first start, the server that initializes the database answers on the socket only, and migrate would fail.
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "essence_admin", "-d", "essence"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    restart: unless-stopped
+
+  # One-shot: applies migrations, then creates the essence_writer and essence_reader roles (or updates their passwords).
+  migrate:
+    image: ghcr.io/etiennex9/essence-migrator:latest
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      TZ: UTC
+      ConnectionStrings__Admin: Host=postgres;Database=essence;Username=essence_admin;Password=CHANGE_ME_ADMIN_PASSWORD;GSS Encryption Mode=Disable
+      Roles__WriterPassword: CHANGE_ME_WRITER_PASSWORD
+      Roles__ReaderPassword: CHANGE_ME_READER_PASSWORD
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
+  ingest:
+    image: ghcr.io/etiennex9/essence-ingest:latest
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      TZ: UTC
+      ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_writer;Password=CHANGE_ME_WRITER_PASSWORD;GSS Encryption Mode=Disable
+      Archive__Path: /data/raw
+    volumes:
+      - type: bind
+        source: /mnt/POOL/apps/essence/raw
+        target: /data/raw
+        bind:
+          create_host_path: false
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  # No published port: only the web container reaches it, under /api/.
+  api:
+    image: ghcr.io/etiennex9/essence-api:latest
+    environment:
+      DOTNET_ENVIRONMENT: Production
+      ASPNETCORE_ENVIRONMENT: Production
+      TZ: UTC
+      ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_reader;Password=CHANGE_ME_READER_PASSWORD;GSS Encryption Mode=Disable
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    restart: unless-stopped
+
+  web:
+    image: ghcr.io/etiennex9/essence-web:latest
+    ports:
+      - "30180:8080"
+    restart: unless-stopped

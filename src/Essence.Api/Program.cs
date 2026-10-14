@@ -1,6 +1,7 @@
 using Essence.Api;
 using Essence.Api.Endpoints;
 using Essence.Data;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
 
@@ -20,6 +21,17 @@ builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks().AddCheck<IngestHealthCheck>("ingest");
 builder.Services.AddPerIpRateLimiting(builder.Configuration);
 
+// Essence.Web's nginx forwards /api/ here with the client's address (for the rate limit) and the public scheme, host and
+// /api prefix (for the OpenAPI document and Scalar). Trusted only from private networks, where that container lives.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedPrefix;
+    foreach (var network in (string[])["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "fc00::/7"])
+    {
+        options.KnownIPNetworks.Add(System.Net.IPNetwork.Parse(network));
+    }
+});
+
 var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
 builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy =>
 {
@@ -37,6 +49,7 @@ builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy =>
 
 var app = builder.Build();
 
+app.UseForwardedHeaders();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseCors();
@@ -44,7 +57,7 @@ app.UseRateLimiter();
 
 app.MapOpenApi();
 app.MapScalarApiReference();
-app.MapGet("/", () => TypedResults.Redirect("/scalar")).ExcludeFromDescription();
+app.MapGet("/", (HttpRequest request) => TypedResults.Redirect($"{request.PathBase}/scalar")).ExcludeFromDescription();
 app.MapHealthChecks("/health", IngestHealthCheck.EndpointOptions);
 
 app.MapStationEndpoints();

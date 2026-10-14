@@ -30,6 +30,7 @@ docker compose up --build
 
 Compose starts `postgres`, then `migrate` (exits 0 once the schema and roles are in place), then `ingest` and `api`, and `web`.
 The map is at <http://localhost:8081>. The API listens on <http://localhost:8080>; the interactive docs are at <http://localhost:8080/scalar>.
+The web container also forwards `/api/` to the API (<http://localhost:8081/api/health>): that's the address the map uses.
 
 ```bash
 curl localhost:8080/health
@@ -122,8 +123,19 @@ In the Development environment, logs are plain text and the ingest archive goes 
 | `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. |
 
 Fuel names accept or omit accents (`Regulier` = `Régulier`). Errors are ProblemDetails. Requests are rate limited per client IP
-(`RateLimiting:PermitLimit` per `RateLimiting:WindowSeconds`, 120/60 s by default). Allowed CORS origins come from
-`Cors:AllowedOrigins`: in Compose, `CORS_ORIGIN` from `.env` and the web container's origin (`http://localhost:WEB_PORT`).
+(`RateLimiting:PermitLimit` per `RateLimiting:WindowSeconds`, 120/60 s by default). The `X-Forwarded-For`, `-Proto` and `-Prefix`
+headers are trusted from private networks only, where the web container that forwards `/api/` lives; that container in turn
+takes the client's address from a reverse proxy on a private network. Allowed CORS origins come from `Cors:AllowedOrigins`:
+in Compose, `CORS_ORIGIN` from `.env`. The web container needs none, since the map calls the API through its own `/api/`.
+
+## Deploy
+
+On every push to `main`, [the publish workflow](.github/workflows/publish.yml) runs the tests, then builds the four images and
+pushes them to the GitHub Container Registry: `ghcr.io/etiennex9/essence-{migrator,ingest,api,web}`, tagged `latest` and
+`sha-<commit>`. Pull requests run the same build without pushing.
+
+[deploy/truenas.yaml](deploy/truenas.yaml) runs those images on TrueNAS (Apps → Discover Apps → ⋮ → Install via YAML).
+Only the web container publishes a port; a reverse proxy in front of it serves the whole app, API included, at one HTTPS address.
 
 ## Configuration
 

@@ -51,12 +51,17 @@ When location isn't available or allowed, the map shows Montréal.
 
 ## Docker
 
-`docker compose up --build` serves the published app with nginx on <http://localhost:8081> (`WEB_PORT`). The image is the same
-for every environment: at container start, `nginx/40-essence-config.sh` writes `appsettings.json` from these variables.
+`docker compose up --build` serves the published app with nginx on <http://localhost:8081> (`WEB_PORT`). nginx also forwards
+`/api/` to the Compose service `api` (port 8080), adding `X-Forwarded-For`, `-Proto` and `-Prefix` headers, so the browser
+reaches the app and the API at one origin. Behind a reverse proxy on a private network, it takes the client's address from
+the proxy's `X-Forwarded-For`.
+
+The image is the same for every environment: at container start, `nginx/40-essence-config.sh` writes `appsettings.json` from
+these variables.
 
 | Variable | Default | |
 |---|---|---|
-| `ESSENCE_API_BASE_URL` | `http://localhost:8080/` | The API as the **browser** reaches it, not the container. Its origin must be in the API's `Cors:AllowedOrigins`. |
+| `ESSENCE_API_BASE_URL` | `/api/` | The API as the **browser** reaches it: a path on this origin, or a URL whose origin is in the API's `Cors:AllowedOrigins`. |
 | `ESSENCE_MAP_STYLE_URL` | OpenFreeMap `positron` | MapLibre style for the light theme. |
 | `ESSENCE_MAP_DARK_STYLE_URL` | OpenFreeMap `dark` | MapLibre style when the device prefers dark. |
 

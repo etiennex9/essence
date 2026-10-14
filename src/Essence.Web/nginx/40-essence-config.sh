@@ -3,7 +3,8 @@
 # nginx serves it from /tmp (see default.conf) because the image runs as a non-root user that can't write to the web root.
 set -eu
 
-api_base_url="${ESSENCE_API_BASE_URL:-http://localhost:8080/}"
+# /api/ is this container's own proxy to the api service (see default.conf).
+api_base_url="${ESSENCE_API_BASE_URL:-/api/}"
 mkdir -p /tmp/essence
 cat > /tmp/essence/appsettings.json <<EOF
 {
