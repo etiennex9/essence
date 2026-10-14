@@ -6,6 +6,8 @@
     right: 0;
     bottom: 0;
     max-height: min(60vh, 600px);
+    /* Heights include the border, as essencePane.js measures them. */
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     background: var(--ess-surface);
@@ -54,10 +56,20 @@
     }
 }
 
+/* The bar is drawn in a full-width strip, which is easier to grab than the bar itself. */
 .handle {
+    position: relative;
+    height: 20px;
+}
+
+.handle::before {
+    content: "";
+    position: absolute;
+    top: 8px;
+    left: 50%;
     width: 36px;
     height: 4px;
-    margin: 8px auto 0;
+    margin-left: -18px;
     border-radius: 2px;
     background: var(--ess-border-strong);
 }
@@ -67,6 +79,27 @@ header {
     align-items: center;
     gap: 12px;
     padding: 14px 12px 10px 16px;
+}
+
+/* The sheet drags by its bar and header (essencePane.js): up to expand, down to shrink back or close. Expanded, it
+   stops below the toolbar. */
+@media (max-width: 767px) {
+    .pane.is-expanded {
+        max-height: calc(100dvh - 66px - env(safe-area-inset-top, 0px));
+    }
+
+    .handle,
+    header {
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+        cursor: grab;
+    }
+
+    /* The bar's strip takes the space above the title. */
+    header {
+        padding-top: 6px;
+    }
 }
 
 header ::deep h2 {

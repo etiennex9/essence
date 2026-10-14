@@ -73,6 +73,8 @@ body {
     color: var(--ess-text);
     font-family: var(--ess-font);
     -webkit-tap-highlight-color: transparent;
+    /* A fullscreen map: pulling down anywhere mustn't reload it (pull-to-refresh) or bounce the page. */
+    overscroll-behavior: none;
 }
 
 /* ---- Markers: style B, a callout pill with the brand badge and the price, its tail on the station. ---- */
