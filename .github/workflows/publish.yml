@@ -1,4 +1,5 @@
-# Tests, then builds the four images. On main, pushes them to ghcr.io/<owner>/essence-<app>, tagged latest and sha-<commit>.
+# Tests, then builds the images whose inputs changed (see .github/scripts/select-images.sh). On main, pushes them to
+# ghcr.io/<owner>/essence-<app>, tagged latest and sha-<commit>.
 name: Publish
 
 on:
@@ -25,19 +26,44 @@ jobs:
           dotnet-version: 10.0.x
       - run: dotnet test --configuration Release
 
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      images: ${{ steps.select.outputs.images }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Compared with the pull request's base, or on main with the last successful run, so that the changes of a canceled
+      # or failed run are built by the next one. A manual run builds every image.
+      - id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          case "$EVENT" in
+            pull_request) range="$PR_BASE...HEAD" ;;
+            push) last=$(gh run list --workflow publish.yml --branch main --status success --limit 1 --json headSha --jq '.[0].headSha // ""')
+                  range="${last:+$last..HEAD}" ;;
+            *) range="" ;;
+          esac
+          images=$(bash .github/scripts/select-images.sh "$range")
+          echo "images=$images" >> "$GITHUB_OUTPUT"
+
   image:
-    needs: test
+    needs: [test, changes]
+    if: needs.changes.outputs.images != '[]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
       packages: write
     strategy:
       matrix:
-        include:
-          - { app: migrator, project: Essence.Migrator }
-          - { app: ingest, project: Essence.Ingest }
-          - { app: api, project: Essence.Api }
-          - { app: web, project: Essence.Web }
+        include: ${{ fromJSON(needs.changes.outputs.images) }}
     env:
       PUSH: ${{ github.event_name != 'pull_request' }}
     steps:

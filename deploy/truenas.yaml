@@ -2,8 +2,10 @@
 #
 # Before pasting, replace:
 #   - every CHANGE_ME_..._PASSWORD (each appears twice). Use letters and digits only: they go into connection strings.
-#   - POOL in the two host paths. Create both folders first: postgres must own its folder (999:999), and ingest the data
-#     folder (1654:1654), where it creates the archive subfolder.
+#   - POOL in the two host paths, and create both first:
+#     - postgres: its own dataset with the Generic preset (POSIX permissions), owned by 999:999, mode 700. Postgres won't
+#       start in a folder that inherits NFSv4 ACLs (the Apps preset).
+#     - data: owned by 1654:1654 (ingest), which creates the archive subfolder in it. NFSv4 ACLs are fine here.
 #   - 30180, if that port is taken. Point the reverse proxy for gas.escott.info at http://<NAS address>:30180:
 #     it serves the map and, under /api/, the API.
 #
