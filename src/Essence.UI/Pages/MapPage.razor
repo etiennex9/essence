@@ -2,6 +2,8 @@
 @implements IMapListener
 @implements IAsyncDisposable
 @inject EssenceApiClient Api
+@inject FavoriteStations Favorites
+@inject ComparedStations Comparison
 @inject IDeviceLocation DeviceLocation
 @inject IPreferenceStore Preferences
 @inject EssenceUIOptions Options
@@ -16,26 +18,54 @@
 
     <div class="toolbar">
         <FuelSelector Value="@_fuel" ValueChanged="SetFuelAsync" />
-        <button type="button" class="locate" @onclick="() => LocateAsync(moveMap: true, fallBackToMontreal: false)"
-                aria-label="@L["LocateMe"]" title="@L["LocateMe"]">
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round"><circle cx="12" cy="12" r="3" /><circle cx="12" cy="12" r="8" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3" /></svg>
-        </button>
+        <div class="tools">
+            <button type="button" class="tool @(View == FavoritesView ? "is-active" : null)" @onclick="() => ToggleListAsync(FavoritesView)"
+                    aria-pressed="@(View == FavoritesView ? "true" : "false")" aria-label="@L["Favorites"]" title="@L["Favorites"]">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linejoin="round"><path d="@Icons.Star" /></svg>
+            </button>
+            <button type="button" class="tool @(View == CompareView ? "is-active" : null)" @onclick="() => ToggleListAsync(CompareView)"
+                    aria-pressed="@(View == CompareView ? "true" : "false")" aria-label="@ComparisonLabel" title="@ComparisonLabel">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Compare" /></svg>
+                @if (Comparison.Count > 0)
+                {
+                    <span class="badge" aria-hidden="true">@Comparison.Count</span>
+                }
+            </button>
+            <button type="button" class="tool" @onclick="() => LocateAsync(moveMap: true, fallBackToMontreal: false)"
+                    aria-label="@L["LocateMe"]" title="@L["LocateMe"]">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round"><circle cx="12" cy="12" r="3" /><circle cx="12" cy="12" r="8" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3" /></svg>
+            </button>
+        </div>
     </div>
 
     <div class="status-slot">
         <StatusChip Message="@StatusMessage" Busy="@(_locating || _loading)" />
     </div>
 
+    @* The details open over a list (?view=…&station=…): closing them goes back to it. *@
     @if (Station is { } stationId)
     {
         <StationDetails StationId="stationId" Fuel="@_fuel" UserLocation="_userLocation" OnClose="CloseDetailsAsync"
                         OnLoaded="OnStationLoadedAsync" />
     }
+    else if (View == FavoritesView)
+    {
+        <FavoritesPanel Fuel="@_fuel" UserLocation="_userLocation" OnClose="CloseListAsync" OnOpenStation="OpenListedStation"
+                        OnCompareAll="() => ShowListAsync(CompareView)" />
+    }
+    else if (View == CompareView)
+    {
+        <ComparisonPanel Fuel="@_fuel" UserLocation="_userLocation" OnClose="CloseListAsync" OnOpenStation="OpenListedStation" />
+    }
 </div>
 
 @code {
     private const string FuelPreferenceKey = "essence.fuel";
+    private const string FavoritesView = "favorites";
+    private const string CompareView = "compare";
     private const double CompactBelowZoom = 12;
     private const double OverviewZoom = 5.5;
     private const double UserZoom = 13;
@@ -69,7 +99,10 @@
     private CancellationTokenSource? _noticeCts;
 
     /// <summary>Set when this page pushed the <c>?station=</c> history entry, so closing goes back instead of forward.</summary>
-    private bool _openedHere;
+    private bool _stationPushed;
+
+    /// <summary>The same for <c>?view=</c>, the list open.</summary>
+    private bool _listPushed;
 
     /// <summary>A cold load with <c>?station=</c> centers on that station once it's loaded, instead of on the user.</summary>
     private bool _centerOnStation;
@@ -77,6 +110,14 @@
 
     [SupplyParameterFromQuery(Name = "station")]
     public long? Station { get; set; }
+
+    /// <summary>The list open: <c>favorites</c> or <c>compare</c>.</summary>
+    [SupplyParameterFromQuery(Name = "view")]
+    public string? View { get; set; }
+
+    private bool ListOpen => View is FavoritesView or CompareView;
+
+    private string ComparisonLabel => Comparison.Count > 0 ? L["ComparisonCount", Comparison.Count] : L["Comparison"];
 
     /// <summary>The one message worth showing right now, most important first.</summary>
     private string? StatusMessage
@@ -112,12 +153,23 @@
         }
     }
 
+    protected override void OnInitialized()
+    {
+        Favorites.Changed += OnFavoritesChanged;
+        Comparison.Changed += OnComparisonChanged;
+    }
+
     protected override async Task OnParametersSetAsync()
     {
         if (Station is null)
         {
-            _openedHere = false;
+            _stationPushed = false;
             _pendingStation = null;
+        }
+
+        if (!ListOpen)
+        {
+            _listPushed = false;
         }
 
         if (_map is not null)
@@ -135,6 +187,8 @@
 
         _fuel = Fuels.Normalize(await Preferences.GetAsync(FuelPreferenceKey));
         _stations.SetFuel(_fuel);
+        await Favorites.LoadAsync();
+        await Comparison.LoadAsync();
         var openedOnStation = Station is not null;
         _centerOnStation = openedOnStation;
 
@@ -318,7 +372,13 @@
         var brand = BrandCatalog.For(station.Brand);
         var name = $"{brand.Name ?? L["Independent"]}, {station.Address}";
         var price = Formatting.Price(visible.HasPrice ? visible.Price!.PriceCents : null, CultureInfo.CurrentCulture);
-        var label = visible.HasPrice ? L["MarkerPrice", name, price] : L["MarkerUnavailable", name, _fuel];
+        string label = visible.HasPrice ? L["MarkerPrice", name, price] : L["MarkerUnavailable", name, _fuel];
+        var favorite = Favorites.IsFavorite(station.Id);
+        if (favorite)
+        {
+            label = L["MarkerFavorite", label];
+        }
+
         var tone = visible.Tone switch
         {
             PriceTone.Low => "low",
@@ -327,7 +387,7 @@
             _ => "",
         };
         return new MarkerModel(
-            station.Id, station.Latitude, station.Longitude, label, price, !visible.HasPrice, tone, visible.ZIndex,
+            station.Id, station.Latitude, station.Longitude, label, price, !visible.HasPrice, tone, visible.ZIndex, favorite,
             brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
     }
 
@@ -337,7 +397,7 @@
         {
             // Switching stations replaces the entry, so Back still closes the pane instead of walking through stations.
             var replace = Station is not null;
-            _openedHere |= !replace;
+            _stationPushed |= !replace;
             _centerOnStation = false;
             Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", id), replace: replace);
         }
@@ -345,7 +405,55 @@
         return Task.CompletedTask;
     }
 
-    public Task OnDismissAsync() => CloseDetailsAsync();
+    /// <summary>A station picked in a list: its details open over it, and the map flies to it.</summary>
+    private void OpenListedStation(long id)
+    {
+        _stationPushed = true;
+        _centerOnStation = true;
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", id));
+    }
+
+    /// <summary>Closes the top-most pane: the details, else the list.</summary>
+    public Task OnDismissAsync() => Station is not null ? CloseDetailsAsync() : CloseListAsync();
+
+    private Task ToggleListAsync(string view) => View == view && Station is null ? CloseListAsync() : ShowListAsync(view);
+
+    private async Task ShowListAsync(string view)
+    {
+        if (View == view)
+        {
+            // The list is under the details.
+            await CloseDetailsAsync();
+            return;
+        }
+
+        // The list takes the place of the details or of the other list, so Back still leads where it did. It counts as
+        // pushed unless the entry it replaces wasn't (a link opened cold).
+        var replace = Station is not null || ListOpen;
+        _listPushed = !replace || _stationPushed || _listPushed;
+        _stationPushed = false;
+        Navigation.NavigateTo(
+            Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = view, ["station"] = null }),
+            replace: replace);
+    }
+
+    private async Task CloseListAsync()
+    {
+        if (!ListOpen)
+        {
+            return;
+        }
+
+        if (_listPushed)
+        {
+            _listPushed = false;
+            await JS.InvokeVoidAsync("history.back");
+        }
+        else
+        {
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("view", (string?)null), replace: true);
+        }
+    }
 
     private async Task CloseDetailsAsync()
     {
@@ -354,9 +462,9 @@
             return;
         }
 
-        if (_openedHere)
+        if (_stationPushed)
         {
-            _openedHere = false;
+            _stationPushed = false;
             await JS.InvokeVoidAsync("history.back");
         }
         else
@@ -420,8 +528,16 @@
         await InvokeAsync(StateHasChanged);
     }
 
+    /// <summary>A station starred or un-starred: its marker gains or loses the star.</summary>
+    private void OnFavoritesChanged() => InvokeAsync(RenderMarkersAsync);
+
+    /// <summary>The toolbar shows how many stations are compared.</summary>
+    private void OnComparisonChanged() => InvokeAsync(StateHasChanged);
+
     public async ValueTask DisposeAsync()
     {
+        Favorites.Changed -= OnFavoritesChanged;
+        Comparison.Changed -= OnComparisonChanged;
         _loadCts?.Cancel();
         _retryCts?.Cancel();
         _noticeCts?.Cancel();

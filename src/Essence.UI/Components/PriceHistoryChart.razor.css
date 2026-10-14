@@ -35,7 +35,7 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: var(--fuel-color);
+    background: var(--series-color);
 }
 
 .plot {
@@ -59,15 +59,18 @@ svg {
 
 .line {
     fill: none;
-    stroke: var(--fuel-color);
-    stroke-width: 1.5;
+    stroke: var(--series-color);
+    stroke-width: 2;
     stroke-linejoin: round;
-    opacity: 0.55;
 }
 
 .line.is-highlighted {
     stroke-width: 2.5;
-    opacity: 1;
+}
+
+.line.is-dimmed {
+    stroke-width: 1.5;
+    opacity: 0.55;
 }
 
 .guide {
@@ -97,7 +100,16 @@ svg {
     color: var(--ess-text-muted);
 }
 
-.fuel-0 { --fuel-color: var(--ess-fuel-0); }
-.fuel-1 { --fuel-color: var(--ess-fuel-1); }
-.fuel-2 { --fuel-color: var(--ess-fuel-2); }
-.fuel-3 { --fuel-color: var(--ess-fuel-3); }
+.fuel-0 { --series-color: var(--ess-fuel-0); }
+.fuel-1 { --series-color: var(--ess-fuel-1); }
+.fuel-2 { --series-color: var(--ess-fuel-2); }
+.fuel-3 { --series-color: var(--ess-fuel-3); }
+
+.compare-0 { --series-color: var(--ess-compare-0); }
+.compare-1 { --series-color: var(--ess-compare-1); }
+.compare-2 { --series-color: var(--ess-compare-2); }
+.compare-3 { --series-color: var(--ess-compare-3); }
+.compare-4 { --series-color: var(--ess-compare-4); }
+.compare-5 { --series-color: var(--ess-compare-5); }
+.compare-6 { --series-color: var(--ess-compare-6); }
+.compare-7 { --series-color: var(--ess-compare-7); }

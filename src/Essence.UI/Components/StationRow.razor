@@ -1,0 +1,94 @@
+@inject IStringLocalizer<Strings> L
+
+@* A station in the favorites or the comparison: the row's main button, which opens its details. The parent puts it in a
+   list item, with its own controls around it. *@
+<button type="button" class="open" @onclick="OnOpen">
+    <span class="logo @(_brand.Monogram.Length > 1 ? "is-wide" : null)" style="--logo-bg: @_brand.Background; --logo-fg: @_brand.Foreground">
+        @if (_brand.LogoUrl is { } logoUrl)
+        {
+            <img src="@logoUrl" alt="" />
+        }
+        else
+        {
+            @_brand.Monogram
+        }
+    </span>
+    <span class="name">@Name</span>
+    @if (Error == ApiError.NotFound)
+    {
+        <span class="address is-gone">@L["Inactive"]</span>
+    }
+    else
+    {
+        <span class="address">@(Station.Address + Distance)</span>
+    }
+    @if (Hovering && Loaded)
+    {
+        <span class="price">@Formatting.Price(HoveredPriceCents, CultureInfo.CurrentCulture)</span>
+    }
+    else if (Price is { IsAvailable: true, PriceCents: { } cents })
+    {
+        <span class="price">@Formatting.Price(cents, CultureInfo.CurrentCulture)</span>
+        <span class="since">@L["Changed", L.Ago(Price.Since, Now)]</span>
+    }
+    else if (Loaded)
+    {
+        <span class="price is-unavailable">@L["Unavailable"]</span>
+    }
+    else if (Error != ApiError.None)
+    {
+        <span class="price is-unavailable">@Formatting.Price(null, CultureInfo.CurrentCulture)</span>
+    }
+    else
+    {
+        <span class="price is-loading" aria-hidden="true"></span>
+    }
+</button>
+
+@code {
+    private BrandStyle _brand = BrandCatalog.For(null);
+
+    [Parameter, EditorRequired]
+    public SavedStation Station { get; set; } = null!;
+
+    [Parameter]
+    public GeoPoint? UserLocation { get; set; }
+
+    /// <summary>The station's prices are in (<see cref="Price"/> is null when it doesn't sell the fuel).</summary>
+    [Parameter]
+    public bool Loaded { get; set; }
+
+    /// <summary>Why the prices couldn't be loaded; <see cref="ApiError.NotFound"/> when the station left the data.</summary>
+    [Parameter]
+    public ApiError Error { get; set; }
+
+    /// <summary>The current price of the selected fuel.</summary>
+    [Parameter]
+    public CurrentPriceDto? Price { get; set; }
+
+    /// <summary>The pointer is on a chart: show <see cref="HoveredPriceCents"/>, the price at that time, instead.</summary>
+    [Parameter]
+    public bool Hovering { get; set; }
+
+    [Parameter]
+    public decimal? HoveredPriceCents { get; set; }
+
+    /// <summary>For "Changed … ago".</summary>
+    [Parameter]
+    public DateTimeOffset Now { get; set; }
+
+    [Parameter]
+    public EventCallback OnOpen { get; set; }
+
+    /// <summary>The brand, or "Independent": also what the parent names the row's controls after.</summary>
+    public static string NameOf(SavedStation station, IStringLocalizer<Strings> localizer) =>
+        BrandCatalog.For(station.Brand).Name ?? localizer["Independent"];
+
+    private string Name => NameOf(Station, L);
+
+    private string Distance => (UserLocation, Station) is ({ } user, { Latitude: { } lat, Longitude: { } lon })
+        ? $" · {Geo.DistanceKm(user, new GeoPoint(lat, lon)).ToString("0.0", CultureInfo.CurrentCulture)} km"
+        : "";
+
+    protected override void OnParametersSet() => _brand = BrandCatalog.For(Station.Brand);
+}

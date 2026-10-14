@@ -61,7 +61,8 @@ public class HistorySeriesTests
             From,
             To);
 
-        Assert.Equal(["Régulier", "Diesel", "Propane"], data.Series.Select(s => s.Fuel));
+        Assert.Equal(["Régulier", "Diesel", "Propane"], data.Series.Select(s => s.Key));
+        Assert.Equal([0, 2, 3], data.Series.Select(s => s.Color));
         Assert.Equal(90m, data.MinPrice);
         Assert.Equal(180m, data.MaxPrice);
     }
@@ -88,7 +89,7 @@ public class HistorySeriesTests
     [Fact]
     public void Path_joins_contiguous_steps_and_breaks_at_gaps()
     {
-        var series = new FuelSeries("Régulier", [
+        var series = new PriceSeries("Régulier", "Régulier", 0, [
             new PriceStep(From, From.AddDays(5), 160m),
             new PriceStep(From.AddDays(5), From.AddDays(6), 150m),
             new PriceStep(From.AddDays(8), To, 155m),
@@ -106,11 +107,61 @@ public class HistorySeriesTests
     [Fact]
     public void Y_axis_has_headroom_around_a_flat_line()
     {
-        var series = new FuelSeries("Régulier", [new PriceStep(From, To, 160m)]);
+        var series = new PriceSeries("Régulier", "Régulier", 0, [new PriceStep(From, To, 160m)]);
         var scale = new ChartScale(new PriceChartData(From, To, [series]), 100, 60, 0, 0);
 
         Assert.True(scale.YMin < 160m && scale.YMax > 160m);
         Assert.InRange(scale.Y(160m), 1, 59);
+    }
+
+    [Fact]
+    public void Compare_draws_one_series_per_station_for_the_fuel()
+    {
+        var data = HistorySeries.Compare(
+            [
+                new SeriesSource("7", "Shell", 3, [Row("Régulier", 160m, From, null), Row("Diesel", 180m, From, null)]),
+                new SeriesSource("9", "Esso", 0, [Row("régulier", 158m, From.AddDays(1), null)]),
+                new SeriesSource("12", "Costco", 1, [Row("Diesel", 175m, From, null)]),
+            ],
+            "Régulier",
+            From,
+            To);
+
+        Assert.Equal(["7", "9"], data.Series.Select(s => s.Key));
+        Assert.Equal(["Shell", "Esso"], data.Series.Select(s => s.Label));
+        Assert.Equal([3, 0], data.Series.Select(s => s.Color));
+        Assert.Equal([new PriceStep(From, To, 160m)], data.Series[0].Steps);
+        Assert.Equal(158m, data.MinPrice);
+    }
+
+    [Fact]
+    public void Compare_starts_at_the_first_price_of_any_station()
+    {
+        var data = HistorySeries.Compare(
+            [
+                new SeriesSource("1", "A", 0, [Row("Super", 175m, From.AddDays(6), null)]),
+                new SeriesSource("2", "B", 1, [Row("Super", 176m, From.AddDays(4), null)]),
+            ],
+            "Super",
+            From,
+            To);
+
+        Assert.Equal(From.AddDays(4), data.From);
+    }
+
+    [Fact]
+    public void Current_is_the_open_row_of_the_fuel()
+    {
+        PriceHistoryDto[] rows =
+        [
+            Row("Régulier", 160m, From, From.AddDays(2)),
+            Row("Régulier", 158m, From.AddDays(2), null),
+            new("Diesel", null, false, From.AddDays(3), null),
+        ];
+
+        Assert.Equal(new CurrentPriceDto("Régulier", 158m, true, From.AddDays(2)), HistorySeries.Current(rows, "régulier"));
+        Assert.Equal(new CurrentPriceDto("Diesel", null, false, From.AddDays(3)), HistorySeries.Current(rows, "Diesel"));
+        Assert.Null(HistorySeries.Current(rows, "Super"));
     }
 
     private static PriceHistoryDto Row(string fuel, decimal price, DateTimeOffset from, DateTimeOffset? to) =>

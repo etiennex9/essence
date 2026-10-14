@@ -22,6 +22,16 @@
     --ess-fuel-1: #534ab7;
     --ess-fuel-2: #ba7517;
     --ess-fuel-3: #888780;
+    /* Stations in the comparison chart, in this order (validated for color-vision deficiencies as neighbors). */
+    --ess-compare-0: #2a78d6;
+    --ess-compare-1: #eb6834;
+    --ess-compare-2: #1baf7a;
+    --ess-compare-3: #eda100;
+    --ess-compare-4: #e87ba4;
+    --ess-compare-5: #008300;
+    --ess-compare-6: #4a3aa7;
+    --ess-compare-7: #e34948;
+    --ess-favorite: #e0a100;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -44,6 +54,14 @@
         --ess-fuel-1: #afa9ec;
         --ess-fuel-2: #ef9f27;
         --ess-fuel-3: #b4b2a9;
+        --ess-compare-0: #3987e5;
+        --ess-compare-1: #d95926;
+        --ess-compare-2: #199e70;
+        --ess-compare-3: #c98500;
+        --ess-compare-4: #d55181;
+        --ess-compare-5: #008300;
+        --ess-compare-6: #9085e9;
+        --ess-compare-7: #e66767;
     }
 }
 
@@ -181,6 +199,21 @@ body {
     box-shadow: 0 0 0 2px #185fa5;
 }
 
+/* Favorites: a star badge on the pill's corner. */
+.ess-fav {
+    position: absolute;
+    top: -6px;
+    right: -6px;
+    display: grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: var(--ess-favorite);
+    color: #ffffff;
+    box-shadow: 0 0 0 1px #ffffff, 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
 /* Zoomed out: brand-colored dots, centered on the station. The selected station keeps its full pill. */
 .ess-map--compact .ess-marker:not(.is-selected) {
     padding: 0;
@@ -211,6 +244,17 @@ body {
 }
 
 .ess-map--compact .ess-marker:not(.is-selected) .ess-logo > * {
+    display: none;
+}
+
+/* As a dot, a favorite gets a gold ring instead of the star. */
+.ess-map--compact .ess-marker.is-favorite:not(.is-selected) .ess-logo {
+    width: 14px;
+    height: 14px;
+    border: 2.5px solid var(--ess-favorite);
+}
+
+.ess-map--compact .ess-marker:not(.is-selected) .ess-fav {
     display: none;
 }
 

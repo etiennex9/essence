@@ -1,0 +1,258 @@
+@implements IDisposable
+@inject ComparedStations Comparison
+@inject HistoryCache History
+@inject IStringLocalizer<Strings> L
+
+@* The compared stations' prices for the map's fuel, in a chart over the stations, cheapest first. The rows are the
+   chart's legend: hovering the chart shows each one's price at that time. *@
+<Pane TitleId="ess-comparison-title" OnClose="OnClose">
+    <Header>
+        <h2 id="ess-comparison-title" class="title">@L["Comparison"]</h2>
+    </Header>
+    <ChildContent>
+        @if (!_ready)
+        {
+            <div class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+        }
+        else if (Comparison.Count == 0)
+        {
+            <p class="message">@L["ComparisonEmpty"]</p>
+        }
+        else
+        {
+            <section aria-labelledby="ess-comparison-prices">
+                <div class="section-head">
+                    <h3 id="ess-comparison-prices">@L["FuelPrices", Fuel]</h3>
+                    <PeriodSelector Value="_days" ValueChanged="SetPeriodAsync" />
+                </div>
+                @if (_chart is null)
+                {
+                    <div class="skeleton chart-skeleton" aria-hidden="true"><span></span></div>
+                }
+                else if (_chart.IsEmpty)
+                {
+                    <p class="message">@L["HistoryEmpty"]</p>
+                }
+                else
+                {
+                    <PriceHistoryChart Data="_chart" Palette="compare" Highlight="@_highlight" ShowSeriesInReadout="false"
+                                       HoverChanged="time => { _hover = time; }" />
+                }
+                @if (_errors.Values.Any(e => e != ApiError.NotFound))
+                {
+                    <p class="message">
+                        @L["SomePricesFailed"]
+                        <button type="button" class="link" @onclick="RetryAsync">@L["Retry"]</button>
+                    </p>
+                }
+            </section>
+
+            <ul class="stations" aria-label="@L["Comparison"]">
+                @foreach (var row in Rows())
+                {
+                    var station = row.Station;
+                    var key = Key(station.Id);
+                    var name = StationRow.NameOf(station, L);
+                    var hovered = _hover is { } time && _lines.TryGetValue(key, out var line) ? line.At(time) : null;
+                    <li @key="station.Id" class="@(_highlight == key ? "is-highlighted" : null)"
+                        @onpointerenter="() => _highlight = key" @onpointerleave="() => _highlight = null"
+                        @onfocusin="() => _highlight = key" @onfocusout="() => _highlight = null">
+                        <i class="swatch compare-@row.Color" aria-hidden="true"></i>
+                        <StationRow Station="station" UserLocation="UserLocation" Loaded="row.History is not null" Error="row.Error"
+                                    Price="row.Price" Hovering="_hover is not null" HoveredPriceCents="hovered?.PriceCents" Now="_now"
+                                    OnOpen="() => OnOpenStation.InvokeAsync(station.Id)" />
+                        <button type="button" class="row-action" @onclick="() => Comparison.RemoveAsync(station.Id)"
+                                aria-label="@L["RemoveFromComparison", name]" title="@L["RemoveFromComparison", name]">
+                            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round"><path d="@Icons.Close" /></svg>
+                        </button>
+                    </li>
+                }
+            </ul>
+
+            @if (Comparison.IsFull)
+            {
+                <p class="message">@L["ComparisonFull", ComparedStations.MaxStations]</p>
+            }
+            <button type="button" class="link clear" @onclick="Comparison.ClearAsync">@L["ClearComparison"]</button>
+        }
+    </ChildContent>
+</Pane>
+
+@code {
+    private readonly Dictionary<long, StationHistory> _histories = [];
+    private readonly Dictionary<long, ApiError> _errors = [];
+    private readonly HashSet<long> _inFlight = [];
+    private CancellationTokenSource _cts = new();
+    private bool _ready;
+    private int _days;
+    private string? _shownFuel;
+    private DateTimeOffset _now = DateTimeOffset.UtcNow;
+
+    /// <summary>One line per compared station with prices in the period; null until their histories are in.</summary>
+    private PriceChartData? _chart;
+
+    /// <summary>The chart's lines by key: the rows show their price at the hovered time.</summary>
+    private Dictionary<string, PriceSeries> _lines = [];
+
+    private DateTimeOffset? _hover;
+    private string? _highlight;
+
+    /// <summary>The fuel selected on the map: the one compared.</summary>
+    [Parameter, EditorRequired]
+    public string Fuel { get; set; } = Fuels.Default;
+
+    [Parameter]
+    public GeoPoint? UserLocation { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnOpenStation { get; set; }
+
+    private sealed record Row(SavedStation Station, int Color, StationHistory? History, CurrentPriceDto? Price, ApiError Error);
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Set before awaiting: the saved comparison coming in raises Changed, which mustn't fetch without a period.
+        _days = Comparison.ChartDays;
+        Comparison.Changed += OnComparisonChanged;
+        await Comparison.LoadAsync();
+        _ready = true;
+        await LoadAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Fuel != _shownFuel && _shownFuel is not null)
+        {
+            Rebuild();
+        }
+
+        _shownFuel = Fuel;
+    }
+
+    /// <summary>Cheapest first; stations without a price for the fuel after, in color order.</summary>
+    private IEnumerable<Row> Rows() =>
+        Comparison.Stations
+            .Select(c =>
+            {
+                var history = _histories.GetValueOrDefault(c.Station.Id);
+                var price = history is null ? null : HistorySeries.Current(history.Rows, Fuel);
+                return new Row(c.Station, c.Color, history, price, _errors.GetValueOrDefault(c.Station.Id));
+            })
+            .OrderBy(r => r.Price is { IsAvailable: true, PriceCents: not null } ? r.Price.PriceCents : decimal.MaxValue)
+            .ThenBy(r => r.Color);
+
+    private async Task SetPeriodAsync(int days)
+    {
+        Comparison.ChartDays = _days = days;
+        _cts.Cancel();
+        _cts = new CancellationTokenSource();
+        _histories.Clear();
+        _errors.Clear();
+        _inFlight.Clear();
+        _chart = null;
+        _lines = [];
+        _hover = null;
+        await LoadAsync();
+    }
+
+    private Task RetryAsync()
+    {
+        foreach (var id in _errors.Where(e => e.Value != ApiError.NotFound).Select(e => e.Key).ToList())
+        {
+            _errors.Remove(id);
+        }
+
+        return LoadAsync();
+    }
+
+    /// <summary>Fetches the histories not loaded yet (from the cache when it has them), then redraws.</summary>
+    private async Task LoadAsync()
+    {
+        var token = _cts.Token;
+        var missing = Comparison.Stations
+            .Select(c => c.Station.Id)
+            .Where(id => !_histories.ContainsKey(id) && !_errors.ContainsKey(id) && !_inFlight.Contains(id))
+            .ToList();
+        if (missing.Count == 0)
+        {
+            Rebuild();
+            return;
+        }
+
+        _inFlight.UnionWith(missing);
+        (long Id, ApiResult<StationHistory> Result)[] results;
+        try
+        {
+            results = await Task.WhenAll(missing.Select(async id => (id, await History.GetAsync(id, _days, token))));
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        foreach (var (id, result) in results)
+        {
+            _inFlight.Remove(id);
+            if (result.Value is { } history)
+            {
+                _histories[id] = history;
+            }
+            else
+            {
+                _errors[id] = result.Error;
+            }
+        }
+
+        _now = DateTimeOffset.UtcNow;
+        Rebuild();
+    }
+
+    /// <summary>Builds the chart from the histories loaded so far, once none is still loading.</summary>
+    private void Rebuild()
+    {
+        if (_inFlight.Count > 0)
+        {
+            return;
+        }
+
+        var to = _histories.Count == 0 ? DateTimeOffset.UtcNow : _histories.Values.Max(h => h.To);
+        var sources = Comparison.Stations
+            .Where(c => _histories.ContainsKey(c.Station.Id))
+            .Select(c => new SeriesSource(Key(c.Station.Id), StationRow.NameOf(c.Station, L), c.Color, _histories[c.Station.Id].Rows));
+        _chart = HistorySeries.Compare(sources, Fuel, to.AddDays(-_days), to);
+        _lines = _chart.Series.ToDictionary(s => s.Key);
+        _hover = null;
+    }
+
+    private static string Key(long id) => id.ToString(CultureInfo.InvariantCulture);
+
+    /// <summary>A station added, removed or cleared: fetch what's new and redraw.</summary>
+    private void OnComparisonChanged()
+    {
+        if (!_ready)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        Comparison.Changed -= OnComparisonChanged;
+        _cts.Cancel();
+    }
+}

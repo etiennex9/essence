@@ -10,6 +10,7 @@ public sealed record MapOptions(
 /// <summary>One marker as <c>essenceMap.js</c> draws it. Everything is preformatted, so the JS side only builds DOM.</summary>
 /// <param name="Tone">"low", "mid", "high" or "" (no tone).</param>
 /// <param name="Z">Stacking order; higher draws on top.</param>
+/// <param name="Favorite">Draws a star on the marker.</param>
 public sealed record MarkerModel(
     long Id,
     double Lat,
@@ -19,6 +20,7 @@ public sealed record MarkerModel(
     bool Unavailable,
     string Tone,
     int Z,
+    bool Favorite,
     string Monogram,
     string Background,
     string Foreground,

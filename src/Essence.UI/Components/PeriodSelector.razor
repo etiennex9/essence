@@ -1,0 +1,24 @@
+@inject IStringLocalizer<Strings> L
+
+@* The price history's period, in days. *@
+<div class="periods" role="radiogroup" aria-label="@L["PriceHistory"]">
+    @foreach (var days in Periods)
+    {
+        <button type="button" role="radio" aria-checked="@(days == Value ? "true" : "false")"
+                class="@(days == Value ? "is-active" : null)" @onclick="() => SelectAsync(days)">
+            @L["PeriodDays", days]
+        </button>
+    }
+</div>
+
+@code {
+    private static readonly int[] Periods = [7, 30, 90];
+
+    [Parameter]
+    public int Value { get; set; }
+
+    [Parameter]
+    public EventCallback<int> ValueChanged { get; set; }
+
+    private Task SelectAsync(int days) => days == Value ? Task.CompletedTask : ValueChanged.InvokeAsync(days);
+}

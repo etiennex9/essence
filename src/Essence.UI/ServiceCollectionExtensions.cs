@@ -18,6 +18,10 @@ public static class ServiceCollectionExtensions
         services.AddSingleton(options);
         services.AddSingleton(_ => new EssenceApiClient(new HttpClient { BaseAddress = apiBaseUrl, Timeout = TimeSpan.FromSeconds(20) }));
         services.AddLocalization();
+        services.TryAddSingleton(TimeProvider.System);
+        services.AddScoped<HistoryCache>();
+        services.AddScoped<FavoriteStations>();
+        services.AddScoped<ComparedStations>();
         services.TryAddScoped<BrowserDevice>();
         services.TryAddScoped<IDeviceLocation>(sp => sp.GetRequiredService<BrowserDevice>());
         services.TryAddScoped<IPreferenceStore>(sp => sp.GetRequiredService<BrowserDevice>());

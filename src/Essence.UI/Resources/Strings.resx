@@ -123,4 +123,58 @@
   <data name="BackToMap" xml:space="preserve">
     <value>Back to the map</value>
   </data>
+  <data name="Favorites" xml:space="preserve">
+    <value>Favorites</value>
+  </data>
+  <data name="Favorite" xml:space="preserve">
+    <value>Favorite</value>
+  </data>
+  <data name="AddFavorite" xml:space="preserve">
+    <value>Add to favorites</value>
+  </data>
+  <data name="RemoveFavorite" xml:space="preserve">
+    <value>Remove from favorites</value>
+  </data>
+  <data name="Compare" xml:space="preserve">
+    <value>Compare</value>
+  </data>
+  <data name="FavoritesEmpty" xml:space="preserve">
+    <value>No favorites yet. Open a station and tap ☆ to add it.</value>
+  </data>
+  <data name="FuelPrices" xml:space="preserve">
+    <value>{0} prices</value>
+  </data>
+  <data name="ClearComparison" xml:space="preserve">
+    <value>Clear the comparison</value>
+  </data>
+  <data name="SomePricesFailed" xml:space="preserve">
+    <value>Couldn’t load some prices.</value>
+  </data>
+  <data name="MarkerFavorite" xml:space="preserve">
+    <value>{0}, favorite</value>
+  </data>
+  <data name="Comparison" xml:space="preserve">
+    <value>Comparison</value>
+  </data>
+  <data name="ComparisonCount" xml:space="preserve">
+    <value>Comparison ({0})</value>
+  </data>
+  <data name="CompareStation" xml:space="preserve">
+    <value>Compare {0}</value>
+  </data>
+  <data name="FavoriteStation" xml:space="preserve">
+    <value>Favorite: {0}</value>
+  </data>
+  <data name="CompareAll" xml:space="preserve">
+    <value>Compare all</value>
+  </data>
+  <data name="ComparisonEmpty" xml:space="preserve">
+    <value>Nothing to compare yet. Tap Compare in a station’s details, or next to a favorite.</value>
+  </data>
+  <data name="ComparisonFull" xml:space="preserve">
+    <value>The comparison holds up to {0} stations.</value>
+  </data>
+  <data name="RemoveFromComparison" xml:space="preserve">
+    <value>Remove {0} from the comparison</value>
+  </data>
 </root>

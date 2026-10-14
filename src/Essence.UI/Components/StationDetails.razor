@@ -1,13 +1,12 @@
 @implements IDisposable
 @inject EssenceApiClient Api
+@inject HistoryCache History
+@inject FavoriteStations Favorites
+@inject ComparedStations Comparison
 @inject IStringLocalizer<Strings> L
 
-@* A side panel on wide screens, a bottom sheet on narrow ones (see the CSS). data-ess-pane lets the map pan the
-   selected station out from under it. *@
-<aside class="details" data-ess-pane role="dialog" aria-labelledby="ess-details-title">
-    <div class="handle" aria-hidden="true"></div>
-
-    <header>
+<Pane TitleId="ess-details-title" OnClose="OnClose">
+    <Header>
         <span class="logo @(_brand.Monogram.Length > 1 ? "is-wide" : null)" style="--logo-bg: @_brand.Background; --logo-fg: @_brand.Foreground">
             @if (_brand.LogoUrl is { } logoUrl)
             {
@@ -25,13 +24,20 @@
                 <p>@_station.Address</p>
             }
         </div>
-        <button type="button" class="close" @onclick="OnClose" aria-label="@L["Close"]" title="@L["Close"]">
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18" /></svg>
-        </button>
-    </header>
-
-    <div class="body">
+    </Header>
+    <Actions>
+        @if (_station is not null)
+        {
+            var favorite = Favorites.IsFavorite(_station.Id);
+            <button type="button" class="icon-button star @(favorite ? "is-on" : null)" @onclick="ToggleFavoriteAsync"
+                    aria-pressed="@(favorite ? "true" : "false")" aria-label="@L["Favorite"]"
+                    title="@(favorite ? L["RemoveFavorite"] : L["AddFavorite"])">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="@(favorite ? "currentColor" : "none")"
+                     stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="@Icons.Star" /></svg>
+            </button>
+        }
+    </Actions>
+    <ChildContent>
         @if (_error != ApiError.None)
         {
             <p class="message">@(_error == ApiError.NotFound ? L["StationNotFound"] : L["DetailsFailed"])</p>
@@ -91,15 +97,7 @@
             <section aria-labelledby="ess-price-history">
                 <div class="section-head">
                     <h3 id="ess-price-history">@L["PriceHistory"]</h3>
-                    <div class="periods" role="radiogroup" aria-label="@L["PriceHistory"]">
-                        @foreach (var days in Periods)
-                        {
-                            <button type="button" role="radio" aria-checked="@(days == _days ? "true" : "false")"
-                                    class="@(days == _days ? "is-active" : null)" @onclick="() => SetPeriodAsync(days)">
-                                @L["PeriodDays", days]
-                            </button>
-                        }
-                    </div>
+                    <PeriodSelector Value="_days" ValueChanged="SetPeriodAsync" />
                 </div>
                 @if (_historyError != ApiError.None)
                 {
@@ -116,26 +114,37 @@
                 }
                 else
                 {
-                    <PriceHistoryChart Data="_history" HighlightFuel="@Fuel" />
+                    <PriceHistoryChart Data="_history" Highlight="@Fuel" />
                 }
             </section>
 
-            @if (_station is { Latitude: { } lat, Longitude: { } lon })
-            {
-                <a class="directions" target="_blank" rel="noopener"
-                   href="@string.Create(CultureInfo.InvariantCulture, $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}")">
+            <div class="actions">
+                @if (_station is { Latitude: { } lat, Longitude: { } lon })
+                {
+                    <a class="directions" target="_blank" rel="noopener"
+                       href="@string.Create(CultureInfo.InvariantCulture, $"https://www.google.com/maps/dir/?api=1&destination={lat},{lon}")">
+                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z" /></svg>
+                        @L["Directions"]
+                    </a>
+                }
+                @{
+                    var compared = Comparison.Contains(_station.Id);
+                    var full = !compared && Comparison.IsFull;
+                }
+                <button type="button" class="compare @(compared ? "is-on" : null)" @onclick="ToggleComparedAsync" disabled="@full"
+                        aria-pressed="@(compared ? "true" : "false")"
+                        title="@(full ? L["ComparisonFull", ComparedStations.MaxStations].Value : compared ? L["RemoveFromComparison", Title].Value : null)">
                     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z" /></svg>
-                    @L["Directions"]
-                </a>
-            }
+                         stroke-linecap="round" stroke-linejoin="round"><path d="@(compared ? Icons.Check : Icons.Compare)" /></svg>
+                    @L["Compare"]
+                </button>
+            </div>
         }
-    </div>
-</aside>
+    </ChildContent>
+</Pane>
 
 @code {
-    private static readonly int[] Periods = [7, 30, 90];
-
     private CancellationTokenSource? _stationCts;
     private CancellationTokenSource? _historyCts;
     private long _loadedId;
@@ -169,6 +178,14 @@
     private double? Distance => (UserLocation, _station) is ({ } user, { Latitude: { } lat, Longitude: { } lon })
         ? Geo.DistanceKm(user, new GeoPoint(lat, lon))
         : null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Favorites.Changed += OnListsChanged;
+        Comparison.Changed += OnListsChanged;
+        await Favorites.LoadAsync();
+        await Comparison.LoadAsync();
+    }
 
     protected override async Task OnParametersSetAsync()
     {
@@ -204,6 +221,8 @@
                 _brand = BrandCatalog.For(_station.Brand);
                 StateHasChanged();
                 await OnLoaded.InvokeAsync(_station);
+                await Favorites.RefreshAsync(_station);
+                await Comparison.RefreshAsync(_station);
             }
         }
         catch (OperationCanceledException)
@@ -216,11 +235,8 @@
 
     private async Task SetPeriodAsync(int days)
     {
-        if (days != _days)
-        {
-            _days = days;
-            await LoadHistoryAsync();
-        }
+        _days = days;
+        await LoadHistoryAsync();
     }
 
     private async Task LoadHistoryAsync()
@@ -229,18 +245,16 @@
         _historyError = ApiError.None;
         _historyCts?.Cancel();
         var cts = _historyCts = new CancellationTokenSource();
-        var to = DateTimeOffset.UtcNow;
-        var from = to.AddDays(-_days);
         try
         {
-            var result = await Api.GetPriceHistoryAsync(StationId, from, to, cts.Token);
+            var result = await History.GetAsync(StationId, _days, cts.Token);
             if (cts.IsCancellationRequested)
             {
                 return;
             }
 
             _historyError = result.Error;
-            _history = result.Value is { } rows ? HistorySeries.Build(rows, from, to) : null;
+            _history = result.Value is { } history ? HistorySeries.Build(history.Rows, history.From, history.To) : null;
         }
         catch (OperationCanceledException)
         {
@@ -248,8 +262,32 @@
         }
     }
 
+    private Task ToggleFavoriteAsync()
+    {
+        if (_station is not { } station)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Favorites.IsFavorite(station.Id) ? Favorites.RemoveAsync(station.Id) : Favorites.AddAsync(SavedStation.From(station));
+    }
+
+    private Task ToggleComparedAsync()
+    {
+        if (_station is not { } station)
+        {
+            return Task.CompletedTask;
+        }
+
+        return Comparison.Contains(station.Id) ? Comparison.RemoveAsync(station.Id) : Comparison.AddAsync(SavedStation.From(station));
+    }
+
+    private void OnListsChanged() => InvokeAsync(StateHasChanged);
+
     public void Dispose()
     {
+        Favorites.Changed -= OnListsChanged;
+        Comparison.Changed -= OnListsChanged;
         _stationCts?.Cancel();
         _historyCts?.Cancel();
     }

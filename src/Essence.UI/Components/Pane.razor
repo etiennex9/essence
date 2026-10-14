@@ -1,0 +1,40 @@
+@inject IStringLocalizer<Strings> L
+
+@* The pane the station details and the favorites open in: a side panel on wide screens, a bottom sheet on narrow ones
+   (see the CSS). data-ess-pane lets the map pan a station out from under it. *@
+<aside class="pane" data-ess-pane role="dialog" aria-labelledby="@TitleId">
+    <div class="handle" aria-hidden="true"></div>
+
+    <header>
+        @Header
+        @Actions
+        <button type="button" class="icon-button" @onclick="OnClose" aria-label="@L["Close"]" title="@L["Close"]">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round"><path d="@Icons.Close" /></svg>
+        </button>
+    </header>
+
+    <div class="body">
+        @ChildContent
+    </div>
+</aside>
+
+@code {
+    /// <summary>The id of the heading in <see cref="Header"/>, which names the dialog.</summary>
+    [Parameter, EditorRequired]
+    public string TitleId { get; set; } = "";
+
+    /// <summary>Takes the header's free width, before <see cref="Actions"/> and the Close button.</summary>
+    [Parameter]
+    public RenderFragment? Header { get; set; }
+
+    /// <summary>Icon buttons before Close.</summary>
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+}

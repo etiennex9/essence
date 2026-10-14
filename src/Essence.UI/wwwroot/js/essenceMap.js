@@ -26,6 +26,10 @@ const PUMP_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="t
     'stroke-linecap="round" stroke-linejoin="round"><path d="M3 22V5a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v17M2 22h13M6 9h5"/>' +
     '<path d="M14 11h2a2 2 0 0 1 2 2v4a1.5 1.5 0 0 0 3 0V8l-3-3"/></svg>';
 
+// The favorite badge.
+const STAR_SVG = '<svg viewBox="0 0 24 24" width="9" height="9" aria-hidden="true" fill="currentColor">' +
+    '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
+
 export function createMap(container, options, dotnet) {
     ensureStylesheet();
     document.documentElement.lang = options.language;
@@ -110,6 +114,7 @@ export function createMap(container, options, dotnet) {
     function renderMarker(element, model) {
         element.dataset.tone = model.tone;
         element.classList.toggle("is-unavailable", model.unavailable);
+        element.classList.toggle("is-favorite", model.favorite);
         element.classList.toggle("is-selected", model.id === selectedId);
         element.style.zIndex = String(model.z + 1);
         element.setAttribute("aria-label", model.label);
@@ -139,6 +144,13 @@ export function createMap(container, options, dotnet) {
         const pill = document.createElement("span");
         pill.className = "ess-pill";
         pill.append(logo, price);
+        if (model.favorite) {
+            const star = document.createElement("span");
+            star.className = "ess-fav";
+            star.innerHTML = STAR_SVG;
+            pill.append(star);
+        }
+
         element.replaceChildren(pill);
     }
 

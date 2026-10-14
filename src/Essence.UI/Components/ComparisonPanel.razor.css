@@ -1,0 +1,22 @@
+/* The station's line color, beside its row. */
+.swatch {
+    flex: none;
+    width: 10px;
+    height: 10px;
+    margin-left: 4px;
+    border-radius: 50%;
+    background: var(--series-color);
+}
+
+.compare-0 { --series-color: var(--ess-compare-0); }
+.compare-1 { --series-color: var(--ess-compare-1); }
+.compare-2 { --series-color: var(--ess-compare-2); }
+.compare-3 { --series-color: var(--ess-compare-3); }
+.compare-4 { --series-color: var(--ess-compare-4); }
+.compare-5 { --series-color: var(--ess-compare-5); }
+.compare-6 { --series-color: var(--ess-compare-6); }
+.compare-7 { --series-color: var(--ess-compare-7); }
+
+.clear {
+    margin-top: 14px;
+}

@@ -1,0 +1,230 @@
+@implements IDisposable
+@inject FavoriteStations Favorites
+@inject ComparedStations Comparison
+@inject HistoryCache History
+@inject IStringLocalizer<Strings> L
+
+@* The favorites at a glance, cheapest first for the map's fuel. Each can be added to the comparison, or all at once. *@
+<Pane TitleId="ess-favorites-title" OnClose="OnClose">
+    <Header>
+        <h2 id="ess-favorites-title" class="title">@L["Favorites"]</h2>
+    </Header>
+    <ChildContent>
+        @if (!_ready)
+        {
+            <div class="skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+        }
+        else if (_shown.Count == 0)
+        {
+            <p class="message">@L["FavoritesEmpty"]</p>
+        }
+        else
+        {
+            <ul class="stations" aria-label="@L["Favorites"]">
+                @foreach (var row in Rows())
+                {
+                    var station = row.Station;
+                    var name = StationRow.NameOf(station, L);
+                    var favorite = Favorites.IsFavorite(station.Id);
+                    var compared = Comparison.Contains(station.Id);
+                    var full = !compared && Comparison.IsFull;
+                    <li @key="station.Id">
+                        <StationRow Station="station" UserLocation="UserLocation" Loaded="row.History is not null" Error="row.Error"
+                                    Price="row.Price" Now="_now" OnOpen="() => OnOpenStation.InvokeAsync(station.Id)" />
+                        <button type="button" class="row-action @(compared ? "is-on" : null)" @onclick="() => ToggleComparedAsync(station)"
+                                disabled="@full" aria-pressed="@(compared ? "true" : "false")" aria-label="@L["CompareStation", name]"
+                                title="@(compared ? L["RemoveFromComparison", name] : full ? L["ComparisonFull", ComparedStations.MaxStations] : L["CompareStation", name])">
+                            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round"><path d="@(compared ? Icons.Check : Icons.Compare)" /></svg>
+                        </button>
+                        <button type="button" class="row-action star @(favorite ? "is-on" : null)" @onclick="() => ToggleFavoriteAsync(station)"
+                                aria-pressed="@(favorite ? "true" : "false")" aria-label="@L["FavoriteStation", name]"
+                                title="@(favorite ? L["RemoveFavorite"] : L["AddFavorite"])">
+                            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="@(favorite ? "currentColor" : "none")"
+                                 stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="@Icons.Star" /></svg>
+                        </button>
+                    </li>
+                }
+            </ul>
+
+            @if (_errors.Values.Any(e => e != ApiError.NotFound))
+            {
+                <p class="message">
+                    @L["SomePricesFailed"]
+                    <button type="button" class="link" @onclick="RetryAsync">@L["Retry"]</button>
+                </p>
+            }
+
+            <button type="button" class="compare-all" @onclick="CompareAllAsync" disabled="@(NotCompared().Count == 0 || Comparison.IsFull)">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Compare" /></svg>
+                @L["CompareAll"]
+            </button>
+        }
+    </ChildContent>
+</Pane>
+
+@code {
+    /// <summary>The details' default period, so their histories come from the cache.</summary>
+    private const int HistoryDays = 30;
+
+    /// <summary>The favorites when the pane opened, plus any starred since. Un-starred ones stay until it closes, to undo.</summary>
+    private readonly List<SavedStation> _shown = [];
+
+    private readonly Dictionary<long, StationHistory> _histories = [];
+    private readonly Dictionary<long, ApiError> _errors = [];
+    private readonly HashSet<long> _inFlight = [];
+    private readonly CancellationTokenSource _cts = new();
+    private bool _ready;
+    private DateTimeOffset _now = DateTimeOffset.UtcNow;
+
+    /// <summary>The fuel selected on the map: the price shown.</summary>
+    [Parameter, EditorRequired]
+    public string Fuel { get; set; } = Fuels.Default;
+
+    [Parameter]
+    public GeoPoint? UserLocation { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [Parameter]
+    public EventCallback<long> OnOpenStation { get; set; }
+
+    /// <summary>Raised after Compare all added the favorites, to show the comparison.</summary>
+    [Parameter]
+    public EventCallback OnCompareAll { get; set; }
+
+    private sealed record Row(SavedStation Station, int Order, StationHistory? History, CurrentPriceDto? Price, ApiError Error);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Favorites.Changed += OnFavoritesChanged;
+        Comparison.Changed += OnComparisonChanged;
+        await Favorites.LoadAsync();
+        await Comparison.LoadAsync();
+        SyncShown();
+        _ready = true;
+        await LoadAsync();
+    }
+
+    /// <summary>Cheapest first; stations without a price for the fuel after, in list order.</summary>
+    private IEnumerable<Row> Rows() =>
+        _shown
+            .Select((s, order) =>
+            {
+                var history = _histories.GetValueOrDefault(s.Id);
+                var price = history is null ? null : HistorySeries.Current(history.Rows, Fuel);
+                return new Row(s, order, history, price, _errors.GetValueOrDefault(s.Id));
+            })
+            .OrderBy(r => r.Price is { IsAvailable: true, PriceCents: not null } ? r.Price.PriceCents : decimal.MaxValue)
+            .ThenBy(r => r.Order);
+
+    /// <summary>The favorites not in the comparison yet, cheapest first, so those are the ones that fit when it's nearly full.</summary>
+    private List<SavedStation> NotCompared() =>
+        Rows().Select(r => r.Station).Where(s => Favorites.IsFavorite(s.Id) && !Comparison.Contains(s.Id)).ToList();
+
+    private async Task CompareAllAsync()
+    {
+        await Comparison.AddAsync(NotCompared());
+        await OnCompareAll.InvokeAsync();
+    }
+
+    private Task ToggleComparedAsync(SavedStation station) =>
+        Comparison.Contains(station.Id) ? Comparison.RemoveAsync(station.Id) : Comparison.AddAsync(station);
+
+    private Task ToggleFavoriteAsync(SavedStation station) =>
+        Favorites.IsFavorite(station.Id) ? Favorites.RemoveAsync(station.Id) : Favorites.AddAsync(station);
+
+    private Task RetryAsync()
+    {
+        foreach (var id in _errors.Where(e => e.Value != ApiError.NotFound).Select(e => e.Key).ToList())
+        {
+            _errors.Remove(id);
+        }
+
+        return LoadAsync();
+    }
+
+    /// <summary>Fetches the histories not loaded yet (from the cache when it has them).</summary>
+    private async Task LoadAsync()
+    {
+        var token = _cts.Token;
+        var missing = _shown
+            .Select(s => s.Id)
+            .Where(id => !_histories.ContainsKey(id) && !_errors.ContainsKey(id) && !_inFlight.Contains(id))
+            .ToList();
+        if (missing.Count == 0)
+        {
+            return;
+        }
+
+        _inFlight.UnionWith(missing);
+        (long Id, ApiResult<StationHistory> Result)[] results;
+        try
+        {
+            results = await Task.WhenAll(missing.Select(async id => (id, await History.GetAsync(id, HistoryDays, token))));
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        foreach (var (id, result) in results)
+        {
+            _inFlight.Remove(id);
+            if (result.Value is { } history)
+            {
+                _histories[id] = history;
+            }
+            else
+            {
+                _errors[id] = result.Error;
+            }
+        }
+
+        _now = DateTimeOffset.UtcNow;
+    }
+
+    /// <summary>Adds the favorites not shown yet and takes in updated snapshots; un-starred ones stay.</summary>
+    private void SyncShown()
+    {
+        foreach (var favorite in Favorites.Favorites)
+        {
+            var index = _shown.FindIndex(s => s.Id == favorite.Id);
+            if (index < 0)
+            {
+                _shown.Add(favorite);
+            }
+            else
+            {
+                _shown[index] = favorite;
+            }
+        }
+    }
+
+    private void OnFavoritesChanged()
+    {
+        if (!_ready)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(async () =>
+        {
+            SyncShown();
+            StateHasChanged();
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void OnComparisonChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Favorites.Changed -= OnFavoritesChanged;
+        Comparison.Changed -= OnComparisonChanged;
+        _cts.Cancel();
+    }
+}

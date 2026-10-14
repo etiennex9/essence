@@ -30,7 +30,13 @@
     pointer-events: auto;
 }
 
-.locate {
+.tools {
+    display: flex;
+    gap: 8px;
+}
+
+.tool {
+    position: relative;
     display: grid;
     place-items: center;
     width: 42px;
@@ -43,13 +49,47 @@
     cursor: pointer;
 }
 
-.locate:hover {
+.tool:hover {
     color: var(--ess-accent);
 }
 
-.locate:focus-visible {
+.tool.is-active {
+    background: var(--ess-accent);
+    color: var(--ess-on-accent);
+}
+
+.tool:focus-visible {
     outline: 2px solid var(--ess-accent);
     outline-offset: 2px;
+}
+
+/* How many stations are compared. */
+.badge {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 9px;
+    border: 2px solid var(--ess-surface);
+    background: var(--ess-accent);
+    color: var(--ess-on-accent);
+    font: 600 10px/14px var(--ess-font);
+    text-align: center;
+}
+
+/* Small phones: the fuel selector and three buttons share 336 px at 360 px wide. */
+@media (max-width: 400px) {
+    .tools {
+        gap: 6px;
+    }
+
+    .tool {
+        width: 40px;
+        height: 40px;
+    }
 }
 
 .status-slot {

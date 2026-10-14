@@ -31,3 +31,10 @@
     outline: 2px solid var(--ess-accent);
     outline-offset: 2px;
 }
+
+/* Small phones: room for the toolbar's buttons. */
+@media (max-width: 400px) {
+    .fuel button {
+        padding: 8px 10px;
+    }
+}

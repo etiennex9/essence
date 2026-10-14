@@ -15,11 +15,15 @@ app can host the same components later (see [Android](#android) below). The brow
 | Page | `Pages/MapPage.razor`: fuel selector, locate button, status, data loading, `?station=` navigation. |
 | Loading | `Services/StationViewport.cs`: on each move, `/stations/nearby` around the map center (radius to the corners, max 50 km and 100 stations; nothing below zoom 9), merged into a cache per fuel. |
 | Markers | Callout pills (brand badge and price). Prices are tinted by tertile among the stations in view, the cheapest draws on top, and below zoom 12 markers shrink to brand-colored dots. Styles are in `wwwroot/css/essence.css`. |
-| Details | `Components/StationDetails.razor` (side panel from 768 px, bottom sheet below) and `PriceHistoryChart.razor` (stepped lines in plain SVG). |
+| Details | `Components/StationDetails.razor` in `Pane.razor` (side panel from 768 px, bottom sheet below) and `PriceHistoryChart.razor` (stepped lines in plain SVG). |
+| Favorites | The star in a station's details saves it on the device (`Services/FavoriteStations.cs`, through `IPreferenceStore`: `localStorage` here). The toolbar's star opens `Components/FavoritesPanel.razor`: the favorites, cheapest first for the selected fuel, each with a toggle to compare it, and *Compare all*. |
+| Comparison | *Compare* in a station's details, or beside a favorite, adds it to the comparison (`Services/ComparedStations.cs`, also saved on the device, up to 8 stations: one per palette color, kept when others leave). The toolbar's chart button, with the count, opens `Components/ComparisonPanel.razor`: one price line per station for the selected fuel, and the stations cheapest first, each removable; *Clear the comparison* empties it. |
+| History requests | Each listed or compared station costs one `/stations/{id}/prices` request (all fuels, so switching fuel is free), kept 2 minutes by `Services/HistoryCache.cs`. |
 | Text | `Resources/Strings.resx` (English) and `Strings.fr.resx`. The language follows the browser. Fuel names stay as the Régie publishes them. |
 
 Opening a station adds `?station=<id>` to the URL, so Back closes the pane and the link can be shared; a link opened cold
-centers the map on that station.
+centers the map on that station. The favorites add `?view=favorites` and the comparison `?view=compare`; a station opened
+from them stacks on top, so Back returns to the list.
 
 ## Run it
 

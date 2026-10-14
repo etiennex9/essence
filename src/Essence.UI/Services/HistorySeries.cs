@@ -7,13 +7,19 @@ namespace Essence.UI.Services;
 /// <summary>A price held from <see cref="From"/> to <see cref="To"/> (exclusive).</summary>
 public sealed record PriceStep(DateTimeOffset From, DateTimeOffset To, decimal PriceCents);
 
-/// <summary>The steps of one fuel, in time order. Time not covered by a step is a gap (unavailable or not sold).</summary>
-public sealed record FuelSeries(string Fuel, IReadOnlyList<PriceStep> Steps)
+/// <summary>
+/// One line of the chart, in time order: the prices of a fuel, or of one fuel at a station when comparing stations.
+/// Time not covered by a step is a gap (unavailable or not sold).
+/// </summary>
+/// <param name="Key">Identifies the series (the fuel, or the station id), e.g. to highlight it.</param>
+/// <param name="Label">Shown in the chart's readout.</param>
+/// <param name="Color">Index in the chart's palette.</param>
+public sealed record PriceSeries(string Key, string Label, int Color, IReadOnlyList<PriceStep> Steps)
 {
     public PriceStep? At(DateTimeOffset time) => Steps.FirstOrDefault(s => s.From <= time && time < s.To);
 }
 
-public sealed record PriceChartData(DateTimeOffset From, DateTimeOffset To, IReadOnlyList<FuelSeries> Series)
+public sealed record PriceChartData(DateTimeOffset From, DateTimeOffset To, IReadOnlyList<PriceSeries> Series)
 {
     public bool IsEmpty => Series.Count == 0;
 
@@ -21,6 +27,9 @@ public sealed record PriceChartData(DateTimeOffset From, DateTimeOffset To, IRea
 
     public decimal MaxPrice => Series.SelectMany(s => s.Steps).Max(s => s.PriceCents);
 }
+
+/// <summary>The history of one station, to compare with others: its rows and how its line looks.</summary>
+public sealed record SeriesSource(string Key, string Label, int Color, IEnumerable<PriceHistoryDto> Rows);
 
 public static class HistorySeries
 {
@@ -34,20 +43,51 @@ public static class HistorySeries
     public static PriceChartData Build(IEnumerable<PriceHistoryDto> rows, DateTimeOffset from, DateTimeOffset to)
     {
         var series = rows
-            .Where(r => r is { IsAvailable: true, PriceCents: not null })
-            .Select(r => (r.Fuel, Step: new PriceStep(Max(r.ValidFrom, from), Min(r.ValidTo ?? to, to), r.PriceCents!.Value)))
-            .Where(x => x.Step.From < x.Step.To)
-            .GroupBy(x => x.Fuel, StringComparer.OrdinalIgnoreCase)
+            .GroupBy(r => r.Fuel, StringComparer.OrdinalIgnoreCase)
             .OrderBy(g => Fuels.IndexOf(g.Key))
             .ThenBy(g => g.Key, StringComparer.OrdinalIgnoreCase)
-            .Select(g => new FuelSeries(g.Key, MergeSteps(g.Select(x => x.Step).OrderBy(s => s.From))))
+            .Select(g => new PriceSeries(g.Key, g.Key, Fuels.IndexOf(g.Key), Steps(g, from, to)))
+            .Where(s => s.Steps.Count > 0)
             .ToList();
+        return Chart(series, from, to);
+    }
+
+    /// <summary>
+    /// One series per station for <paramref name="fuel"/>, built like <see cref="Build"/>, in the order given.
+    /// Stations without that fuel in the range are left out.
+    /// </summary>
+    public static PriceChartData Compare(IEnumerable<SeriesSource> stations, string fuel, DateTimeOffset from, DateTimeOffset to)
+    {
+        var series = stations
+            .Select(s => new PriceSeries(
+                s.Key, s.Label, s.Color, Steps(s.Rows.Where(r => string.Equals(r.Fuel, fuel, StringComparison.OrdinalIgnoreCase)), from, to)))
+            .Where(s => s.Steps.Count > 0)
+            .ToList();
+        return Chart(series, from, to);
+    }
+
+    /// <summary>The current price of <paramref name="fuel"/>: the row still open, or null when the station doesn't list it.</summary>
+    public static CurrentPriceDto? Current(IEnumerable<PriceHistoryDto> rows, string fuel) =>
+        rows
+            .Where(r => r.ValidTo is null && string.Equals(r.Fuel, fuel, StringComparison.OrdinalIgnoreCase))
+            .Select(r => new CurrentPriceDto(r.Fuel, r.PriceCents, r.IsAvailable, r.ValidFrom))
+            .FirstOrDefault();
+
+    private static PriceChartData Chart(List<PriceSeries> series, DateTimeOffset from, DateTimeOffset to)
+    {
         var start = series.Count == 0 ? from : series.Min(s => s.Steps[0].From);
         return new PriceChartData(start, to, series);
     }
 
-    private static List<PriceStep> MergeSteps(IEnumerable<PriceStep> steps)
+    /// <summary>The priced rows clamped to [from, to), in time order, with contiguous steps at the same price merged.</summary>
+    private static List<PriceStep> Steps(IEnumerable<PriceHistoryDto> rows, DateTimeOffset from, DateTimeOffset to)
     {
+        var steps = rows
+            .Where(r => r is { IsAvailable: true, PriceCents: not null })
+            .Select(r => new PriceStep(Max(r.ValidFrom, from), Min(r.ValidTo ?? to, to), r.PriceCents!.Value))
+            .Where(s => s.From < s.To)
+            .OrderBy(s => s.From);
+
         var merged = new List<PriceStep>();
         foreach (var step in steps)
         {
@@ -108,7 +148,7 @@ public sealed class ChartScale
     public double Y(decimal priceCents) => _top + (double)((YMax - priceCents) / (YMax - YMin)) * _plotHeight;
 
     /// <summary>SVG path of a stepped line: horizontal runs, joined vertically when a step starts where the previous one ends.</summary>
-    public string Path(FuelSeries series)
+    public string Path(PriceSeries series)
     {
         var path = new StringBuilder();
         PriceStep? previous = null;

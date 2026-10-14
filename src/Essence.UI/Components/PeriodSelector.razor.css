@@ -1,0 +1,28 @@
+.periods {
+    display: inline-flex;
+    gap: 2px;
+    padding: 2px;
+    border-radius: 8px;
+    background: var(--ess-hover);
+}
+
+.periods button {
+    border: 0;
+    background: transparent;
+    color: var(--ess-text-muted);
+    font: 500 12px/1 var(--ess-font);
+    padding: 6px 8px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.periods button.is-active {
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    box-shadow: 0 0 0 0.5px var(--ess-border-strong);
+}
+
+.periods button:focus-visible {
+    outline: 2px solid var(--ess-accent);
+    outline-offset: 2px;
+}

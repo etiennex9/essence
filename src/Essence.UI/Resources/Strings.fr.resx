@@ -123,4 +123,58 @@
   <data name="BackToMap" xml:space="preserve">
     <value>Retour à la carte</value>
   </data>
+  <data name="Favorites" xml:space="preserve">
+    <value>Favoris</value>
+  </data>
+  <data name="Favorite" xml:space="preserve">
+    <value>Favori</value>
+  </data>
+  <data name="AddFavorite" xml:space="preserve">
+    <value>Ajouter aux favoris</value>
+  </data>
+  <data name="RemoveFavorite" xml:space="preserve">
+    <value>Retirer des favoris</value>
+  </data>
+  <data name="Compare" xml:space="preserve">
+    <value>Comparer</value>
+  </data>
+  <data name="FavoritesEmpty" xml:space="preserve">
+    <value>Aucun favori pour l’instant. Ouvrez une station et touchez ☆ pour l’ajouter.</value>
+  </data>
+  <data name="FuelPrices" xml:space="preserve">
+    <value>Prix du {0}</value>
+  </data>
+  <data name="ClearComparison" xml:space="preserve">
+    <value>Vider la comparaison</value>
+  </data>
+  <data name="SomePricesFailed" xml:space="preserve">
+    <value>Impossible de charger certains prix.</value>
+  </data>
+  <data name="MarkerFavorite" xml:space="preserve">
+    <value>{0}, favori</value>
+  </data>
+  <data name="Comparison" xml:space="preserve">
+    <value>Comparaison</value>
+  </data>
+  <data name="ComparisonCount" xml:space="preserve">
+    <value>Comparaison ({0})</value>
+  </data>
+  <data name="CompareStation" xml:space="preserve">
+    <value>Comparer {0}</value>
+  </data>
+  <data name="FavoriteStation" xml:space="preserve">
+    <value>Favori : {0}</value>
+  </data>
+  <data name="CompareAll" xml:space="preserve">
+    <value>Tout comparer</value>
+  </data>
+  <data name="ComparisonEmpty" xml:space="preserve">
+    <value>Rien à comparer pour l’instant. Touchez Comparer dans les détails d’une station, ou à côté d’un favori.</value>
+  </data>
+  <data name="ComparisonFull" xml:space="preserve">
+    <value>La comparaison contient au plus {0} stations.</value>
+  </data>
+  <data name="RemoveFromComparison" xml:space="preserve">
+    <value>Retirer {0} de la comparaison</value>
+  </data>
 </root>

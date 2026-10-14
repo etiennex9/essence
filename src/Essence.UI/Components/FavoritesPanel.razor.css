@@ -1,0 +1,25 @@
+.compare-all {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    margin-top: 14px;
+    padding: 11px 16px;
+    border: 1px solid var(--ess-border-strong);
+    border-radius: 10px;
+    background: transparent;
+    color: var(--ess-accent);
+    font: 500 15px var(--ess-font);
+    cursor: pointer;
+}
+
+.compare-all:hover:not(:disabled) {
+    background: var(--ess-hover);
+}
+
+.compare-all:disabled {
+    color: var(--ess-text-muted);
+    opacity: 0.6;
+    cursor: not-allowed;
+}
