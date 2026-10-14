@@ -19,6 +19,6 @@ TestResults/
 *.trx
 coverage*.xml
 
-# Local secrets and data (the raw archive defaults to ./data/raw when running outside Docker)
+# Local secrets and data (the raw archive defaults to ./data/archive when running outside Docker)
 .env
 /data/

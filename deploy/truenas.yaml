@@ -2,7 +2,8 @@
 #
 # Before pasting, replace:
 #   - every CHANGE_ME_..._PASSWORD (each appears twice). Use letters and digits only: they go into connection strings.
-#   - POOL in the two host paths. Create both folders first; postgres must own its folder (999:999), ingest its own (1654:1654).
+#   - POOL in the two host paths. Create both folders first: postgres must own its folder (999:999), and ingest the data
+#     folder (1654:1654), where it creates the archive subfolder.
 #   - 30180, if that port is taken. Point the reverse proxy for gas.escott.info at http://<NAS address>:30180:
 #     it serves the map and, under /api/, the API.
 #
@@ -50,11 +51,11 @@ services:
       DOTNET_ENVIRONMENT: Production
       TZ: UTC
       ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_writer;Password=CHANGE_ME_WRITER_PASSWORD;GSS Encryption Mode=Disable
-      Archive__Path: /data/raw
+      Archive__Path: /data/archive
     volumes:
       - type: bind
-        source: /mnt/POOL/apps/essence/raw
-        target: /data/raw
+        source: /mnt/POOL/apps/essence/data
+        target: /data
         bind:
           create_host_path: false
     depends_on:

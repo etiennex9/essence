@@ -45,9 +45,9 @@ services:
     environment:
       <<: *dotnet-env
       ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_writer;Password=${ESSENCE_WRITER_PASSWORD};GSS Encryption Mode=Disable
-      Archive__Path: /data/raw
+      Archive__Path: /data/archive
     volumes:
-      - rawdata:/data/raw
+      - data:/data
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -80,4 +80,4 @@ services:
 
 volumes:
   pgdata:
-  rawdata:
+  data:

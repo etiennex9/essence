@@ -9,7 +9,7 @@ public sealed class ArchiveOptions
 {
     public const string SectionName = "Archive";
 
-    public string Path { get; set; } = "/data/raw";
+    public string Path { get; set; } = "/data/archive";
     public int RetentionDays { get; set; } = 30;
 }
 

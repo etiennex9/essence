@@ -79,7 +79,7 @@ tests/Essence.Ingest.Tests/  xUnit + Fixtures/stations.sample.geojson (copy of t
    Outcomes: 304 → nothing new. 200 → decompress (gzip or identity), SHA-256, parse.
    **Discarded if `generated_at` ≤ the last imported one** (CDN flip-flop) or if the SHA matches the last import. Neither case updates the ETag.
 3. **FeedParser**: System.Text.Json source-generated DTOs. Prices are parsed with InvariantCulture after stripping `¢`.
-4. **RawArchive**: writes `/data/raw/yyyy/MM/dd/stations-{generated_at:yyyyMMddTHHmmssZ}.geojson.gz` *before* importing, and deletes files past retention once a day.
+4. **RawArchive**: writes `/data/archive/yyyy/MM/dd/stations-{generated_at:yyyyMMddTHHmmssZ}.geojson.gz` *before* importing, and deletes files past retention once a day.
 5. **FeedDiffer** (pure, no database): (current stations + current prices snapshot, parsed feed) → ChangeSet:
    new stations, field changes, reactivations, deactivations (in DB but not in the file), price changes (price or availability differs),
    closed prices (station dropped a fuel type, or the station went missing). Duplicate keys in one file: keep the first, log a warning.
@@ -97,7 +97,7 @@ OpenAPI docs come from the built-in `Microsoft.AspNetCore.OpenApi`, with a Scala
 ## Docker
 - Multi-stage Dockerfiles (`sdk:10.0` → `runtime:10.0` / `aspnet:10.0`), running as the image's non-root `app` user.
 - Compose: `postgres` (healthcheck, `pgdata` volume) → `migrate` (runs once, waits for a healthy postgres, creates the `essence_writer`/`essence_reader` roles)
-  → `ingest` (`restart: unless-stopped`, `rawdata` volume at `/data/raw`) and `api` (port 8080), both waiting for `migrate` to complete successfully.
+  → `ingest` (`restart: unless-stopped`, `data` volume at `/data`, archive in `/data/archive`) and `api` (port 8080), both waiting for `migrate` to complete successfully.
   Secrets come from `.env` (gitignored). `.env.example` is committed.
 
 ## Build order
@@ -122,4 +122,4 @@ Changes stay uncommitted for your review. I'll commit when you ask.
   - `migrate` exits 0, and `ingest` logs a first import (2463 stations)
   - over about 15 min, the logs show one import per publish with delay of about 40–90 s, plus "stale version ignored" entries
 - API checks: `curl localhost:8080/health`, `/stations/nearby?lat=45.5017&lon=-73.5673&radiusKm=3&fuel=Diesel`, `/prices/current?fuel=Régulier&limit=5`, `/imports`. `/scalar` loads.
-- psql: `price_history` grows only by actual changes, `current_prices` has about 7,100 rows, and archive files show up in the `rawdata` volume.
+- psql: `price_history` grows only by actual changes, `current_prices` has about 7,100 rows, and archive files show up in the `data` volume.

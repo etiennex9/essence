@@ -10,8 +10,9 @@ COPY src/Essence.Ingest/ src/Essence.Ingest/
 RUN dotnet publish src/Essence.Ingest/Essence.Ingest.csproj --configuration Release --no-restore --output /app
 
 FROM mcr.microsoft.com/dotnet/runtime:10.0 AS final
-# Created here so a new named volume mounted on it inherits the app user's ownership.
-RUN mkdir -p /data/raw && chown "$APP_UID" /data/raw
+# /data is the app's data folder and the archive a subfolder. Created here so a new named volume mounted on /data inherits
+# the app user's ownership.
+RUN mkdir -p /data/archive && chown -R "$APP_UID" /data
 WORKDIR /app
 COPY --from=build /app .
 USER $APP_UID

@@ -40,7 +40,7 @@ curl localhost:8080/imports
 ```
 
 Look at the data with `docker compose exec postgres psql -U essence_admin essence`, and at the raw archive with
-`docker compose exec ingest ls -R /data/raw`.
+`docker compose exec ingest ls -R /data/archive`.
 
 ## Develop
 
@@ -72,7 +72,7 @@ dotnet watch --project src/Essence.Web
 
 To run an app outside Docker, give it a connection string, e.g.
 `ConnectionStrings__Essence="Host=localhost;Database=essence;Username=essence_writer;Password=…"`.
-In the Development environment, logs are plain text and the ingest archive goes to `./data/raw`.
+In the Development environment, logs are plain text and the ingest archive goes to `./data/archive`.
 
 ## How ingestion works
 
@@ -89,7 +89,7 @@ In the Development environment, logs are plain text and the ingest archive goes 
   then `00`, then `02`. Slots older than `Backfill:MaxAge` (70 min) aren't requested; the log says how many were lost.
   Backfilled imports have `source = 'xlsx'` and no delay, so they don't affect the learned delay.
 - **Archive.** Each new file is saved as received (gzipped JSON, or xlsx) to
-  `/data/raw/yyyy/MM/dd/stations-{generated_at}.geojson.gz` (or `.xlsx`) before it is imported. Files older than 30 days are deleted once a day.
+  `/data/archive/yyyy/MM/dd/stations-{generated_at}.geojson.gz` (or `.xlsx`) before it is imported. Files older than 30 days are deleted once a day.
 - **Import.** One transaction, guarded by a PostgreSQL advisory lock: the current stations and prices are loaded, diffed in memory,
   and only the changes are written. The effective time of every change is the file's `generated_at`.
   A failed import is rolled back, recorded as a `failed` row in `imports` and retried on the next poll; after 3 failures the file
@@ -154,5 +154,5 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Backfill:Enabled` | `true` | Backfill missed versions from xlsx. |
 | `Backfill:BaseUrl` | `https://regieessencequebec.ca/data/` | Folder of the xlsx files, ending with `/`. |
 | `Backfill:MaxAge` | `01:10:00` | Older slots aren't requested (the server keeps the files about an hour). |
-| `Archive:Path` / `RetentionDays` | `/data/raw` / 30 | |
+| `Archive:Path` / `RetentionDays` | `/data/archive` / 30 | |
 | `Health:MaxImportAgeMinutes` | 15 | API `/health` threshold. |
