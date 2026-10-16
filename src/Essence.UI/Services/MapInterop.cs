@@ -35,6 +35,9 @@ public interface IMapListener
 
     /// <summary>A click on the map itself (not on a marker), or Escape.</summary>
     Task OnDismissAsync();
+
+    /// <summary>The page was hidden (another tab, the app in the background) or shown again.</summary>
+    Task OnVisibilityChangedAsync(bool visible);
 }
 
 /// <summary>The MapLibre map behind <c>essenceMap.js</c>: the JS side owns the map and the marker DOM, C# everything else.</summary>
@@ -76,6 +79,9 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 
     [JSInvokable]
     public Task OnDismiss() => _listener?.OnDismissAsync() ?? Task.CompletedTask;
+
+    [JSInvokable]
+    public Task OnVisibilityChanged(bool visible) => _listener?.OnVisibilityChangedAsync(visible) ?? Task.CompletedTask;
 
     public async ValueTask DisposeAsync()
     {

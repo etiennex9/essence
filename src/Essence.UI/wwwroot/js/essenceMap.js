@@ -1,5 +1,6 @@
 // The MapLibre map behind MapInterop.cs. C# decides what to show (markers arrive preformatted); this module draws it
-// and reports what the user does: map moves, marker clicks, and dismissals (a click on the map, or Escape).
+// and reports what the user does: map moves, marker clicks, and dismissals (a click on the map, or Escape), and when the
+// page is hidden or shown again.
 import { Map as MapLibreMap, Marker, NavigationControl } from "../lib/maplibre-gl/maplibre-gl.mjs";
 
 const VIEWPORT_DEBOUNCE_MS = 250;
@@ -92,6 +93,11 @@ export function createMap(container, options, dotnet) {
         map.setStyle(e.matches ? options.darkStyleUrl : options.styleUrl);
     }
 
+    // Another tab, or the app in the background: the prices needn't refresh until the map is seen again.
+    function onVisibilityChange() {
+        call("OnVisibilityChanged", document.visibilityState === "visible");
+    }
+
     // The part of the map not covered by the details pane (a side panel or a bottom sheet), in container pixels.
     // Called after the pane's entrance transition (PANE_SETTLE_MS) so its final position is measured.
     function uncoveredArea() {
@@ -160,7 +166,12 @@ export function createMap(container, options, dotnet) {
     map.on("click", onMapClick);
     document.addEventListener("keydown", onKeyDown);
     darkScheme.addEventListener("change", onSchemeChange);
+    document.addEventListener("visibilitychange", onVisibilityChange);
     updateCompact();
+    if (document.visibilityState !== "visible") {
+        // Opened in a background tab: no event comes until it's shown.
+        onVisibilityChange();
+    }
 
     return {
         // Adds, updates and removes markers so the map shows exactly `models`. Unchanged markers aren't touched.
@@ -252,6 +263,7 @@ export function createMap(container, options, dotnet) {
             clearTimeout(viewportTimer);
             document.removeEventListener("keydown", onKeyDown);
             darkScheme.removeEventListener("change", onSchemeChange);
+            document.removeEventListener("visibilitychange", onVisibilityChange);
             map.remove();
             markers.clear();
         },

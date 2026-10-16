@@ -17,7 +17,8 @@ public enum ApiError
 }
 
 /// <param name="RetryAfter">With <see cref="ApiError.RateLimited"/>: how long the API asked to wait.</param>
-public sealed record ApiResult<T>(T? Value, ApiError Error = ApiError.None, TimeSpan? RetryAfter = null)
+/// <param name="DataAsOf">When the data was imported (the API's <c>Last-Modified</c>), on the endpoints that say so.</param>
+public sealed record ApiResult<T>(T? Value, ApiError Error = ApiError.None, TimeSpan? RetryAfter = null, DateTimeOffset? DataAsOf = null)
 {
     public bool IsSuccess => Error == ApiError.None;
 }
@@ -69,7 +70,9 @@ public sealed class EssenceApiClient(HttpClient http)
             }
 
             var value = await response.Content.ReadFromJsonAsync(typeInfo, cancellationToken);
-            return value is null ? new ApiResult<T>(default, ApiError.Failed) : new ApiResult<T>(value);
+            return value is null
+                ? new ApiResult<T>(default, ApiError.Failed)
+                : new ApiResult<T>(value, DataAsOf: response.Content.Headers.LastModified);
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException
                                        || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))

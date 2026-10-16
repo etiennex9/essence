@@ -48,7 +48,7 @@
     @* The details open over a list (?view=…&station=…): closing them goes back to it. *@
     @if (Station is { } stationId)
     {
-        <StationDetails StationId="stationId" Fuel="@_fuel" UserLocation="_userLocation" OnClose="CloseDetailsAsync"
+        <StationDetails StationId="stationId" Fuel="@_fuel" UserLocation="_userLocation" DataAsOf="_dataAsOf" OnClose="CloseDetailsAsync"
                         OnLoaded="OnStationLoadedAsync" />
     }
     else if (View == FavoritesView)
@@ -97,6 +97,18 @@
     private CancellationTokenSource? _loadCts;
     private CancellationTokenSource? _retryCts;
     private CancellationTokenSource? _noticeCts;
+
+    /// <summary>When the prices shown were imported, as the API says; the next refresh is timed from it.</summary>
+    private DateTimeOffset? _dataAsOf;
+
+    /// <summary>Refreshes in a row that found nothing newer, or failed.</summary>
+    private int _lateRefreshes;
+
+    private DateTimeOffset? _refreshDueAt;
+    private CancellationTokenSource? _refreshCts;
+
+    /// <summary>The page is out of sight: the refresh waits until it's back.</summary>
+    private bool _hidden;
 
     /// <summary>Set when this page pushed the <c>?station=</c> history entry, so closing goes back instead of forward.</summary>
     private bool _stationPushed;
@@ -274,14 +286,17 @@
 
     /// <summary>
     /// Fetches the stations around the viewport. A newer call cancels an older one still in flight, and the same request
-    /// isn't repeated while it's in flight or fresh (map events often report the same view twice).
+    /// isn't repeated while it's in flight or fresh (map events often report the same view twice). Each success plans a
+    /// <paramref name="background"/> refresh of the same view for when the next prices should be in; that one fetches
+    /// even if fresh, shows no progress, and fails silently.
     /// </summary>
-    private async Task LoadAsync(Viewport viewport)
+    private async Task LoadAsync(Viewport viewport, bool background = false)
     {
         if (!StationViewport.ShouldFetch(viewport))
         {
             _retryCts?.Cancel();
             _loadCts?.Cancel();
+            CancelRefresh();
             _lastFetch = null;
             _loading = false;
             _loadError = ApiError.None;
@@ -292,17 +307,22 @@
         var fuel = _fuel;
         var radiusKm = StationViewport.FetchRadiusKm(viewport);
         var key = string.Create(CultureInfo.InvariantCulture, $"{fuel}|{viewport.CenterLat:0.0000}|{viewport.CenterLon:0.0000}|{radiusKm}");
-        if (_lastFetch is { } last && last.Key == key && DateTimeOffset.UtcNow - last.At < FetchFreshness)
+        if (!background && _lastFetch is { } last && last.Key == key && DateTimeOffset.UtcNow - last.At < FetchFreshness)
         {
             return;
         }
 
+        // Planned again once this one is in.
         _retryCts?.Cancel();
         _loadCts?.Cancel();
+        CancelRefresh();
         var cts = _loadCts = new CancellationTokenSource();
         _lastFetch = (key, DateTimeOffset.UtcNow);
-        _loading = true;
-        StateHasChanged();
+        if (!background)
+        {
+            _loading = true;
+            StateHasChanged();
+        }
 
         ApiResult<List<NearbyStation>> result;
         try
@@ -319,13 +339,25 @@
             return;
         }
 
+        if (background && result.Value is null)
+        {
+            // The prices shown stay; the next refresh tries again.
+            _lastFetch = null;
+            _lateRefreshes++;
+            ScheduleRefresh(result.Error == ApiError.RateLimited ? result.RetryAfter : null);
+            return;
+        }
+
         _loading = false;
         _loadError = result.Error;
         if (result.Value is { } stations)
         {
             _loaded = true;
+            _lateRefreshes = background && result.DataAsOf == _dataAsOf ? _lateRefreshes + 1 : 0;
+            _dataAsOf = result.DataAsOf;
             _stations.Merge(stations, viewport.Center);
             await RenderMarkersAsync();
+            ScheduleRefresh();
         }
         else
         {
@@ -352,6 +384,64 @@
         {
             await InvokeAsync(() => LoadAsync(viewport));
         }
+    }
+
+    /// <summary>Plans the next background refresh: by default timed to the next import, later while it's late.</summary>
+    private void ScheduleRefresh(TimeSpan? delay = null)
+    {
+        var now = DateTimeOffset.UtcNow;
+        _refreshDueAt = now + (delay ?? RefreshSchedule.Next(_dataAsOf, now, _lateRefreshes));
+        StartRefreshTimer();
+    }
+
+    /// <summary>Waits for the planned refresh, unless the page is hidden. One that's overdue runs at once.</summary>
+    private void StartRefreshTimer()
+    {
+        _refreshCts?.Cancel();
+        if (_hidden || _refreshDueAt is not { } dueAt)
+        {
+            return;
+        }
+
+        var cts = _refreshCts = new CancellationTokenSource();
+        _ = RefreshLaterAsync(dueAt - DateTimeOffset.UtcNow, cts.Token);
+    }
+
+    private async Task RefreshLaterAsync(TimeSpan delay, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await Task.Delay(delay > TimeSpan.Zero ? delay : TimeSpan.Zero, cancellationToken);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        await InvokeAsync(() => !cancellationToken.IsCancellationRequested && _viewport is { } viewport
+            ? LoadAsync(viewport, background: true)
+            : Task.CompletedTask);
+    }
+
+    private void CancelRefresh()
+    {
+        _refreshCts?.Cancel();
+        _refreshDueAt = null;
+    }
+
+    public Task OnVisibilityChangedAsync(bool visible)
+    {
+        _hidden = !visible;
+        if (_hidden)
+        {
+            _refreshCts?.Cancel();
+        }
+        else
+        {
+            StartRefreshTimer();
+        }
+
+        return Task.CompletedTask;
     }
 
     private async Task RenderMarkersAsync()
@@ -540,6 +630,7 @@
         Comparison.Changed -= OnComparisonChanged;
         _loadCts?.Cancel();
         _retryCts?.Cancel();
+        _refreshCts?.Cancel();
         _noticeCts?.Cancel();
         if (_map is not null)
         {

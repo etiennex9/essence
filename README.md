@@ -122,6 +122,10 @@ In the Development environment, logs are plain text and the ingest archive goes 
 | `GET /imports?limit=20` | Recent imports with their statistics and `source` (`feed` or `xlsx`). |
 | `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. |
 
+`/stations/{id}` and `/stations/nearby` send `Last-Modified`: when the latest import was fetched. The map refreshes its prices
+about 5 min 20 s after that time, which is when the next import should be in, and more often while that import is late. A request
+whose `If-Modified-Since` is still current gets a 304.
+
 Fuel names accept or omit accents (`Regulier` = `Régulier`). Errors are ProblemDetails. Requests are rate limited per client IP
 (`RateLimiting:PermitLimit` per `RateLimiting:WindowSeconds`, 120/60 s by default). The `X-Forwarded-For`, `-Proto` and `-Prefix`
 headers are trusted from private networks only, where the web container that forwards `/api/` lives; that container in turn

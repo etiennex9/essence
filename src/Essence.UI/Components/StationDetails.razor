@@ -102,7 +102,7 @@
                 @if (_historyError != ApiError.None)
                 {
                     <p class="message">@L["HistoryFailed"]</p>
-                    <button type="button" class="link" @onclick="LoadHistoryAsync">@L["Retry"]</button>
+                    <button type="button" class="link" @onclick="() => LoadHistoryAsync()">@L["Retry"]</button>
                 }
                 else if (_history is null)
                 {
@@ -156,6 +156,9 @@
     private DateTimeOffset _now = DateTimeOffset.UtcNow;
     private BrandStyle _brand = BrandCatalog.For(null);
 
+    /// <summary>When the prices shown were imported, as the API said with them.</summary>
+    private DateTimeOffset? _shownDataAsOf;
+
     [Parameter, EditorRequired]
     public long StationId { get; set; }
 
@@ -165,6 +168,10 @@
 
     [Parameter]
     public GeoPoint? UserLocation { get; set; }
+
+    /// <summary>When the map's prices were imported: once they're newer than the pane's, the pane refreshes too.</summary>
+    [Parameter]
+    public DateTimeOffset? DataAsOf { get; set; }
 
     [Parameter]
     public EventCallback OnClose { get; set; }
@@ -194,6 +201,10 @@
             _loadedId = StationId;
             await LoadAsync();
         }
+        else if (_station is not null && DataAsOf > _shownDataAsOf)
+        {
+            await RefreshAsync();
+        }
     }
 
     private async Task LoadAsync()
@@ -216,6 +227,7 @@
 
             _station = result.Value;
             _error = result.Error;
+            _shownDataAsOf = result.DataAsOf;
             if (_station is not null)
             {
                 _brand = BrandCatalog.For(_station.Brand);
@@ -233,22 +245,60 @@
         await history;
     }
 
+    /// <summary>
+    /// Newer prices came in while the pane is open: updates it in place, without the skeleton, and without raising
+    /// <see cref="OnLoaded"/> (the map mustn't move by itself). The chart reloads if a price changed. A failure keeps what's shown.
+    /// </summary>
+    private async Task RefreshAsync()
+    {
+        _shownDataAsOf = DataAsOf;
+        _stationCts?.Cancel();
+        var cts = _stationCts = new CancellationTokenSource();
+        try
+        {
+            var result = await Api.GetStationAsync(StationId, cts.Token);
+            if (cts.IsCancellationRequested || result.Value is not { } station)
+            {
+                return;
+            }
+
+            var pricesChanged = _station is null || !station.Prices.SequenceEqual(_station.Prices);
+            _station = station;
+            _shownDataAsOf = result.DataAsOf > DataAsOf ? result.DataAsOf : DataAsOf;
+            _now = DateTimeOffset.UtcNow;
+            StateHasChanged();
+            if (pricesChanged)
+            {
+                await LoadHistoryAsync(refresh: true);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // The pane moved on to another station.
+        }
+    }
+
     private async Task SetPeriodAsync(int days)
     {
         _days = days;
         await LoadHistoryAsync();
     }
 
-    private async Task LoadHistoryAsync()
+    /// <param name="refresh">Fetches past the cache, and keeps the chart shown until the new one is in.</param>
+    private async Task LoadHistoryAsync(bool refresh = false)
     {
-        _history = null;
-        _historyError = ApiError.None;
+        if (!refresh)
+        {
+            _history = null;
+            _historyError = ApiError.None;
+        }
+
         _historyCts?.Cancel();
         var cts = _historyCts = new CancellationTokenSource();
         try
         {
-            var result = await History.GetAsync(StationId, _days, cts.Token);
-            if (cts.IsCancellationRequested)
+            var result = await History.GetAsync(StationId, _days, cts.Token, refresh);
+            if (cts.IsCancellationRequested || (refresh && !result.IsSuccess))
             {
                 return;
             }

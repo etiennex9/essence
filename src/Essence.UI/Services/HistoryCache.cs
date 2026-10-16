@@ -17,10 +17,11 @@ public sealed class HistoryCache(EssenceApiClient api, TimeProvider time)
     private readonly Dictionary<(long StationId, int Days), StationHistory> _entries = [];
 
     /// <summary>The last <paramref name="days"/> days of history, up to now.</summary>
-    public async Task<ApiResult<StationHistory>> GetAsync(long stationId, int days, CancellationToken cancellationToken)
+    /// <param name="refresh">Fetches even if a fresh entry is kept: the caller knows a price changed since.</param>
+    public async Task<ApiResult<StationHistory>> GetAsync(long stationId, int days, CancellationToken cancellationToken, bool refresh = false)
     {
         var now = time.GetUtcNow();
-        if (_entries.TryGetValue((stationId, days), out var cached) && now - cached.To < Freshness)
+        if (!refresh && _entries.TryGetValue((stationId, days), out var cached) && now - cached.To < Freshness)
         {
             return new ApiResult<StationHistory>(cached);
         }

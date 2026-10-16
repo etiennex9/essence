@@ -29,6 +29,30 @@ public class EssenceApiClientTests
     }
 
     [Fact]
+    public async Task Last_modified_is_when_the_data_was_imported()
+    {
+        var importedAt = new DateTimeOffset(2026, 10, 16, 12, 5, 41, TimeSpan.Zero);
+        var (client, _) = Client(_ =>
+        {
+            var response = Json(NearbyJson);
+            response.Content.Headers.LastModified = importedAt;
+            return response;
+        });
+
+        var result = await client.GetNearbyAsync(45.5, -73.56, 3, "Régulier", 20, TestContext.Current.CancellationToken);
+
+        Assert.Equal(importedAt, result.DataAsOf);
+    }
+
+    [Fact]
+    public async Task Without_last_modified_the_version_is_unknown()
+    {
+        var (client, _) = Client(_ => Json(NearbyJson));
+        var result = await client.GetNearbyAsync(45.5, -73.56, 3, "Régulier", 20, TestContext.Current.CancellationToken);
+        Assert.Null(result.DataAsOf);
+    }
+
+    [Fact]
     public async Task Query_numbers_are_invariant_whatever_the_culture()
     {
         var previous = CultureInfo.CurrentCulture;

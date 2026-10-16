@@ -55,6 +55,21 @@ public class HistoryCacheTests
     }
 
     [Fact]
+    public async Task A_refresh_fetches_even_a_fresh_history()
+    {
+        var cache = Cache();
+
+        var first = await cache.GetAsync(7, 30, TestContext.Current.CancellationToken);
+        _time.Advance(TimeSpan.FromSeconds(30));
+        var refreshed = await cache.GetAsync(7, 30, TestContext.Current.CancellationToken, refresh: true);
+        var reused = await cache.GetAsync(7, 30, TestContext.Current.CancellationToken);
+
+        Assert.Equal(2, _requests.Count);
+        Assert.NotSame(first.Value, refreshed.Value);
+        Assert.Same(refreshed.Value, reused.Value);
+    }
+
+    [Fact]
     public async Task Failures_are_not_kept()
     {
         var cache = Cache();

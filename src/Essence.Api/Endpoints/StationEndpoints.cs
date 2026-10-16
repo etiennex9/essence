@@ -27,9 +27,11 @@ public static class StationEndpoints
             .WithSummary("List stations")
             .WithDescription("Filters combine with AND. `q` searches the name, and the address and postal code ignoring case and accents.");
         group.MapGet("/nearby", Nearby)
-            .WithSummary("Active stations near a point, closest first");
+            .WithSummary("Active stations near a point, closest first")
+            .WithDataVersion();
         group.MapGet("/{id:long}", GetStation)
-            .WithSummary("A station with its current prices");
+            .WithSummary("A station with its current prices")
+            .WithDataVersion();
         group.MapGet("/{id:long}/prices", GetPriceHistory)
             .WithSummary("Price history of a station")
             .WithDescription("Every price state that overlaps [from, to). Defaults to the last 30 days.");
