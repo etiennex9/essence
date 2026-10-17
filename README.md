@@ -134,8 +134,9 @@ in Compose, `CORS_ORIGIN` from `.env`. The web container needs none, since the m
 
 ## Deploy
 
-On every push to `main`, [the publish workflow](.github/workflows/publish.yml) runs the tests, then builds the images whose
-inputs changed since its last successful run and pushes them to the GitHub Container Registry:
+On every push to `main` that changes more than Markdown files and `docs/`,
+[the publish workflow](.github/workflows/publish.yml) runs the tests, then builds the images whose inputs changed since its
+last successful push run and pushes them to the GitHub Container Registry:
 `ghcr.io/etiennex9/essence-{migrator,ingest,api,web}`, tagged `latest` and `sha-<commit>`. An image's inputs are read from
 its Dockerfile: the projects it copies (its own and those it references) and the shared build files such as
 `Directory.Packages.props` ([select-images.sh](.github/scripts/select-images.sh)). A manual run, or a change to the workflow
