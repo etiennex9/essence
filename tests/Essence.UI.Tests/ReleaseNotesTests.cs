@@ -11,7 +11,10 @@ namespace Essence.UI.Tests;
 public class ReleaseNotesTests
 {
     /// <summary>release.json as tools/Essence.Release writes it.</summary>
-    private const string ReleaseJson = """{"version":"2026-11-02","commit":"85f1af2","months":["2026-11","2026-10"],"unreleased":[]}""";
+    private const string ReleaseJson = """
+        {"version":"2026-11-02","commit":"85f1af2","months":["2026-11","2026-10"],"unreleased":[],
+         "commitUrl":"https://github.com/etiennex9/essence/commit/85f1af21f22bf61e2b64994f48de92b4a81bc009"}
+        """;
 
     private const string NovemberJson = """
         {"versions":[{"date":"2026-11-02","changes":[{"en":"Older versions load as you scroll.","fr":"Les versions précédentes se chargent en défilant."}]}]}
@@ -150,6 +153,24 @@ public class ReleaseNotesTests
 
         Assert.Equal(expected, ReleaseNotes.DateHeading(new DateOnly(2026, 10, day), pattern, firstOfMonth, ui));
     }
+
+    [Fact]
+    public async Task The_commit_links_to_its_page()
+    {
+        var (notes, _) = Notes(Files(ReleaseJson, NovemberJson, OctoberJson));
+
+        await notes.LoadReleaseAsync();
+
+        Assert.Equal("https://github.com/etiennex9/essence/commit/85f1af21f22bf61e2b64994f48de92b4a81bc009", ReleaseNotes.CommitLink(notes.Release!));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("http://github.com/etiennex9/essence/commit/85f1af2")]
+    [InlineData("/commit/85f1af2")]
+    public void Only_an_https_page_is_linked(string? url) =>
+        Assert.Null(ReleaseNotes.CommitLink(new ReleaseInfo(new DateOnly(2026, 10, 19), "85f1af2", [], [], url)));
 
     [Fact]
     public void A_version_is_written_the_same_in_every_language() =>

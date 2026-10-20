@@ -14,7 +14,9 @@ namespace Essence.Contracts;
 /// <param name="Commit">The commit built, abbreviated.</param>
 /// <param name="Months">The months with changes ("2026-10"), newest first. Each one is <c>changelog-{month}.json</c>.</param>
 /// <param name="Unreleased">Changes not on main yet: only when <paramref name="Version"/> is null.</param>
-public sealed record ReleaseInfo(DateOnly? Version, string? Commit, IReadOnlyList<string> Months, IReadOnlyList<ChangelogEntry> Unreleased);
+/// <param name="CommitUrl">The commit's page on GitHub, when a workflow built it (a local build doesn't know the repository).</param>
+public sealed record ReleaseInfo(
+    DateOnly? Version, string? Commit, IReadOnlyList<string> Months, IReadOnlyList<ChangelogEntry> Unreleased, string? CommitUrl = null);
 
 /// <summary><c>changelog-{month}.json</c>: that month's versions, newest first.</summary>
 public sealed record ChangelogMonth(IReadOnlyList<ChangelogVersion> Versions);

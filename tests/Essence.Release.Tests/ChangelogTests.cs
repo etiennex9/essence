@@ -86,7 +86,7 @@ public class ChangelogTests
         var notes = Changelog.Build(Oct14, "85f1af2", [Day(Oct14, "map")], [E("map")]);
 
         Assert.Equal(
-            """{"version":"2026-10-14","commit":"85f1af2","months":["2026-10"],"unreleased":[]}""",
+            """{"version":"2026-10-14","commit":"85f1af2","months":["2026-10"],"unreleased":[],"commitUrl":null}""",
             JsonSerializer.Serialize(notes.Release, ReleaseJsonContext.Default.ReleaseInfo));
         Assert.Equal(
             """{"versions":[{"date":"2026-10-14","changes":[{"en":"map (en)","fr":"map (fr)"}]}]}""",

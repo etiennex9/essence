@@ -207,4 +207,7 @@
   <data name="ChangelogDateFormatFirstDay" xml:space="preserve">
     <value>d'er' MMMM yyyy</value>
   </data>
+  <data name="CommitOnGitHub" xml:space="preserve">
+    <value>Voir ce commit sur GitHub</value>
+  </data>
 </root>

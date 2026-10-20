@@ -36,7 +36,17 @@
                     @L["VersionLabel", ReleaseNotes.VersionName(current)]
                     @if (release.Commit is { } commit)
                     {
-                        <span class="commit"> · @commit</span>
+                        <span class="commit">
+                            ·
+                            @if (ReleaseNotes.CommitLink(release) is { } commitUrl)
+                            {
+                                <a href="@commitUrl" target="_blank" rel="noopener" title="@L["CommitOnGitHub"]">@commit</a>
+                            }
+                            else
+                            {
+                                @commit
+                            }
+                        </span>
                     }
                 }
                 else
