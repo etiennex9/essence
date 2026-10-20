@@ -27,6 +27,10 @@ public sealed class Git
     public void FetchMainAndTags() =>
         Run("fetch", "--quiet", "--force", "origin", "+refs/heads/main:refs/remotes/origin/main", "+refs/tags/*:refs/tags/*");
 
+    /// <summary>Creates or moves the tag <paramref name="name"/> on origin to <paramref name="commit"/>.</summary>
+    public void PushTag(string name, string commit) =>
+        Run("push", "--quiet", "--force", "origin", $"{commit}:refs/tags/{name}");
+
     /// <summary>
     /// Whether <paramref name="commit"/> is on origin/main. A commit the clone doesn't have (force-pushed away) isn't:
     /// is-ancestor answers 1 for "not an ancestor" and 128 for an unknown commit.
