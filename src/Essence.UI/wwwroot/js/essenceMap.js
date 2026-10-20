@@ -84,7 +84,8 @@ export function createMap(container, options, dotnet) {
     }
 
     function onKeyDown(e) {
-        if (e.key === "Escape") {
+        // Esc in a modal dialog (About) closes that dialog only, not the pane behind it.
+        if (e.key === "Escape" && !document.querySelector("dialog:modal")) {
             call("OnDismiss");
         }
     }

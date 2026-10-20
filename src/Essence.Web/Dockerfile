@@ -13,9 +13,15 @@ RUN dotnet publish src/Essence.Web/Essence.Web.csproj --configuration Release --
     # appsettings.json is written at container start (see 40-essence-config.sh); drop the build-time copies.
     && rm /app/wwwroot/appsettings.json*
 
+# The release notes (release.json, changelog-<month>.json), written from git history by tools/Essence.Release. The publish
+# workflow passes them as the build context "release", which replaces this empty stage; a local build has none, so the
+# app's About dialog says it's a development version.
+FROM scratch AS release
+
 # A static site: nginx serves the published wwwroot, running as the image's non-root user.
 FROM nginxinc/nginx-unprivileged:1.30-alpine AS final
 COPY --from=build /app/wwwroot /usr/share/nginx/html
+COPY --from=release / /usr/share/nginx/html/release/
 COPY src/Essence.Web/nginx/default.conf /etc/nginx/conf.d/default.conf
 COPY --chmod=755 src/Essence.Web/nginx/40-essence-config.sh /docker-entrypoint.d/
 # The image listens on 8080.

@@ -49,7 +49,11 @@ public sealed class EssenceApiClient(HttpClient http)
             EssenceJsonContext.Default.ListPriceHistoryDto,
             cancellationToken);
 
-    private async Task<ApiResult<T>> GetAsync<T>(string path, JsonTypeInfo<T> typeInfo, CancellationToken cancellationToken)
+    private Task<ApiResult<T>> GetAsync<T>(string path, JsonTypeInfo<T> typeInfo, CancellationToken cancellationToken) =>
+        GetAsync(http, path, typeInfo, cancellationToken);
+
+    /// <summary>A GET of JSON as an <see cref="ApiResult{T}"/>; also used for the release notes (<see cref="HttpReleaseNotesSource"/>).</summary>
+    internal static async Task<ApiResult<T>> GetAsync<T>(HttpClient http, string path, JsonTypeInfo<T> typeInfo, CancellationToken cancellationToken)
     {
         try
         {

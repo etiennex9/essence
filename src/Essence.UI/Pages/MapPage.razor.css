@@ -80,6 +80,16 @@
     text-align: center;
 }
 
+/* The About button: smaller than the toolbar's, in the bottom-left corner, clear of a notch or the home indicator. */
+.tool.about {
+    position: absolute;
+    z-index: 10;
+    left: max(12px, env(safe-area-inset-left));
+    bottom: max(12px, env(safe-area-inset-bottom));
+    width: 36px;
+    height: 36px;
+}
+
 /* Small phones: the fuel selector and three buttons share 336 px at 360 px wide. */
 @media (max-width: 400px) {
     .tools {

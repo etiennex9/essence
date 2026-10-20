@@ -22,3 +22,6 @@ coverage*.xml
 # Local secrets and data (the raw archive defaults to ./data/archive when running outside Docker)
 .env
 /data/
+
+# Release notes written locally to preview the About dialog (README → Versions)
+src/Essence.Web/wwwroot/release/

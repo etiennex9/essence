@@ -11,4 +11,11 @@ public sealed class EssenceUIOptions
 
     /// <summary>MapLibre style used when the device prefers a dark color scheme.</summary>
     public string MapDarkStyleUrl { get; init; } = "https://tiles.openfreemap.org/styles/dark";
+
+    /// <summary>
+    /// Where release.json and the changelog files are, e.g. the web app's <c>release/</c>. A host that registers its own
+    /// <see cref="Services.IReleaseNotesSource"/> first doesn't need it; with neither, the About dialog says it's a development
+    /// version.
+    /// </summary>
+    public Uri? ReleaseNotesUrl { get; init; }
 }

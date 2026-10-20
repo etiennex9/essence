@@ -25,6 +25,8 @@ builder.Services.AddEssenceUI(new EssenceUIOptions
     ApiBaseUrl = apiUri,
     MapStyleUrl = builder.Configuration["Map:StyleUrl"] ?? defaults.MapStyleUrl,
     MapDarkStyleUrl = builder.Configuration["Map:DarkStyleUrl"] ?? defaults.MapDarkStyleUrl,
+    // The image's release notes (see its Dockerfile), next to the page.
+    ReleaseNotesUrl = new Uri(new Uri(builder.HostEnvironment.BaseAddress), "release/"),
 });
 
 await builder.Build().RunAsync();

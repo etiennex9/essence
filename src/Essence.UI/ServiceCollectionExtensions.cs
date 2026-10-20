@@ -8,7 +8,8 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Registers what the map page needs. The device services default to the browser ones; a host with better ones
-    /// (e.g. native geolocation in MAUI) registers its own <see cref="IDeviceLocation"/> or <see cref="IPreferenceStore"/> first.
+    /// (e.g. native geolocation in MAUI) registers its own <see cref="IDeviceLocation"/> or <see cref="IPreferenceStore"/> first,
+    /// and likewise its own <see cref="IReleaseNotesSource"/> (release notes bundled with the app).
     /// </summary>
     public static IServiceCollection AddEssenceUI(this IServiceCollection services, EssenceUIOptions options)
     {
@@ -25,6 +26,15 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<BrowserDevice>();
         services.TryAddScoped<IDeviceLocation>(sp => sp.GetRequiredService<BrowserDevice>());
         services.TryAddScoped<IPreferenceStore>(sp => sp.GetRequiredService<BrowserDevice>());
+        if (options.ReleaseNotesUrl is { } notesUrl)
+        {
+            var notesBaseUrl = notesUrl.AbsoluteUri.EndsWith('/') ? notesUrl : new Uri(notesUrl.AbsoluteUri + "/");
+            services.TryAddSingleton<IReleaseNotesSource>(
+                _ => new HttpReleaseNotesSource(new HttpClient { BaseAddress = notesBaseUrl, Timeout = TimeSpan.FromSeconds(20) }));
+        }
+
+        services.TryAddSingleton<IReleaseNotesSource, NoReleaseNotes>();
+        services.AddScoped<ReleaseNotes>();
         return services;
     }
 }

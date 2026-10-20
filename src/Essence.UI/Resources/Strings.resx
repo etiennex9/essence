@@ -177,4 +177,34 @@
   <data name="RemoveFromComparison" xml:space="preserve">
     <value>Remove {0} from the comparison</value>
   </data>
+  <data name="About" xml:space="preserve">
+    <value>About Essence</value>
+  </data>
+  <data name="VersionLabel" xml:space="preserve">
+    <value>Version {0}</value>
+  </data>
+  <data name="DevelopmentVersion" xml:space="preserve">
+    <value>Development version</value>
+  </data>
+  <data name="WhatsNew" xml:space="preserve">
+    <value>What’s new</value>
+  </data>
+  <data name="ChangelogDateFormat" xml:space="preserve">
+    <value>MMMM d, yyyy</value>
+  </data>
+  <data name="NotReleasedYet" xml:space="preserve">
+    <value>Not released yet</value>
+  </data>
+  <data name="OlderVersions" xml:space="preserve">
+    <value>Older versions</value>
+  </data>
+  <data name="ChangelogFailed" xml:space="preserve">
+    <value>Couldn’t load the changes.</value>
+  </data>
+  <data name="ChangelogEmpty" xml:space="preserve">
+    <value>No changes to show.</value>
+  </data>
+  <data name="ChangelogDateFormatFirstDay" xml:space="preserve">
+    <value>MMMM d, yyyy</value>
+  </data>
 </root>

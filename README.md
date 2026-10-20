@@ -11,11 +11,13 @@ and shows them on a map of nearby stations.
 | `src/Essence.Ingest` | Worker: polls the feed, archives each new file, diffs it against the database and writes only the changes. Backfills missed versions from the Régie's xlsx files. |
 | `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. |
 | `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
-| `src/Essence.Contracts` | The API's response records, shared by the API and the UI. |
+| `src/Essence.Contracts` | The API's response records and the release notes', shared by the API, the UI and the release tool. |
 | `src/Essence.UI` | Razor class library: the map page, the station details pane and everything behind them. Shared with a future MAUI app. |
 | `src/Essence.Web` | Blazor WebAssembly host for `Essence.UI`, served as static files by nginx. See [its README](src/Essence.Web/README.md). |
+| `tools/Essence.Release` | Run by the publish workflow: dates each release by the day it landed on `main` and writes the web app's changelog (see [Versions](#versions)). |
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. |
-| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, translations. |
+| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, the release notes, translations. |
+| `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
 The full design and its rationale are in [docs/PLAN.md](docs/PLAN.md).
 
@@ -145,7 +147,9 @@ On `main`, a run waits for the one in progress instead of canceling it; a push m
 manual run, so start that again afterwards. An image's inputs are read from
 its Dockerfile: the projects it copies (its own and those it references) and the shared build files such as
 `Directory.Packages.props` ([select-images.sh](.github/scripts/select-images.sh)). A manual run, or a change to the workflow
-or `.dockerignore`, builds all four. Pull requests build the images they affect, without pushing.
+or `.dockerignore`, builds all four. The web image is also built along with any other, and when a changelog entry
+changed: it carries the release's version and changelog ([Versions](#versions)). Pull requests build the images they
+affect, without pushing.
 
 [deploy/truenas.yaml](deploy/truenas.yaml) runs those images on TrueNAS (Apps → Discover Apps → ⋮ → Install via YAML).
 Only the web container publishes a port; a reverse proxy in front of it serves the whole app, API included, at one HTTPS address.
@@ -205,7 +209,8 @@ gets an `@autodeploy-<time>` snapshot first (the last 10 are kept).
   **Stop**, then **Start** the app in **Apps**, or push a fix.
 - **To hold an image back**, set it to `:sha-<commit>` in the app's YAML (**Apps → essence → Edit**). A sha tag doesn't
   move, so the script leaves it alone until you set it back to `:latest`. Only the images a push rebuilt get its sha tag:
-  pick one listed on the image's package page (the repository's **Packages**). To pause everything, disable the cron job.
+  pick one listed on the image's package page (the repository's **Packages**). Holding `web` back also keeps the version
+  and changelog it shows. To pause everything, disable the cron job.
 - **Migrations only go forward**, so rolling back the images doesn't undo one. Stop the app. Roll the postgres dataset back
   to the `@autodeploy-` snapshot taken before the bad rollout: **Datasets** → the dataset → **Data Protection** → **View
   Snapshots** → that snapshot's row → **Rollback**. If newer snapshots exist, the default choice is refused: choose
@@ -214,6 +219,57 @@ gets an `@autodeploy-<time>` snapshot first (the last 10 are kept).
   cron job leaves a stopped app alone. Starting it on `latest` instead would run the new migration again.
 - **To update the script**, look at what changed in `deploy/truenas-autodeploy.py`, since root runs it, then run the
   `curl` command again.
+
+## Versions
+
+The app's version is a date: the day the newest change it was built from landed on `main`, counted in Québec time
+(America/Toronto), e.g. `2026-10-19`. Everything that lands on one day is one version. The button in the map's
+bottom-left corner shows the version and, under *What's new*, each version's changes, newest first; older months load as
+the list scrolls.
+
+**Adding an entry.** A change that users would notice adds a file to [changelog/](changelog/), named freely, with an
+English and a French sentence:
+
+```json
+{
+  "en": "On phones, drag a station’s panel up to see more of it, or down to close it.",
+  "fr": "Sur téléphone, faites glisser le panneau d’une station vers le haut pour l’agrandir, ou vers le bas pour le fermer."
+}
+```
+
+No date: the entry gets the day it lands on `main`, however long its pull request stayed open. Only an entry written
+after the fact has `"date": "YYYY-MM-DD"`. Renaming a file dates it again, to the day of the rename, so give a renamed
+entry a `date` too. A test checks that every file has both languages and nothing else. Changes users wouldn't notice (CI,
+refactors) add no file: their day is still a version, with nothing listed under it.
+
+**How a day is known.** Git doesn't record when a commit reached `main`: a commit's date is when it was written, and a run
+can start after midnight for a push made before. GitHub does: its
+[activity log](https://docs.github.com/en/rest/repos/repos#list-repository-activities) lists each push, merge and force
+push to `main` with its time. On each run on `main`, the publish workflow's `tag` job (`tools/Essence.Release tag`) reads it
+and points the tag `vYYYY-MM-DD` at what `main` was at the end of that day. It derives every day of the log's last 100
+moves again, so a run that was replaced while it waited is made up for by the next one. The tags are the lasting record
+(GitHub doesn't say how long it keeps the log). They belong to the workflow, which moves them: don't create or move them
+by hand, and a tag ruleset on `v*` would have to let GitHub Actions bypass it. Only the tag of the commit being built has
+to be set for its images to be released; another day's that can't be set is a warning in the job's log, and until a
+later run sets it, that day's entries are dated by the next tag.
+
+The web image's leg then runs `tools/Essence.Release notes`: the version is the first day tag that contains the commit,
+and each entry is dated by the first day tag whose tree has its file, so rewriting `main`'s history doesn't move old
+entries. It writes `release.json` (version, commit, months) and one `changelog-<month>.json` per month, which nginx serves
+under `/release/`. On `main`, the build fails rather than ship a web image without a version. A pull request's build has
+none: the dialog says *Development version* and lists the pull request's new entries as not released yet. A local Docker
+build has no release notes at all (the same *Development version*, with nothing listed), and a local `notes` run takes the
+version of the first day tag containing HEAD, if there's one.
+
+To try the dialog with real notes while working on the web app (the folder is ignored by git and Docker):
+
+```bash
+git fetch --tags --force
+```
+
+```bash
+dotnet run --project tools/Essence.Release -- notes src/Essence.Web/wwwroot/release
+```
 
 ## Configuration
 

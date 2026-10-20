@@ -4,7 +4,8 @@
 # An image is built when one of its inputs changed in the given commit range. Its inputs are read from its Dockerfile:
 # the Dockerfile itself and what it copies from the repository (its project, the projects it references and the shared
 # build files). Every image is built when there's no range, when the range can't be compared (rewritten history), or
-# when .dockerignore or the publishing workflow changed.
+# when .dockerignore or the publishing workflow changed. The web image is also built along with any other, and when a
+# changelog entry or the release tool changed: it carries the release's version and changelog.
 #
 # Usage: select-images.sh [<range>], e.g. select-images.sh 06f1a06..HEAD
 set -e
@@ -31,6 +32,12 @@ for dockerfile in src/*/Dockerfile; do
     fi
     selected+=("$project")
 done
+
+# The web image serves the release notes (tools/Essence.Release notes, from the day tags), so the version it shows is the
+# whole release's: it's rebuilt with any other image, and when changelog/ or the tool changed.
+if [ ${#selected[@]} -gt 0 ] || grep -qE '^(changelog/|tools/Essence\.Release/)' <<<"$code_changes"; then
+    [[ " ${selected[*]} " == *" Essence.Web "* ]] || selected+=("Essence.Web")
+fi
 
 echo "Images to build: ${selected[*]:-none}${range:+ (changes in $range)}" >&2
 matrix=""

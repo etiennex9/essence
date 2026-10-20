@@ -20,6 +20,7 @@ app can host the same components later (see [Android](#android) below). The brow
 | Comparison | *Compare* in a station's details, or beside a favorite, adds it to the comparison (`Services/ComparedStations.cs`, also saved on the device, up to 8 stations: one per palette color, kept when others leave). The toolbar's chart button, with the count, opens `Components/ComparisonPanel.razor`: one price line per station for the selected fuel, and the stations cheapest first, each removable; *Clear the comparison* empties it. |
 | History requests | Each listed or compared station costs one `/stations/{id}/prices` request (all fuels, so switching fuel is free), kept 2 minutes by `Services/HistoryCache.cs`. |
 | Text | `Resources/Strings.resx` (English) and `Strings.fr.resx`. The language follows the browser. Fuel names stay as the Régie publishes them. |
+| About | The button in the bottom-left corner opens `Components/AboutDialog.razor`, a native modal `<dialog>` (`wwwroot/js/essenceDialog.js`): the version and the changelog, a month at a time as it scrolls (`Services/ReleaseNotes.cs`). The files are under `release/`, written at build time ([Versions](../../README.md#versions)). |
 
 Opening a station adds `?station=<id>` to the URL, so Back closes the pane and the link can be shared; a link opened cold
 centers the map on that station. The favorites add `?view=favorites` and the comparison `?view=compare`; a station opened
