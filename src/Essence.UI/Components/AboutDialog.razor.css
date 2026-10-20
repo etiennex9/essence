@@ -1,0 +1,187 @@
+/* Centered over a dimmed map, at most 440 px wide; the list scrolls inside. Closed, it's the browser's display: none. */
+.about {
+    box-sizing: border-box;
+    width: min(440px, calc(100vw - 24px));
+    max-height: min(640px, calc(100dvh - 48px));
+    padding: 0;
+    border: 0.5px solid var(--ess-border);
+    border-radius: 14px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    box-shadow: var(--ess-shadow-lg);
+    font-family: var(--ess-font);
+    overflow: hidden;
+}
+
+.about[open] {
+    display: flex;
+    flex-direction: column;
+    animation: about-in 180ms ease-out;
+}
+
+.about::backdrop {
+    background: rgba(0, 0, 0, 0.35);
+}
+
+@keyframes about-in {
+    from {
+        transform: translateY(12px);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .about[open] {
+        animation: none;
+    }
+}
+
+header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 12px 6px 16px;
+}
+
+h2 {
+    flex: 1;
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.25;
+}
+
+.icon-button {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ess-text-muted);
+    cursor: pointer;
+}
+
+.icon-button:hover {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+.body {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0 16px 16px;
+    overscroll-behavior: contain;
+}
+
+.version {
+    margin: 0;
+    font-size: 14px;
+    font-variant-numeric: tabular-nums;
+}
+
+.commit {
+    color: var(--ess-text-muted);
+}
+
+h3 {
+    margin: 18px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ess-text-muted);
+}
+
+section {
+    margin-top: 12px;
+}
+
+h4 {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 600;
+}
+
+ul {
+    margin: 4px 0 0;
+    padding-left: 18px;
+}
+
+li {
+    font-size: 14px;
+    line-height: 1.45;
+}
+
+li + li {
+    margin-top: 4px;
+}
+
+.message {
+    margin: 12px 0 0;
+    font-size: 14px;
+    color: var(--ess-text-muted);
+}
+
+.link,
+.older {
+    border: 0;
+    padding: 0;
+    background: none;
+    color: var(--ess-accent);
+    font: 500 14px var(--ess-font);
+    cursor: pointer;
+}
+
+.older {
+    display: block;
+    margin: 16px auto 0;
+    padding: 6px 12px;
+    border-radius: 8px;
+}
+
+.older:hover {
+    background: var(--ess-hover);
+}
+
+.older[aria-busy="true"] {
+    opacity: 0.5;
+    cursor: progress;
+}
+
+.older[hidden] {
+    display: none;
+}
+
+button:focus-visible {
+    outline: 2px solid var(--ess-accent);
+    outline-offset: 2px;
+}
+
+.skeleton {
+    display: grid;
+    gap: 10px;
+    padding-top: 12px;
+}
+
+.skeleton span {
+    height: 14px;
+    border-radius: 6px;
+    background: var(--ess-hover);
+    animation: pulse 1.2s ease-in-out infinite;
+}
+
+.skeleton span:nth-child(2) {
+    width: 70%;
+}
+
+.skeleton span:nth-child(3) {
+    width: 45%;
+}
+
+@keyframes pulse {
+    50% {
+        opacity: 0.5;
+    }
+}

@@ -18,6 +18,10 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Essence.Ingest.Tests/Essence.Ingest.Tests.csproj" />
+    <Project Path="tests/Essence.Release.Tests/Essence.Release.Tests.csproj" />
     <Project Path="tests/Essence.UI.Tests/Essence.UI.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Essence.Release/Essence.Release.csproj" />
   </Folder>
 </Solution>

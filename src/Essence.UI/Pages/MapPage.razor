@@ -6,6 +6,7 @@
 @inject ComparedStations Comparison
 @inject IDeviceLocation DeviceLocation
 @inject IPreferenceStore Preferences
+@inject ReleaseNotes Notes
 @inject EssenceUIOptions Options
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -45,6 +46,12 @@
         <StatusChip Message="@StatusMessage" Busy="@(_locating || _loading)" />
     </div>
 
+    @* Alone in the bottom-left corner (the map's own controls are bottom-right), under a bottom sheet while one is open. *@
+    <button type="button" class="tool about" @onclick="() => _about!.ShowAsync()" aria-label="@L["About"]" title="@L["About"]">
+        <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 16.5v-5M12 7.75v.01" /></svg>
+    </button>
+
     @* The details open over a list (?view=…&station=…): closing them goes back to it. *@
     @if (Station is { } stationId)
     {
@@ -60,6 +67,8 @@
     {
         <ComparisonPanel Fuel="@_fuel" UserLocation="_userLocation" OnClose="CloseListAsync" OnOpenStation="OpenListedStation" />
     }
+
+    <AboutDialog @ref="_about" />
 </div>
 
 @code {
@@ -81,6 +90,7 @@
 
     private readonly StationViewport _stations = new();
     private MapInterop? _map;
+    private AboutDialog? _about;
     private ElementReference _mapElement;
     private string _fuel = Fuels.Default;
     private Viewport? _viewport;
@@ -197,6 +207,8 @@
             return;
         }
 
+        // Now rather than when the About dialog opens: the version shown is then the one this tab runs.
+        _ = Notes.LoadReleaseAsync();
         _fuel = Fuels.Normalize(await Preferences.GetAsync(FuelPreferenceKey));
         _stations.SetFuel(_fuel);
         await Favorites.LoadAsync();

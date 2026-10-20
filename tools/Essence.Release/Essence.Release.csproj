@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Dates each release by the day it landed on main and writes the web app's changelog. Run by the publish workflow,
+       in no image (README → Versions). -->
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseAppHost>false</UseAppHost>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Essence.Contracts\Essence.Contracts.csproj" />
+  </ItemGroup>
+
+</Project>

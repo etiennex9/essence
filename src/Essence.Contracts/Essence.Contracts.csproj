@@ -1,5 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <!-- The API's response shapes. No dependencies, so the Blazor WebAssembly and MAUI clients can share them. -->
+  <!-- The API's response shapes and the web app's release notes. No dependencies, so the Blazor WebAssembly and MAUI
+       clients can share them. -->
 
 </Project>

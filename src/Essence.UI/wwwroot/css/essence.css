@@ -333,6 +333,12 @@ body {
     }
 }
 
+/* The About button (MapPage) has the bottom-left corner: an expanded attribution wraps before reaching it. The corner
+   itself takes no clicks, only its controls do. */
+.maplibregl-ctrl-bottom-right {
+    left: calc(max(12px, env(safe-area-inset-left)) + 44px);
+}
+
 /* On wide screens the details panel covers the right edge, so the zoom buttons and attribution move left of it. */
 @media (min-width: 768px) {
     body:has([data-ess-pane]) .maplibregl-ctrl-bottom-right {
