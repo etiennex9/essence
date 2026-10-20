@@ -10,6 +10,8 @@
 #     it serves the map and, under /api/, the API.
 #
 # The images come from the GitHub Container Registry, published by .github/workflows/publish.yml on every push to main.
+# TrueNAS offers Update once a day when one changed. To roll out each push within about 10 minutes instead, run
+# deploy/truenas-autodeploy.py from a cron job (README → Deploy).
 
 services:
   postgres:
@@ -82,4 +84,12 @@ services:
     image: ghcr.io/etiennex9/essence-web:latest
     ports:
       - "30180:8080"
+    healthcheck:
+      # The api's /alive through this container's /api/ proxy, so the app shows as running once both answer.
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/api/alive"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+      start_interval: 2s
     restart: unless-stopped

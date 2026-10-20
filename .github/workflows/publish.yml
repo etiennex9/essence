@@ -1,5 +1,5 @@
-# Tests, then builds the images whose inputs changed (see .github/scripts/select-images.sh). On main, pushes them to
-# ghcr.io/<owner>/essence-<app>, tagged latest and sha-<commit>.
+# Tests, then builds the images whose inputs changed (see .github/scripts/select-images.sh). Outside pull requests, pushes
+# them to ghcr.io/<owner>/essence-<app>, tagged sha-<commit>; on main, then moves latest to all of them together.
 name: Publish
 
 on:
@@ -9,9 +9,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# A pull request's newer push cancels its older run. On main, a run waits for the one in progress instead, so that the
+# promote job is never stopped halfway. Only one run waits: a newer one replaces it, and a push run's changes include
+# those of a push run it replaces. A manual run that a push replaces is canceled, though: start it again afterwards.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read
@@ -81,9 +84,8 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/essence-${{ matrix.app }}
-          tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,format=short
+          # latest moves in the promote job, once every image of the run is pushed.
+          tags: type=sha,format=short
       # The Dockerfiles expect the repository root as their build context.
       - uses: docker/build-push-action@v7
         with:
@@ -94,3 +96,41 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
+  # Moves latest to the run's images together, after every one of them is pushed, so that a host that polls latest
+  # (deploy/truenas-autodeploy.py) doesn't start a new migrator next to an old api. If an image fails to build, none
+  # moves. If this job fails partway, latest is a mix until it succeeds: use Re-run failed jobs, but only on the latest
+  # run on main. A later run rebuilds this run's images and moves latest past them; re-running this one afterwards would
+  # move latest back to its sha tags.
+  promote:
+    needs: [changes, image]
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@v4
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      # sha-<commit> is the tag docker/metadata-action gave the images: the commit's first 7 characters. Every source is
+      # checked before any tag moves, and each move is retried, so that a registry hiccup doesn't leave latest on a mix.
+      # deploy/truenas-autodeploy.py waits for two checks 2 minutes apart to agree, longer than these retries.
+      - env:
+          IMAGES: ${{ needs.changes.outputs.images }}
+          REPOSITORY: ghcr.io/${{ github.repository_owner }}/essence
+        run: |
+          apps=$(jq -r '.[].app' <<<"$IMAGES")
+          for app in $apps; do
+            docker buildx imagetools inspect "${REPOSITORY,,}-$app:sha-${GITHUB_SHA::7}" >/dev/null
+          done
+          for app in $apps; do
+            image="${REPOSITORY,,}-$app"
+            for attempt in 1 2 3 4 5; do
+              docker buildx imagetools create --tag "$image:latest" "$image:sha-${GITHUB_SHA::7}" && break
+              [ "$attempt" = 5 ] && exit 1
+              sleep 15
+            done
+          done

@@ -1,6 +1,7 @@
 using Essence.Api;
 using Essence.Api.Endpoints;
 using Essence.Data;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
@@ -59,6 +60,8 @@ app.MapOpenApi();
 app.MapScalarApiReference();
 app.MapGet("/", (HttpRequest request) => TypedResults.Redirect($"{request.PathBase}/scalar")).ExcludeFromDescription();
 app.MapHealthChecks("/health", IngestHealthCheck.EndpointOptions);
+// Liveness only, whatever the last import's age: the web container's healthcheck asks for it through its /api/ proxy.
+app.MapHealthChecks("/alive", new HealthCheckOptions { Predicate = _ => false });
 
 app.MapStationEndpoints();
 app.MapPriceEndpoints();

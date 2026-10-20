@@ -137,13 +137,83 @@ in Compose, `CORS_ORIGIN` from `.env`. The web container needs none, since the m
 On every push to `main` that changes more than Markdown files and `docs/`,
 [the publish workflow](.github/workflows/publish.yml) runs the tests, then builds the images whose inputs changed since its
 last successful push run and pushes them to the GitHub Container Registry:
-`ghcr.io/etiennex9/essence-{migrator,ingest,api,web}`, tagged `latest` and `sha-<commit>`. An image's inputs are read from
+`ghcr.io/etiennex9/essence-{migrator,ingest,api,web}`, tagged `sha-<commit>`. Once all of them are pushed, `latest` moves to
+them together, so a new migrator doesn't run next to an old api. If an image fails to build, `latest` stays. If the move
+itself fails partway, use **Re-run failed jobs** on that run, but only while it's the latest run on `main`: a later run
+builds its images again and moves `latest` past them, and re-running the older one after that would move `latest` back.
+On `main`, a run waits for the one in progress instead of canceling it; a push made while a manual run waits replaces the
+manual run, so start that again afterwards. An image's inputs are read from
 its Dockerfile: the projects it copies (its own and those it references) and the shared build files such as
 `Directory.Packages.props` ([select-images.sh](.github/scripts/select-images.sh)). A manual run, or a change to the workflow
 or `.dockerignore`, builds all four. Pull requests build the images they affect, without pushing.
 
 [deploy/truenas.yaml](deploy/truenas.yaml) runs those images on TrueNAS (Apps → Discover Apps → ⋮ → Install via YAML).
 Only the web container publishes a port; a reverse proxy in front of it serves the whole app, API included, at one HTTPS address.
+
+### Rolling out each push automatically
+
+TrueNAS checks for new images once a day and waits for a click on **Update**. Instead, a cron job on the NAS can run
+[truenas-autodeploy.py](deploy/truenas-autodeploy.py) every 5 minutes: when a `latest` tag on GHCR points to a newer image
+than the app runs, it waits until the whole release is published, snapshots the database's dataset, then pulls and
+redeploys the app (what **Update** does), waits for it to report running, and checks that no container keeps restarting.
+Nothing reaches the NAS from outside and no API key is involved. Written for TrueNAS 25.10, for
+the app installed as `essence` from [deploy/truenas.yaml](deploy/truenas.yaml); replace `POOL` with your pool's name.
+Start once the Publish run for the commit that added the script has succeeded, promote job included (**Actions →
+Publish**): its api is the first with `/alive`, which step 4 needs.
+
+1. **Datasets → Add Dataset** on your pool: name `scripts`, preset **Generic**. Don't share it: root runs what's in it.
+2. In **System → Shell**, run `sudo -i` unless the prompt already ends in `#` (otherwise it ends in `$` or `%`), entering
+   your password if asked, then:
+   ```sh
+   curl -fsSL -o /mnt/POOL/scripts/truenas-autodeploy.py https://raw.githubusercontent.com/etiennex9/essence/main/deploy/truenas-autodeploy.py
+   chown -R root:root /mnt/POOL/scripts && chmod 700 /mnt/POOL/scripts
+   python3 /mnt/POOL/scripts/truenas-autodeploy.py essence --snapshot POOL/apps/essence/postgres --check
+   ```
+   `--check` changes nothing. It prints the app's state, that it will snapshot the dataset, and either
+   `nothing to redeploy` or the images it would roll out; an error means a wrong app or dataset name.
+3. Roll out the current images once by hand, which also tells you the script works end to end:
+   ```sh
+   python3 /mnt/POOL/scripts/truenas-autodeploy.py essence --snapshot POOL/apps/essence/postgres
+   ```
+   It prints what it does, and nothing if the app already runs the latest images. A rollout takes a few minutes: it waits
+   2 minutes for the release to settle and 2 more after the app runs, to catch a container that keeps restarting.
+4. If the app was installed from a `deploy/truenas.yaml` whose `web` service has no `healthcheck`, add that block now
+   (**Apps → essence → Edit**, keeping your passwords and paths, then **Save**), so that the app reports running only once
+   the api answers. Only once the app runs an api with `/alive` (step 3 rolled out `essence-api`, or printed nothing
+   after that Publish run): an older api would keep `web` unhealthy, and the app on **Deploying**.
+5. So that failures reach you: in **Credentials → Users**, set the **Email** of `root`, which the cron job mails. Then
+   **System → General Settings → Email → Settings**: set up a mail server, **Send Test Mail** (it goes to `root` and any
+   other local administrator with an email), then **Save**. The test uses the form as filled in; cron mails use only saved
+   settings.
+6. **System → Advanced Settings → Cron Jobs → Add**:
+   - **Description**: `Autodeploy essence`
+   - **Command**: `python3 /mnt/POOL/scripts/truenas-autodeploy.py essence --snapshot POOL/apps/essence/postgres`
+   - **Run As User**: `root`
+   - **Schedule**: **Custom**; in the dialog, **Minutes** `*/5`, **Hours** and **Days of Month** `*`, every day of the
+     week and month checked, **Done**
+   - **Hide Standard Output**: checked to be mailed only failures, cleared to also get a mail for each rollout
+   - **Hide Standard Error**: cleared
+   - **Enabled**: checked
+
+From then on, each push that publishes an image is running within about 10 minutes of the publish run's end (the next
+5-minute run, 2 minutes for the release to settle, then the pull, restart and health checks), and the database's dataset
+gets an `@autodeploy-<time>` snapshot first (the last 10 are kept).
+
+- **A failed rollout** is mailed and not retried: the next publish is. If the pull failed, the app still runs the old
+  images; to retry, `rm /mnt/POOL/scripts/.autodeploy-essence.json`. If migrate failed, or the app wasn't running 10
+  minutes later, or a container restarted in the 2 minutes after, the app already has the new images: fix the cause and
+  **Stop**, then **Start** the app in **Apps**, or push a fix.
+- **To hold an image back**, set it to `:sha-<commit>` in the app's YAML (**Apps → essence → Edit**). A sha tag doesn't
+  move, so the script leaves it alone until you set it back to `:latest`. Only the images a push rebuilt get its sha tag:
+  pick one listed on the image's package page (the repository's **Packages**). To pause everything, disable the cron job.
+- **Migrations only go forward**, so rolling back the images doesn't undo one. Stop the app. Roll the postgres dataset back
+  to the `@autodeploy-` snapshot taken before the bad rollout: **Datasets** → the dataset → **Data Protection** → **View
+  Snapshots** → that snapshot's row → **Rollback**. If newer snapshots exist, the default choice is refused: choose
+  **Newer Clone**, which deletes the snapshots taken after it. Then, in **Apps → essence → Edit**, set the images to the
+  `sha-<commit>` tags of the release before, **Save**, and **Start** the app: Save doesn't start a stopped app, and the
+  cron job leaves a stopped app alone. Starting it on `latest` instead would run the new migration again.
+- **To update the script**, look at what changed in `deploy/truenas-autodeploy.py`, since root runs it, then run the
+  `curl` command again.
 
 ## Configuration
 
