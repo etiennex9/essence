@@ -253,6 +253,32 @@ by hand, and a tag ruleset on `v*` would have to let GitHub Actions bypass it. O
 to be set for its images to be released; another day's that can't be set is a warning in the job's log, and until a
 later run sets it, that day's entries are dated by the next tag.
 
+**The deploy key.** The job pushes the tags with an SSH deploy key, because GitHub refuses the workflow's own token a tag
+at some commits that changed a workflow file (`Resource not accessible by integration`). Without the key, or if a push
+with it fails, it falls back to that token. To set the key up, once:
+
+1. Make a key pair without a passphrase, outside the repository:
+   ```bash
+   ssh-keygen -t ed25519 -N "" -C "essence release tags" -f ~/essence-release-tags
+   ```
+2. From the repository, add the public half as a deploy key with write access, and the private half as the Actions
+   secret `RELEASE_DEPLOY_KEY`. On github.com, that's **Settings → Deploy keys → Add deploy key** (**Allow write access**
+   checked), then **Settings → Secrets and variables → Actions → New repository secret**. With the GitHub CLI:
+   ```bash
+   gh repo deploy-key add ~/essence-release-tags.pub --allow-write --title "Release tags (publish workflow)"
+   ```
+   ```bash
+   gh secret set RELEASE_DEPLOY_KEY < ~/essence-release-tags
+   ```
+3. Delete both files; GitHub has what it needs:
+   ```bash
+   rm ~/essence-release-tags ~/essence-release-tags.pub
+   ```
+
+The next run on `main` uses it: its `tag` job log says `set … ` for each tag, with no warning about the deploy key. The
+key can push anything to the repository, so it lives only in that secret, which pull requests from forks don't get. To
+replace it, delete the deploy key and the secret, and set them up again.
+
 The web image's leg then runs `tools/Essence.Release notes`: the version is the first day tag that contains the commit,
 and each entry is dated by the first day tag whose tree has its file, so rewriting `main`'s history doesn't move old
 entries. It writes `release.json` (version, commit, months) and one `changelog-<month>.json` per month, which nginx serves

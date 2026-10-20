@@ -65,20 +65,26 @@ jobs:
   # time main moved, whatever the commits' own dates or when this run started. Every run re-derives the log's last 100
   # moves, so one that was replaced while it waited is made up for by the next. The tags are this job's: don't create or
   # move them by hand, and a tag ruleset on v* would have to let GitHub Actions bypass it. Same condition as promote's.
+  # They're pushed with the deploy key in the RELEASE_DEPLOY_KEY secret (README → Versions): GitHub refuses this job's own
+  # token a tag at some commits that changed a workflow. Without the secret, or when that push fails, the token is used.
+  # A tag pushed with the key starts no run: this workflow runs for pushes to main, not tags.
   tag:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      # With the key, origin is an SSH remote that git pushes through.
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
       - env:
           GH_TOKEN: ${{ github.token }}
+          TAGS_OVER_SSH: ${{ secrets.RELEASE_DEPLOY_KEY != '' }}
         run: dotnet run --project tools/Essence.Release --configuration Release -- tag
 
   # Runs on pull requests too, where tag is skipped, but not when a job it needs failed or was canceled.

@@ -18,6 +18,8 @@ public static class TagCommand
         var github = GitHub.FromEnvironment();
         // The commit this run builds. Without it (trying --dry-run by hand), no day is required.
         var commit = Environment.GetEnvironmentVariable("GITHUB_SHA") is { Length: > 0 } sha ? sha : null;
+        // Set by the workflow when the checkout has the deploy key (README → Versions): origin is then an SSH remote.
+        var overSsh = Environment.GetEnvironmentVariable("TAGS_OVER_SSH") == "true";
 
         var activity = await ReadActivityAsync(github, commit);
         // After reading the log, so origin/main is at least as new as what the log shows.
@@ -48,13 +50,13 @@ public static class TagCommand
             var change = current is null ? $"{name} → {target[..7]}" : $"{name} → {target[..7]} (was {current[..7]})";
             if (dryRun)
             {
-                Console.WriteLine($"would set {change}");
+                Console.WriteLine($"would set {change}{(overSsh ? " over SSH" : "")}");
                 continue;
             }
 
             try
             {
-                await github.SetTagAsync(name, target, exists: current is not null, CancellationToken.None);
+                await SetTagAsync(git, github, overSsh, name, target, exists: current is not null);
                 Console.WriteLine($"set {change}");
             }
             catch (ReleaseException ex) when (day != required)
@@ -66,6 +68,29 @@ public static class TagCommand
         }
 
         return 0;
+    }
+
+    /// <summary>
+    /// Pushes the tag with the deploy key when the checkout has one: GitHub refuses the workflow's own token a tag at some
+    /// commits that changed a workflow file ("Resource not accessible by integration"), a deploy key with write access
+    /// isn't. Without the key, or when that push fails, the API with the workflow's token.
+    /// </summary>
+    private static async Task SetTagAsync(Git git, GitHub github, bool overSsh, string name, string commit, bool exists)
+    {
+        if (overSsh)
+        {
+            try
+            {
+                git.PushTag(name, commit);
+                return;
+            }
+            catch (ReleaseException ex)
+            {
+                Console.WriteLine($"::warning::couldn't push {name} with the deploy key, trying the API instead: {ex.Message}");
+            }
+        }
+
+        await github.SetTagAsync(name, commit, exists, CancellationToken.None);
     }
 
     private static async Task<List<Activity>> ReadActivityAsync(GitHub github, string? commit)
