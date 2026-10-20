@@ -87,6 +87,17 @@ h2 {
     color: var(--ess-text-muted);
 }
 
+.commit a {
+    color: inherit;
+    text-decoration-color: var(--ess-border-strong);
+    text-underline-offset: 2px;
+}
+
+.commit a:hover {
+    color: var(--ess-accent);
+    text-decoration-color: currentColor;
+}
+
 h3 {
     margin: 18px 0 0;
     font-size: 13px;
@@ -154,7 +165,8 @@ li + li {
     display: none;
 }
 
-button:focus-visible {
+button:focus-visible,
+a:focus-visible {
     outline: 2px solid var(--ess-accent);
     outline-offset: 2px;
 }

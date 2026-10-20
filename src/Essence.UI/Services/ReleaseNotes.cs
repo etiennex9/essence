@@ -133,6 +133,10 @@ public sealed class ReleaseNotes(IReleaseNotesSource source)
         }
     }
 
+    /// <summary>The commit's page to link the commit to: only an https address, whatever the file says.</summary>
+    public static string? CommitLink(ReleaseInfo release) =>
+        Uri.TryCreate(release.CommitUrl, UriKind.Absolute, out var url) && url.Scheme == Uri.UriSchemeHttps ? url.AbsoluteUri : null;
+
     /// <summary>"2026-10-19": how a version is written, in every language.</summary>
     public static string VersionName(DateOnly version) => version.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
 

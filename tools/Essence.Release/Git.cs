@@ -21,6 +21,8 @@ public sealed class Git
 
     public bool IsShallow() => Run("rev-parse", "--is-shallow-repository").Trim() == "true";
 
+    public string Commit(string revision) => Run("rev-parse", revision).Trim();
+
     public string ShortCommit(string revision) => Run("rev-parse", "--short=7", revision).Trim();
 
     /// <summary>Brings origin/main and every tag up to date, overwriting local tags that differ.</summary>

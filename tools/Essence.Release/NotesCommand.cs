@@ -25,6 +25,7 @@ public static class NotesCommand
 
         var days = git.DayTags().Select(t => new DayTree(t.Key, git.ChangelogFiles(t.Value))).ToList();
         var notes = Changelog.Build(version, git.ShortCommit("HEAD"), days, EntryFiles.ReadAll(git.Root));
+        notes = notes with { Release = notes.Release with { CommitUrl = CommitUrl(git) } };
         Write(folder, notes);
 
         Console.WriteLine($"{(version is { } v ? $"Version {Days.Iso(v)}" : "No version")} ({notes.Release.Commit}), in {Path.GetFullPath(folder)}");
@@ -36,6 +37,13 @@ public static class NotesCommand
         Console.WriteLine($"  not released: {notes.Release.Unreleased.Count}");
         return 0;
     }
+
+    /// <summary>HEAD's page on GitHub, from the workflow's variables (https://github.com/owner/name/commit/sha); none locally.</summary>
+    private static string? CommitUrl(Git git) =>
+        Environment.GetEnvironmentVariable("GITHUB_SERVER_URL") is { Length: > 0 } server
+        && Environment.GetEnvironmentVariable("GITHUB_REPOSITORY") is { Length: > 0 } repository
+            ? $"{server}/{repository}/commit/{git.Commit("HEAD")}"
+            : null;
 
     private static void Write(string folder, Notes notes)
     {
