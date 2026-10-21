@@ -1,0 +1,40 @@
+/* StatusChip's look, with a button. It stacks with the status chip in MapPage's slot: above it on phones, where the slot is at
+   the top, and below it on wide screens, where the slot is at the bottom. */
+.chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    max-width: min(420px, calc(100vw - 32px), 100%);
+    margin-bottom: 8px;
+    padding: 6px 6px 6px 14px;
+    border-radius: 999px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    border: 0.5px solid var(--ess-border);
+    box-shadow: var(--ess-shadow);
+    font: 400 13px/1.35 var(--ess-font);
+    pointer-events: auto;
+}
+
+.reload {
+    flex: none;
+    border: 0;
+    border-radius: 999px;
+    padding: 2px 8px;
+    background: none;
+    color: var(--ess-accent);
+    font: 500 13px/1.35 var(--ess-font);
+    cursor: pointer;
+}
+
+.reload:focus-visible {
+    outline: 2px solid var(--ess-accent);
+    outline-offset: 2px;
+}
+
+@media (min-width: 768px) {
+    .chip {
+        margin-top: 8px;
+        margin-bottom: 0;
+    }
+}

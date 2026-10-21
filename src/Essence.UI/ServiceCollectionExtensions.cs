@@ -35,6 +35,7 @@ public static class ServiceCollectionExtensions
 
         services.TryAddSingleton<IReleaseNotesSource, NoReleaseNotes>();
         services.AddScoped<ReleaseNotes>();
+        services.AddScoped<UpdateCheck>();
         return services;
     }
 }

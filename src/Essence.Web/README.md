@@ -21,6 +21,7 @@ app can host the same components later (see [Android](#android) below). The brow
 | History requests | Each listed or compared station costs one `/stations/{id}/prices` request (all fuels, so switching fuel is free), kept 2 minutes by `Services/HistoryCache.cs`. |
 | Text | `Resources/Strings.resx` (English) and `Strings.fr.resx`. The language follows the browser. Fuel names stay as the Régie publishes them. |
 | About | The button in the bottom-left corner opens `Components/AboutDialog.razor`, a native modal `<dialog>` (`wwwroot/js/essenceDialog.js`): the version and the changelog, a month at a time as it scrolls (`Services/ReleaseNotes.cs`). The files are under `release/`, written at build time ([Versions](../../README.md#versions)). |
+| Updates | `Services/UpdateCheck.cs` reads `release/release.json` again, every 10 minutes and when the page is shown, and compares its commit with the one the tab started with. Another release shows `Components/UpdatePrompt.razor`, an offer to reload, while the page is in use; the page reloads by itself once it's been out of sight for a minute, or as it's brought back from that. `essenceMap.js` saves the view, the user's dot, the fuel and the history flags in `sessionStorage`, so the reload reopens as the page was. |
 
 Opening a station adds `?station=<id>` to the URL, so Back closes the pane and the link can be shared; a link opened cold
 centers the map on that station. The favorites add `?view=favorites` and the comparison `?view=compare`; a station opened

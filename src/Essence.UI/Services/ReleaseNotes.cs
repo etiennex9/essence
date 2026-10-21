@@ -48,7 +48,8 @@ public enum ReleaseState
 /// <summary>
 /// The release this tab runs and its changelog, a month at a time, newest first. release.json is read once, at startup:
 /// after a newer release is deployed, the version shown is still the one running, and the newer versions that later
-/// months' files may hold are left out. Failures aren't kept: the next call tries again.
+/// months' files may hold are left out. (<see cref="UpdateCheck"/> reads release.json again on its own, to notice another
+/// release and offer a reload.) Failures aren't kept: the next call tries again.
 /// </summary>
 public sealed class ReleaseNotes(IReleaseNotesSource source)
 {

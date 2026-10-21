@@ -210,4 +210,10 @@
   <data name="CommitOnGitHub" xml:space="preserve">
     <value>See this commit on GitHub</value>
   </data>
+  <data name="UpdateAvailable" xml:space="preserve">
+    <value>A new version is available.</value>
+  </data>
+  <data name="Reload" xml:space="preserve">
+    <value>Reload</value>
+  </data>
 </root>
