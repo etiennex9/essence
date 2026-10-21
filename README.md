@@ -153,6 +153,8 @@ affect, without pushing.
 
 [deploy/truenas.yaml](deploy/truenas.yaml) runs those images on TrueNAS (Apps → Discover Apps → ⋮ → Install via YAML).
 Only the web container publishes a port; a reverse proxy in front of it serves the whole app, API included, at one HTTPS address.
+Leave asset caching off on that proxy: the web app's files under `_content/` aren't fingerprinted, and a new release reaches
+open tabs only if they're revalidated ([Versions](#versions)).
 
 ### Rolling out each push automatically
 
@@ -287,6 +289,14 @@ none: the dialog says *Development version* and lists the pull request's new ent
 build has no release notes at all (the same *Development version*, with nothing listed), and a local `notes` run takes the
 version of the first day tag containing HEAD, if there's one.
 
+**Open tabs.** A tab reads `release.json` again every 10 minutes, and when it's brought back into view (at most once a
+minute, unless it was away with the offer showing), to compare its commit with the one it started with (`Essence.UI`'s `Services/UpdateCheck.cs`). The commit tells
+releases apart, since one day's version can be deployed more than once, and any other commit counts, so a rollback reaches
+open tabs too. While the tab is in use, a chip offers to reload. The tab reloads by itself only once it has been out of
+sight for a minute, or as it's brought back from that (within 2 seconds), and only right after a read that saw the other
+release, so a tab that lost its network isn't reloaded into an error page. The reload reopens on the same map view, fuel
+and panels. A build without release notes, or without a commit, never checks.
+
 To try the dialog with real notes while working on the web app (the folder is ignored by git and Docker):
 
 ```bash
@@ -296,6 +306,9 @@ git fetch --tags --force
 ```bash
 dotnet run --project tools/Essence.Release -- notes src/Essence.Web/wwwroot/release
 ```
+
+With those notes, `dotnet watch` checks for new releases too: after a commit, running `notes` again makes an open tab offer
+to reload. Keep DevTools' *Disable cache* on, as the development server doesn't ask browsers to revalidate the file.
 
 ## Configuration
 

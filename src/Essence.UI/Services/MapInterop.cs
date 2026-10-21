@@ -26,6 +26,16 @@ public sealed record MarkerModel(
     string Foreground,
     string? LogoUrl);
 
+/// <summary>What the page keeps across a reload for a new release, besides the map's view.</summary>
+/// <param name="StationPushed">The page pushed the <c>?station=</c> history entry (MapPage), so closing still goes back.</param>
+/// <param name="ListPushed">The same for <c>?view=</c>.</param>
+public sealed record ReloadState(string Fuel, bool StationPushed, bool ListPushed);
+
+/// <summary>The view and state a reload for a new release left for the page it reloaded into.</summary>
+/// <param name="UserLat">Where the user's dot was, if it was shown.</param>
+public sealed record SavedView(
+    double Lat, double Lon, double Zoom, double? UserLat, double? UserLon, string? Fuel, bool StationPushed, bool ListPushed);
+
 /// <summary>What the map reports back.</summary>
 public interface IMapListener
 {
@@ -45,7 +55,7 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 {
     private const string ModulePath = "./_content/Essence.UI/js/essenceMap.js";
 
-    private IJSObjectReference? _module;
+    private Task<IJSObjectReference>? _module;
     private IJSObjectReference? _map;
     private DotNetObjectReference<MapInterop>? _self;
     private IMapListener? _listener;
@@ -54,9 +64,18 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
     {
         _listener = listener;
         _self = DotNetObjectReference.Create(this);
-        _module = await js.InvokeAsync<IJSObjectReference>("import", ModulePath);
-        _map = await _module.InvokeAsync<IJSObjectReference>("createMap", container, options, _self);
+        _map = await (await GetModuleAsync()).InvokeAsync<IJSObjectReference>("createMap", container, options, _self);
     }
+
+    /// <summary>The view a reload for a new release saved for this page, if this page is that reload.</summary>
+    public async Task<SavedView?> TakeSavedViewAsync() => await (await GetModuleAsync()).InvokeAsync<SavedView?>("takeSavedView");
+
+    /// <summary>
+    /// Reloads the page for a new release. With <paramref name="saveView"/>, it reopens on this view and
+    /// <paramref name="state"/> (<see cref="TakeSavedViewAsync"/>); an <paramref name="automatic"/> reload that can't save
+    /// them doesn't happen.
+    /// </summary>
+    public ValueTask ReloadAsync(ReloadState state, bool saveView, bool automatic) => InvokeAsync("reload", state, saveView, automatic);
 
     public ValueTask SetMarkersAsync(IReadOnlyList<MarkerModel> markers) => InvokeAsync("setMarkers", markers);
 
@@ -96,7 +115,7 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 
             if (_module is not null)
             {
-                await _module.DisposeAsync();
+                await (await _module).DisposeAsync();
             }
         }
         catch (JSDisconnectedException)
@@ -106,6 +125,9 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 
         _self?.Dispose();
     }
+
+    private Task<IJSObjectReference> GetModuleAsync() =>
+        _module ??= js.InvokeAsync<IJSObjectReference>("import", ModulePath).AsTask();
 
     private ValueTask InvokeAsync(string method, params object?[] args) =>
         _map is null ? ValueTask.CompletedTask : _map.InvokeVoidAsync(method, args);

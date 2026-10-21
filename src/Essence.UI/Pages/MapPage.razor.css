@@ -109,7 +109,8 @@
     left: 0;
     right: 0;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
+    align-items: center;
     pointer-events: none;
 }
 
@@ -122,5 +123,13 @@
     .status-slot {
         top: auto;
         bottom: 28px;
+        /* The offer to reload (UpdatePrompt) keeps to the edge, under the status. */
+        flex-direction: column-reverse;
+    }
+
+    /* Clear of the About button, and of the details panel and the map controls that move left of it (essence.css). */
+    .page:has([data-ess-pane]) .status-slot {
+        left: calc(max(12px, env(safe-area-inset-left)) + 44px);
+        right: 472px;
     }
 }

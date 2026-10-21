@@ -1,0 +1,21 @@
+@inject IStringLocalizer<Strings> L
+
+@* The offer to reload for a new release (UpdateCheck), while the page is in use. The live region stays in the DOM so screen
+   readers announce the offer when it appears; focus stays where it is. *@
+<div class="update" role="status" aria-live="polite">
+    @if (Visible)
+    {
+        <div class="chip">
+            <span id="ess-update-message">@L["UpdateAvailable"]</span>
+            <button type="button" class="reload" aria-describedby="ess-update-message" @onclick="OnReload">@L["Reload"]</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public bool Visible { get; set; }
+
+    [Parameter]
+    public EventCallback OnReload { get; set; }
+}

@@ -7,6 +7,7 @@
 @inject IDeviceLocation DeviceLocation
 @inject IPreferenceStore Preferences
 @inject ReleaseNotes Notes
+@inject UpdateCheck Updates
 @inject EssenceUIOptions Options
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
@@ -43,6 +44,7 @@
     </div>
 
     <div class="status-slot">
+        <UpdatePrompt Visible="@Updates.Available" OnReload="() => ReloadAsync(automatic: false)" />
         <StatusChip Message="@StatusMessage" Busy="@(_locating || _loading)" />
     </div>
 
@@ -96,6 +98,9 @@
     private Viewport? _viewport;
     private GeoPoint? _userLocation;
     private bool _mapReady;
+
+    /// <summary>The map is where the page means it to be at startup: on the user, a station, or a reloaded view.</summary>
+    private bool _placed;
     private bool _locating;
     private bool _loading;
     private bool _loaded;
@@ -179,6 +184,8 @@
     {
         Favorites.Changed += OnFavoritesChanged;
         Comparison.Changed += OnComparisonChanged;
+        Updates.Changed += OnUpdateChanged;
+        Updates.ReloadDue += OnReloadDue;
     }
 
     protected override async Task OnParametersSetAsync()
@@ -209,21 +216,32 @@
 
         // Now rather than when the About dialog opens: the version shown is then the one this tab runs.
         _ = Notes.LoadReleaseAsync();
-        _fuel = Fuels.Normalize(await Preferences.GetAsync(FuelPreferenceKey));
+        _map = new MapInterop(JS);
+
+        // A reload for a new release reopens as the page was (ReloadAsync): its view, fuel (another tab may have changed the
+        // saved one since) and history.
+        var saved = await _map.TakeSavedViewAsync();
+        _fuel = Fuels.Normalize(saved?.Fuel ?? await Preferences.GetAsync(FuelPreferenceKey));
         _stations.SetFuel(_fuel);
         await Favorites.LoadAsync();
         await Comparison.LoadAsync();
         var openedOnStation = Station is not null;
-        _centerOnStation = openedOnStation;
+        _centerOnStation = openedOnStation && saved is null;
+        if (saved is not null)
+        {
+            _stationPushed = saved.StationPushed && Station is not null;
+            _listPushed = saved.ListPushed && ListOpen;
+        }
 
-        _map = new MapInterop(JS);
+        var (center, zoom) = saved is null ? (Overview, OverviewZoom) : (new GeoPoint(saved.Lat, saved.Lon), saved.Zoom);
         await _map.CreateAsync(
             _mapElement,
             new MapOptions(
-                Options.MapStyleUrl, Options.MapDarkStyleUrl, Overview.Latitude, Overview.Longitude, OverviewZoom, CompactBelowZoom,
+                Options.MapStyleUrl, Options.MapDarkStyleUrl, center.Latitude, center.Longitude, zoom, CompactBelowZoom,
                 CultureInfo.CurrentUICulture.TwoLetterISOLanguageName),
             this);
         _mapReady = true;
+        Updates.Start();
         await _map.SetSelectedAsync(Station);
         if (_pendingStation is not null)
         {
@@ -232,8 +250,21 @@
 
         StateHasChanged();
 
-        // Opened on a station: that's where the map goes, and the location only adds the user's dot.
-        await LocateAsync(moveMap: !openedOnStation, fallBackToMontreal: true);
+        if (saved is null)
+        {
+            // Opened on a station: that's where the map goes, and the location only adds the user's dot.
+            await LocateAsync(moveMap: !openedOnStation, fallBackToMontreal: true);
+        }
+        else if (saved is { UserLat: { } userLat, UserLon: { } userLon })
+        {
+            // The dot where it was, without asking for the location again: no spinner, notice or permission prompt, which
+            // a page reloaded out of sight would otherwise show when it's back.
+            _userLocation = new GeoPoint(userLat, userLon);
+            await _map.ShowUserLocationAsync(_userLocation.Value);
+            StateHasChanged();
+        }
+
+        _placed = true;
     }
 
     /// <summary>
@@ -443,6 +474,7 @@
 
     public Task OnVisibilityChangedAsync(bool visible)
     {
+        Updates.SetVisible(visible);
         _hidden = !visible;
         if (_hidden)
         {
@@ -454,6 +486,19 @@
         }
 
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Reloads the page for a new release: asked for by the user, or <paramref name="automatic"/> while the page is away or
+    /// just back (<see cref="UpdateCheck"/>). Once the map is placed, the page reopens as it is; before that, it starts over.
+    /// An automatic reload that can't save the view doesn't happen: the offer to reload stays.
+    /// </summary>
+    private async Task ReloadAsync(bool automatic)
+    {
+        if (_mapReady)
+        {
+            await _map!.ReloadAsync(new ReloadState(_fuel, _stationPushed, _listPushed), saveView: _placed, automatic);
+        }
     }
 
     private async Task RenderMarkersAsync()
@@ -636,10 +681,19 @@
     /// <summary>The toolbar shows how many stations are compared.</summary>
     private void OnComparisonChanged() => InvokeAsync(StateHasChanged);
 
+    /// <summary>Another release came out, or was rolled back: the offer to reload shows or goes.</summary>
+    private void OnUpdateChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>Another release while the page is away or just back: it reloads by itself.</summary>
+    private void OnReloadDue() => InvokeAsync(() => ReloadAsync(automatic: true));
+
     public async ValueTask DisposeAsync()
     {
         Favorites.Changed -= OnFavoritesChanged;
         Comparison.Changed -= OnComparisonChanged;
+        Updates.Changed -= OnUpdateChanged;
+        Updates.ReloadDue -= OnReloadDue;
+        Updates.Stop();
         _loadCts?.Cancel();
         _retryCts?.Cancel();
         _refreshCts?.Cancel();

@@ -1,11 +1,16 @@
 // The MapLibre map behind MapInterop.cs. C# decides what to show (markers arrive preformatted); this module draws it
 // and reports what the user does: map moves, marker clicks, and dismissals (a click on the map, or Escape), and when the
-// page is hidden or shown again.
+// page is hidden or shown again. It also reloads the page for a new release, keeping the view (UpdateCheck.cs): here
+// rather than in a module of its own, which a tab would import from the new release only when it's time to reload.
 import { Map as MapLibreMap, Marker, NavigationControl } from "../lib/maplibre-gl/maplibre-gl.mjs";
 
 const VIEWPORT_DEBOUNCE_MS = 250;
 const PANE_SETTLE_MS = 260;
 const VISIBLE_MARGIN_PX = 48;
+
+// The view a reload for a new release saves, for the page it reloads into: the version before writes it and the version
+// after reads it, so it's read leniently.
+const RELOAD_KEY = "essence.reload";
 
 const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -31,6 +36,45 @@ const PUMP_SVG = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="t
 const STAR_SVG = '<svg viewBox="0 0 24 24" width="9" height="9" aria-hidden="true" fill="currentColor">' +
     '<path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>';
 
+// The view saved by reload(), or null. Taken once, and only by the reload it was saved for, not by a later visit in the
+// same tab. Storage can be blocked (private windows, site data turned off): then there's nothing to take.
+export function takeSavedView() {
+    let saved;
+    try {
+        saved = sessionStorage.getItem(RELOAD_KEY);
+        sessionStorage.removeItem(RELOAD_KEY);
+    } catch {
+        return null;
+    }
+
+    if (!saved || performance.getEntriesByType("navigation")[0]?.type !== "reload") {
+        return null;
+    }
+
+    let view;
+    try {
+        view = JSON.parse(saved);
+    } catch {
+        return null;
+    }
+
+    if (!view || ![view.lat, view.lon, view.zoom].every(Number.isFinite)) {
+        return null;
+    }
+
+    const hasUser = Number.isFinite(view.userLat) && Number.isFinite(view.userLon);
+    return {
+        lat: view.lat,
+        lon: view.lon,
+        zoom: view.zoom,
+        userLat: hasUser ? view.userLat : null,
+        userLon: hasUser ? view.userLon : null,
+        fuel: typeof view.fuel === "string" ? view.fuel : null,
+        stationPushed: view.stationPushed === true,
+        listPushed: view.listPushed === true,
+    };
+}
+
 export function createMap(container, options, dotnet) {
     ensureStylesheet();
     document.documentElement.lang = options.language;
@@ -53,6 +97,9 @@ export function createMap(container, options, dotnet) {
     let selectedId = null;
     let userMarker = null;
     let viewportTimer = 0;
+
+    // flyTo and ensureVisible calls waiting to start their move (see reload).
+    let pendingMoves = 0;
 
     const call = (method, ...args) => dotnet.invokeMethodAsync(method, ...args).catch(e => console.error(e));
 
@@ -230,7 +277,9 @@ export function createMap(container, options, dotnet) {
 
         // With besidePane, the point ends in the middle of the area the details pane leaves uncovered.
         flyTo(lat, lon, zoom, besidePane) {
+            pendingMoves++;
             setTimeout(() => {
+                pendingMoves--;
                 let offset = [0, 0];
                 if (besidePane) {
                     const { width, height, right, bottom } = uncoveredArea();
@@ -249,7 +298,9 @@ export function createMap(container, options, dotnet) {
 
         // Pans just enough that the point isn't under the details pane.
         ensureVisible(lat, lon) {
+            pendingMoves++;
             setTimeout(() => {
+                pendingMoves--;
                 const { right, bottom } = uncoveredArea();
                 const point = map.project([lon, lat]);
                 const inside = point.x >= VISIBLE_MARGIN_PX && point.x <= right - VISIBLE_MARGIN_PX
@@ -258,6 +309,28 @@ export function createMap(container, options, dotnet) {
                     map.panBy([point.x - right / 2, point.y - bottom / 2]);
                 }
             }, PANE_SETTLE_MS);
+        },
+
+        // Reloads the page. With saveView, the page it reloads into opens on this view, with the page's own `state` (C#'s
+        // ReloadState) and the user's dot. An automatic reload that can't save it doesn't happen: the page keeps offering
+        // it. The view is read here because C#'s is only reported once the map has drawn, which a page that opened out of
+        // sight hasn't. A move on its way isn't saved halfway: out of sight, a flight to the user or a station doesn't
+        // run at all (no animation frames), and the reload starts over instead.
+        reload(state, saveView, automatic) {
+            if (saveView && pendingMoves === 0 && !map.isMoving()) {
+                const center = map.getCenter();
+                const user = userMarker?.getLngLat();
+                const view = { ...state, lat: center.lat, lon: center.lng, zoom: map.getZoom(), userLat: user?.lat, userLon: user?.lng };
+                try {
+                    sessionStorage.setItem(RELOAD_KEY, JSON.stringify(view));
+                } catch {
+                    if (automatic) {
+                        return;
+                    }
+                }
+            }
+
+            location.reload();
         },
 
         dispose() {
