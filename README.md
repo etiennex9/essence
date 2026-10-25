@@ -12,13 +12,14 @@ and shows them on a map of nearby stations.
 | `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. |
 | `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
 | `src/Essence.Contracts` | The API's response records and the release notes', shared by the API, the UI and the release tool. |
-| `src/Essence.Ranking` | Which station to fill up at: costs, savings, the pick and its rules, the search area. Pure functions, no dependencies; used by the API. |
+| `src/Essence.Ranking` | Which station to fill up at: costs, savings, the pick and its rules, the search area; for trips, the route's corridor, km along it, detours and the range; and the OSRM client. No dependencies; used by the API. |
+| `src/Essence.Routing` | The routing image: OSRM with Essence's car profile. Its data is built on the host by the image itself (see [Routing](#routing-best-on-the-way)). |
 | `src/Essence.UI` | Razor class library: the map page, the station details pane and everything behind them. Shared with a future MAUI app. |
 | `src/Essence.Web` | Blazor WebAssembly host for `Essence.UI`, served as static files by nginx. See [its README](src/Essence.Web/README.md). |
 | `tools/Essence.Release` | Run by the publish workflow: dates each release by the day it landed on `main` and writes the web app's changelog (see [Versions](#versions)). |
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. |
-| `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility. |
-| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, Google Maps links, the release notes, translations. |
+| `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM client against a stub server. |
+| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the open trip and saved places, the route's split at the range, Google Maps links, the release notes, translations. |
 | `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
 The full design and its rationale are in [docs/PLAN.md](docs/PLAN.md).
@@ -36,10 +37,24 @@ Compose starts `postgres`, then `migrate` (exits 0 once the schema and roles are
 The map is at <http://localhost:8081>. The API listens on <http://localhost:8080>; the interactive docs are at <http://localhost:8080/scalar>.
 The web container also forwards `/api/` to the API (<http://localhost:8081/api/health>): that's the address the map uses.
 
+Road distances and Best on the way need the routing service, in the `trip` profile. Build its data once (a 1.2 GB download
+from Geofabrik, then a few minutes and about 7 GB of RAM to process; it goes into the `routing` volume), then start it:
+
+```bash
+docker compose run --rm routing build
+```
+
+```bash
+docker compose --profile trip up -d routing
+```
+
+Without it, Best near you estimates distances and trips answer 503.
+
 ```bash
 curl localhost:8080/health
 curl "localhost:8080/stations/nearby?lat=45.5017&lon=-73.5673&radiusKm=3&fuel=Diesel"
 curl "localhost:8080/stations/best?lat=45.5017&lon=-73.5673&fuel=Regulier"
+curl "localhost:8080/trips/best?fromLat=45.5017&fromLon=-73.5673&toLat=46.8139&toLon=-71.208&fuel=Regulier&rangeKm=180"
 curl "localhost:8080/prices/current?fuel=Régulier&limit=5"
 curl localhost:8080/imports
 ```
@@ -123,21 +138,36 @@ In the Development environment, logs are plain text and the ingest archive goes 
 | `GET /stations/{id}` | One station with its current prices. |
 | `GET /stations/nearby?lat&lon&radiusKm=5&fuel&limit=20` | Active stations within a radius, closest first. |
 | `GET /stations/best?lat&lon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&radiusKm=10` | Where to fill up near a point: the pick, the closest, the cheapest and a few others that save (see below). |
+| `GET /trips/best?fromLat&fromLon&toLat&toLon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&rangeKm&spareKm=30` | Where to fill up on the way to a destination: the route, where to stop, and the stations along it ranked by detour (see below). |
 | `GET /stations/{id}/prices?fuel&from&to` | Price history overlapping a range (default: the last 30 days). |
 | `GET /prices/current?fuel&region&brand&sort=price&includeUnavailable&limit=50` | Current prices, cheapest first. |
 | `GET /imports?limit=20` | Recent imports with their statistics and `source` (`feed` or `xlsx`). |
-| `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. |
+| `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. A routing server that doesn't answer makes it `Degraded`, still 200. |
 
 `/stations/best` ranks the operating stations with an available price for the fuel (Costco only with `costco=true`: it
 sells to members only) by what the fill-up costs once the drive there and back is counted: price ÷ 100 × (fill + km there
 and back × L/100 km ÷ 100), to the cent. Savings are counted against the closest station. A farther one is picked only if
-it saves at least $0.25, its round trip takes at most `maxDetourMin` longer than the closest's, and it still saves with
-roads twice the straight line; the others stay listed, with the reason. Distances are estimated (straight line × 1.3,
-driven at 40 km/h). It looks within `radiusKm`, widened to 25 km with fewer than 5 stations, else returns the closest
-priced station at any distance. It ranks a copy of every active station and its current prices, kept in memory and loaded
-once per import. The rules are in `src/Essence.Ranking`.
+it saves at least $0.25 and its round trip takes at most `maxDetourMin` longer than the closest's; the others stay
+listed, with the reason. Distances and minutes are by road, from the routing service: the 10 nearest stations and every
+one cheaper than the nearest, at most 200. When the routing service is down, or the point is more than 1 km from a road,
+they're estimated instead (`byRoad` false: straight line × 1.3, driven at 40 km/h), and a farther station must also save
+with roads twice the straight line. It looks within `radiusKm`, widened to 25 km with fewer than 5 stations, else returns
+the closest priced station at any distance. It ranks a copy of every active station and its current prices, kept in
+memory and loaded once per import. The rules are in `src/Essence.Ranking`.
 
-`/stations/{id}`, `/stations/nearby` and `/stations/best` send `Last-Modified`: when the latest import was fetched. The map refreshes its prices
+`/trips/best` routes from the start to the destination, then looks at the stations within `maxDetourMin` × 0.5 km of the
+route (between 1 and 8 km), at most 100: in each 10 km stretch the two closest to the route and the three cheapest, then
+the cheapest of the rest. Each is measured by road, start → station → destination, and its detour (what stopping adds
+to the trip) counts in its cost. The reference is the cheapest station on the way (a stop that adds at most 1 km and
+2 min), or with none, the smallest detour; the pick is the lowest cost within `maxDetourMin`, if it saves at least
+$0.25; the biggest saving is shown too when it's another station. On trips of 100 km or more, `rangeKm` (what the
+dashboard says is left) less `spareKm` says which stations the car reaches and where to stop (`stopBeforeKm`); when that
+reaches no station, `lowFuel` is set and the whole range counts, or else the nearest station. Québec only: a start or
+destination outside Québec's box or more than 1 km from a road gets a 422 that says which (`point`: `from` or `to`), and
+so does a trip with no route; 503 when the routing service is down. Stations snap to their own road: the car profile
+leaves autoroutes out, so a station on a service road beside one gets its real detour.
+
+`/stations/{id}`, `/stations/nearby`, `/stations/best` and `/trips/best` send `Last-Modified`: when the latest import was fetched. The map refreshes its prices
 about 5 min 20 s after that time, which is when the next import should be in, and more often while that import is late. A request
 whose `If-Modified-Since` is still current gets a 304.
 
@@ -152,7 +182,7 @@ in Compose, `CORS_ORIGIN` from `.env`. The web container needs none, since the m
 On every push to `main` that changes more than Markdown files and `docs/`,
 [the publish workflow](.github/workflows/publish.yml) runs the tests, then builds the images whose inputs changed since its
 last successful push run and pushes them to the GitHub Container Registry:
-`ghcr.io/etiennex9/essence-{migrator,ingest,api,web}`, tagged `sha-<commit>`. Once all of them are pushed, `latest` moves to
+`ghcr.io/etiennex9/essence-{migrator,ingest,api,web,routing}`, tagged `sha-<commit>`. Once all of them are pushed, `latest` moves to
 them together, so a new migrator doesn't run next to an old api. If an image fails to build, `latest` stays. If the move
 itself fails partway, use **Re-run failed jobs** on that run, but only while it's the latest run on `main`: a later run
 builds its images again and moves `latest` past them, and re-running the older one after that would move `latest` back.
@@ -160,15 +190,16 @@ On `main`, a run waits for the one in progress instead of canceling it; a push m
 manual run, so start that again afterwards. An image's inputs are read from
 its Dockerfile: the projects it copies (its own and those it references) and the shared build files such as
 `Directory.Packages.props` ([select-images.sh](.github/scripts/select-images.sh)). A manual run, or a change to the workflow
-or `.dockerignore`, builds all four. The web image is also built along with any other, and when a changelog entry
+or `.dockerignore`, builds all five. The web image is also built along with any other, and when a changelog entry
 changed: it carries the release's version and changelog ([Versions](#versions)). Pull requests build the images they
 affect, without pushing.
 
 [deploy/truenas.yaml](deploy/truenas.yaml) runs those images on TrueNAS (Apps → Discover Apps → ⋮ → Install via YAML).
 Only the web container publishes a port; a reverse proxy in front of it serves the whole app, API included, at one HTTPS address.
 Leave asset caching off on that proxy: the web app's files under `_content/` aren't fingerprinted, and a new release reaches
-open tabs only if they're revalidated ([Versions](#versions)). The web container doesn't log `/api/stations/best` and
-`/api/stations/nearby`, whose query strings say where users are; a proxy in front logs query strings too unless told not to.
+open tabs only if they're revalidated ([Versions](#versions)). The web container doesn't log `/api/stations/best`,
+`/api/stations/nearby` and `/api/trips/`, whose query strings say where users are and are going, and the routing server
+logs no requests; a proxy in front logs query strings too unless told not to.
 
 ### Rolling out each push automatically
 
@@ -235,6 +266,49 @@ gets an `@autodeploy-<time>` snapshot first (the last 10 are kept).
   cron job leaves a stopped app alone. Starting it on `latest` instead would run the new migration again.
 - **To update the script**, look at what changed in `deploy/truenas-autodeploy.py`, since root runs it, then run the
   `curl` command again.
+
+### Routing (Best on the way)
+
+Road distances in Best near you and Best on the way come from the `routing` container: OSRM with Québec's roads from
+OpenStreetMap ([src/Essence.Routing](src/Essence.Routing)). The image holds the programs; the map data is built on the
+NAS, by the same image, into a dataset of its own. The api runs without it: Best near you then estimates distances, and
+trips answer 503. What it takes, measured on Québec's October 2026 extract: a 1.16 GB download, about 7 GB of RAM for a
+minute or two while it's processed (on 24 cores; longer on fewer), 0.9 GB of data, and about 0.7 GB of RAM to serve it.
+During a refresh the NAS needs both: the server's memory plus the build's. Replace `POOL` as above.
+
+1. **The package.** The first Publish run on `main` that builds `essence-routing` creates its package on GHCR, private.
+   Make it public, like the others (the repository's **Packages** → `essence-routing` → **Package settings** →
+   **Change visibility**): the autodeploy reads digests anonymously and stops every rollout on a 401, 403 or 404.
+2. **The dataset.** **Datasets → Add Dataset** under `POOL/apps/essence/data`: name `routing`, preset **Generic**. Then in
+   **System → Shell** as root: `chown 1654:1654 /mnt/POOL/apps/essence/data/routing`. It can be rebuilt at any time, so
+   leave it out of snapshots: in any periodic snapshot task that covers `POOL/apps/essence/data` recursively, add it to
+   **Exclude**.
+3. **The first build**, by hand, before the service exists (an app that isn't running 10 minutes after a rollout fails
+   the autodeploy, and the server won't start without data). As root:
+   ```sh
+   docker run --rm -v /mnt/POOL/apps/essence/data/routing:/data ghcr.io/etiennex9/essence-routing:latest build
+   ```
+   It prints its progress and ends with the size of what it built, in `current/`.
+4. **The service.** **Apps → essence → Edit**: add the `routing` service from [deploy/truenas.yaml](deploy/truenas.yaml)
+   (no published port, its dataset, `mem_limit`, its healthcheck), keeping your passwords and paths, then **Save**.
+   `mem_limit` is the size of `current/` (`du -sh /mnt/POOL/apps/essence/data/routing/current`) plus 1 GB: 2 GB for
+   today's data. The api finds it at `http://routing:5000/` (`Routing:BaseUrl`).
+5. **The monthly refresh.** OpenStreetMap changes; rebuild the data once a month with
+   [truenas-routing-refresh.sh](deploy/truenas-routing-refresh.sh): it builds new data next to the current, from the image
+   the routing container runs, while the server keeps answering, then restarts the container on it and waits for it to be
+   healthy; `previous/` keeps the data before. Copy it next to the autodeploy script:
+   ```sh
+   curl -fsSL -o /mnt/POOL/scripts/truenas-routing-refresh.sh https://raw.githubusercontent.com/etiennex9/essence/main/deploy/truenas-routing-refresh.sh
+   ```
+   Then **System → Advanced Settings → Cron Jobs → Add**: **Description** `Refresh essence routing`, **Command**
+   `sh /mnt/POOL/scripts/truenas-routing-refresh.sh /mnt/POOL/apps/essence/data/routing`, **Run As User** `root`,
+   **Schedule** **Custom** with **Minutes** `30`, **Hours** `3`, **Days of Month** `1` (a night hour, once a month),
+   **Hide Standard Output** checked, **Hide Standard Error** cleared, **Enabled** checked. A failed build leaves the
+   server on the data it had, and is mailed with the end of its log.
+6. **Bumping OSRM** (the version pinned in [src/Essence.Routing/Dockerfile](src/Essence.Routing/Dockerfile)) is
+   deliberate: the new server refuses data built by another version and keeps restarting, so the autodeploy reports
+   that rollout as failed. Run the refresh script by hand right after it rolls out: once the server runs on the new
+   data, the app reports running again.
 
 ## Versions
 
@@ -343,3 +417,4 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Backfill:MaxAge` | `01:10:00` | Older slots aren't requested (the server keeps the files about an hour). |
 | `Archive:Path` / `RetentionDays` | `/data/archive` / 30 | |
 | `Health:MaxImportAgeMinutes` | 15 | API `/health` threshold. |
+| `Routing:BaseUrl` | `http://routing:5000/` | The routing server (OSRM), ending with `/`. 3 s per attempt and one retry. |

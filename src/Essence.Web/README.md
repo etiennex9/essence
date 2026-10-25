@@ -2,7 +2,7 @@
 
 A single page: a fullscreen map that zooms to the device's location and shows nearby stations with the current price of the
 selected fuel. Clicking a station opens its details: current prices and their recent history. The fuel pump says which
-station is worth going to near you.
+station is worth going to near you, or on the way to a destination.
 
 It's a standalone Blazor WebAssembly app. The page itself lives in the `Essence.UI` Razor class library, so a MAUI Blazor Hybrid
 app can host the same components later (see [Android](#android) below). The browser calls `Essence.Api` directly.
@@ -20,6 +20,8 @@ app can host the same components later (see [Android](#android) below). The brow
 | Favorites | The star in a station's details saves it on the device (`Services/FavoriteStations.cs`, through `IPreferenceStore`: `localStorage` here). The toolbar's star opens `Components/FavoritesPanel.razor`: the favorites, cheapest first for the selected fuel, each with a toggle to compare it, and *Compare all*. |
 | Comparison | *Compare* in a station's details, or beside a favorite, adds it to the comparison (`Services/ComparedStations.cs`, also saved on the device, up to 8 stations: one per palette color, kept when others leave). The toolbar's chart button, with the count, opens `Components/ComparisonPanel.razor`: one price line per station for the selected fuel, and the stations cheapest first, each removable; *Clear the comparison* empties it. |
 | Best near you | The toolbar's fuel pump locates the user again and opens `Components/BestPanel.razor`: the station worth going to once the gas burned there and back is counted, the closest, best value and cheapest, a few others that save, and what it was worked out for. The ranking is the API's (`/stations/best`); `Services/BestNearYou.cs` keeps the latest answer for the location, fuel and car, and refreshes it on its own timer when the next prices should be in. On the map, the pick and the closest are flagged and the stations not listed fade (`setEmphasis` in `essenceMap.js`); ranked stations outside the viewport's fetch are drawn too, and the map fits the user, the pick and the closest beside the pane. On phones, a chip under the toolbar shows the pick while no pane is open. Without a location, or with an approximate one, it can rank from the map's centre. |
+| Best on the way | A destination turns Best near you into trip mode (`?view=trip`, same `BestPanel.razor`): the route on the map (dashed past where the range runs out, with the corridor stations were looked for in), where to stop, the pick with *Go via · Google Maps* (the station as a waypoint), and every station on the way. The ranking is the API's (`/trips/best`); `Services/TripState.cs` keeps the open trip and its plan in `sessionStorage` (`ISessionStore`), read on every load, so a tab Android discards while Google Maps navigates comes back to it. A trip is planned once, from where the user is; *Refresh* plans it again from there. On trips of 100 km or more, the range chip asks once for what the dashboard says is left, kept per car with its time. |
+| Places | "Going somewhere?" in Best near you: Home, Work and other places saved on the device (`Services/SavedPlaces.cs`, `IPreferenceStore`), one tap from a trip. A press and hold on the map (a right-click on desktops) drops a pin, whose card (`Components/DroppedPin.razor`) offers Best on the way there or saving it; *Use the map centre as destination* does the same from the keyboard. On phones, the chip under the toolbar also offers *To Work*. |
 | My cars | The car chip in Best near you's header opens `Components/MyCarsPanel.razor`: the cars set up on this device, each with its fuel, usual fill, consumption, Costco membership, spare km and longest detour (`Services/CarProfiles.cs`, in `IPreferenceStore`: no accounts). Until one is set up, a typical car (40 L at 8.5 L/100 km) on the map's fuel is used. Picking a car switches the map to its fuel, and the map's fuel updates the car being driven. |
 | History requests | Each listed or compared station costs one `/stations/{id}/prices` request (all fuels, so switching fuel is free), kept 2 minutes by `Services/HistoryCache.cs`. |
 | Text | `Resources/Strings.resx` (English) and `Strings.fr.resx`. The language follows the browser. Fuel names stay as the Régie publishes them. |
@@ -29,11 +31,13 @@ app can host the same components later (see [Android](#android) below). The brow
 Opening a station adds `?station=<id>` to the URL, so Back closes the pane and the link can be shared; a link opened cold
 centers the map on that station. The favorites add `?view=favorites`, the comparison `?view=compare` and Best near you
 `?view=best`; a station opened from them stacks on top, so Back returns to the list. My cars, `?view=cars`, stacks on top of
-Best near you the same way.
+Best near you or of a trip the same way, and so does a trip, `?view=trip`, on top of Best near you. The URL holds no
+coordinates: a `?view=trip` link opened in another tab shows Best near you.
 
 ## Run it
 
-With the back end running (`docker compose up -d postgres migrate ingest api` from the repository root):
+With the back end running (`docker compose up -d postgres migrate ingest api` from the repository root, and for trips the
+routing service: [Run it](../../README.md#run-it)):
 
 ```bash
 dotnet watch --project src/Essence.Web
