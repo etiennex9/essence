@@ -23,6 +23,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<HistoryCache>();
         services.AddScoped<FavoriteStations>();
         services.AddScoped<ComparedStations>();
+        services.AddScoped<CarProfiles>();
+        services.AddScoped<BestNearYou>();
         services.TryAddScoped<BrowserDevice>();
         services.TryAddScoped<IDeviceLocation>(sp => sp.GetRequiredService<BrowserDevice>());
         services.TryAddScoped<IPreferenceStore>(sp => sp.GetRequiredService<BrowserDevice>());
