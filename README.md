@@ -12,11 +12,13 @@ and shows them on a map of nearby stations.
 | `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. |
 | `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
 | `src/Essence.Contracts` | The API's response records and the release notes', shared by the API, the UI and the release tool. |
+| `src/Essence.Ranking` | Which station to fill up at: costs, savings, the pick and its rules, the search area. Pure functions, no dependencies; used by the API. |
 | `src/Essence.UI` | Razor class library: the map page, the station details pane and everything behind them. Shared with a future MAUI app. |
 | `src/Essence.Web` | Blazor WebAssembly host for `Essence.UI`, served as static files by nginx. See [its README](src/Essence.Web/README.md). |
 | `tools/Essence.Release` | Run by the publish workflow: dates each release by the day it landed on `main` and writes the web app's changelog (see [Versions](#versions)). |
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. |
-| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, the release notes, translations. |
+| `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility. |
+| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, Google Maps links, the release notes, translations. |
 | `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
 The full design and its rationale are in [docs/PLAN.md](docs/PLAN.md).
@@ -37,6 +39,7 @@ The web container also forwards `/api/` to the API (<http://localhost:8081/api/h
 ```bash
 curl localhost:8080/health
 curl "localhost:8080/stations/nearby?lat=45.5017&lon=-73.5673&radiusKm=3&fuel=Diesel"
+curl "localhost:8080/stations/best?lat=45.5017&lon=-73.5673&fuel=Regulier"
 curl "localhost:8080/prices/current?fuel=Régulier&limit=5"
 curl localhost:8080/imports
 ```
@@ -119,12 +122,22 @@ In the Development environment, logs are plain text and the ingest archive goes 
 | `GET /stations?region&brand&active&q&page&pageSize` | Stations, paged. `q` searches the name, address and postal code. |
 | `GET /stations/{id}` | One station with its current prices. |
 | `GET /stations/nearby?lat&lon&radiusKm=5&fuel&limit=20` | Active stations within a radius, closest first. |
+| `GET /stations/best?lat&lon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&radiusKm=10` | Where to fill up near a point: the pick, the closest, the cheapest and a few others that save (see below). |
 | `GET /stations/{id}/prices?fuel&from&to` | Price history overlapping a range (default: the last 30 days). |
 | `GET /prices/current?fuel&region&brand&sort=price&includeUnavailable&limit=50` | Current prices, cheapest first. |
 | `GET /imports?limit=20` | Recent imports with their statistics and `source` (`feed` or `xlsx`). |
 | `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. |
 
-`/stations/{id}` and `/stations/nearby` send `Last-Modified`: when the latest import was fetched. The map refreshes its prices
+`/stations/best` ranks the operating stations with an available price for the fuel (Costco only with `costco=true`: it
+sells to members only) by what the fill-up costs once the drive there and back is counted: price ÷ 100 × (fill + km there
+and back × L/100 km ÷ 100), to the cent. Savings are counted against the closest station. A farther one is picked only if
+it saves at least $0.25, its round trip takes at most `maxDetourMin` longer than the closest's, and it still saves with
+roads twice the straight line; the others stay listed, with the reason. Distances are estimated (straight line × 1.3,
+driven at 40 km/h). It looks within `radiusKm`, widened to 25 km with fewer than 5 stations, else returns the closest
+priced station at any distance. It ranks a copy of every active station and its current prices, kept in memory and loaded
+once per import. The rules are in `src/Essence.Ranking`.
+
+`/stations/{id}`, `/stations/nearby` and `/stations/best` send `Last-Modified`: when the latest import was fetched. The map refreshes its prices
 about 5 min 20 s after that time, which is when the next import should be in, and more often while that import is late. A request
 whose `If-Modified-Since` is still current gets a 304.
 
@@ -154,7 +167,8 @@ affect, without pushing.
 [deploy/truenas.yaml](deploy/truenas.yaml) runs those images on TrueNAS (Apps → Discover Apps → ⋮ → Install via YAML).
 Only the web container publishes a port; a reverse proxy in front of it serves the whole app, API included, at one HTTPS address.
 Leave asset caching off on that proxy: the web app's files under `_content/` aren't fingerprinted, and a new release reaches
-open tabs only if they're revalidated ([Versions](#versions)).
+open tabs only if they're revalidated ([Versions](#versions)). The web container doesn't log `/api/stations/best` and
+`/api/stations/nearby`, whose query strings say where users are; a proxy in front logs query strings too unless told not to.
 
 ### Rolling out each push automatically
 
