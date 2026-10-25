@@ -69,6 +69,26 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # Routing for Best near you by road and Best on the way, in the "trip" profile: `docker compose --profile trip up`. The
+  # api runs without it (distances are then estimated, and there are no trips). Its data is built once first, into the
+  # routing volume: about 15–30 minutes, a 1.2 GB download and a few GB of RAM.
+  #   docker compose run --rm routing build
+  routing:
+    profiles: [trip]
+    build:
+      context: .
+      dockerfile: src/Essence.Routing/Dockerfile
+    volumes:
+      - routing:/data
+    healthcheck:
+      test: ["CMD", "essence-routing", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+      start_interval: 5s
+    restart: unless-stopped
+
   # Static Blazor WebAssembly app. Its nginx also forwards /api/ to the api service, which the app calls (same origin, no CORS).
   web:
     build:
@@ -89,3 +109,4 @@ services:
 volumes:
   pgdata:
   data:
+  routing:
