@@ -149,15 +149,16 @@ sells to members only) by what the fill-up costs once the drive there and back i
 and back × L/100 km ÷ 100), to the cent. Savings are counted against the closest station. A farther one is picked only if
 it saves at least $0.25 and its round trip takes at most `maxDetourMin` longer than the closest's; the others stay
 listed, with the reason. Distances and minutes are by road, from the routing service: the 10 nearest stations and every
-one cheaper than the nearest, at most 200. When the routing service is down, or the point is more than 1 km from a road,
+one cheaper than one of them, at most 200. When the routing service is down, or the point is more than 1 km from a road,
 they're estimated instead (`byRoad` false: straight line × 1.3, driven at 40 km/h), and a farther station must also save
 with roads twice the straight line. It looks within `radiusKm`, widened to 25 km with fewer than 5 stations, else returns
 the closest priced station at any distance. It ranks a copy of every active station and its current prices, kept in
 memory and loaded once per import. The rules are in `src/Essence.Ranking`.
 
 `/trips/best` routes from the start to the destination, then looks at the stations within `maxDetourMin` × 0.5 km of the
-route (between 1 and 8 km), at most 100: in each 10 km stretch the two closest to the route and the three cheapest, then
-the cheapest of the rest. Each is measured by road, start → station → destination, and its detour (what stopping adds
+route (between 1 and 8 km), at most 100: in each 10 km stretch the two closest to the route and the three cheapest (on a
+long route, as many of them as 100 allow, the closest and the cheapest of each stretch first), then the cheapest of the
+rest. Each is measured by road, start → station → destination, and its detour (what stopping adds
 to the trip) counts in its cost. The reference is the cheapest station on the way (a stop that adds at most 1 km and
 2 min), or with none, the smallest detour; the pick is the lowest cost within `maxDetourMin`, if it saves at least
 $0.25; the biggest saving is shown too when it's another station. On trips of 100 km or more, `rangeKm` (what the
@@ -198,8 +199,9 @@ affect, without pushing.
 Only the web container publishes a port; a reverse proxy in front of it serves the whole app, API included, at one HTTPS address.
 Leave asset caching off on that proxy: the web app's files under `_content/` aren't fingerprinted, and a new release reaches
 open tabs only if they're revalidated ([Versions](#versions)). The web container doesn't log `/api/stations/best`,
-`/api/stations/nearby` and `/api/trips/`, whose query strings say where users are and are going, and the routing server
-logs no requests; a proxy in front logs query strings too unless told not to.
+`/api/stations/nearby` and `/api/trips/`, whose query strings say where users are and are going, and logs only critical
+errors under `/api/` (an upstream error names the request); the routing server logs no requests. A proxy in front logs
+query strings too unless told not to.
 
 ### Rolling out each push automatically
 
@@ -274,15 +276,18 @@ OpenStreetMap ([src/Essence.Routing](src/Essence.Routing)). The image holds the 
 NAS, by the same image, into a dataset of its own. The api runs without it: Best near you then estimates distances, and
 trips answer 503. What it takes, measured on Québec's October 2026 extract: a 1.16 GB download, about 7 GB of RAM for a
 minute or two while it's processed (on 24 cores; longer on fewer), 0.9 GB of data, and about 0.7 GB of RAM to serve it.
-During a refresh the NAS needs both: the server's memory plus the build's. Replace `POOL` as above.
+During a refresh the NAS needs both: the server's memory plus the build's, and on disk about 4 GB at the peak (the
+previous and current data, the download and the new data), 1.8 GB the rest of the time. Replace `POOL` as above.
 
 1. **The package.** The first Publish run on `main` that builds `essence-routing` creates its package on GHCR, private.
    Make it public, like the others (the repository's **Packages** → `essence-routing` → **Package settings** →
    **Change visibility**): the autodeploy reads digests anonymously and stops every rollout on a 401, 403 or 404.
-2. **The dataset.** **Datasets → Add Dataset** under `POOL/apps/essence/data`: name `routing`, preset **Generic**. Then in
-   **System → Shell** as root: `chown 1654:1654 /mnt/POOL/apps/essence/data/routing`. It can be rebuilt at any time, so
-   leave it out of snapshots: in any periodic snapshot task that covers `POOL/apps/essence/data` recursively, add it to
-   **Exclude**.
+2. **The dataset.** If `POOL/apps/essence/data` is a dataset (**Datasets** lists it), **Add Dataset** under it: name
+   `routing`, preset **Generic**. If `data` is a plain folder, don't create a `data` dataset over it (it would hide the
+   archive): add `routing` under `POOL/apps/essence` instead, and use `/mnt/POOL/apps/essence/routing` wherever these
+   steps and the routing service say `/mnt/POOL/apps/essence/data/routing`. Then in **System → Shell** as root:
+   `chown 1654:1654` on its folder. It can be rebuilt at any time, so leave it out of snapshots: in any periodic
+   snapshot task that covers its parent recursively, add it to **Exclude**.
 3. **The first build**, by hand, before the service exists (an app that isn't running 10 minutes after a rollout fails
    the autodeploy, and the server won't start without data). As root:
    ```sh
@@ -307,8 +312,9 @@ During a refresh the NAS needs both: the server's memory plus the build's. Repla
    server on the data it had, and is mailed with the end of its log.
 6. **Bumping OSRM** (the version pinned in [src/Essence.Routing/Dockerfile](src/Essence.Routing/Dockerfile)) is
    deliberate: the new server refuses data built by another version and keeps restarting, so the autodeploy reports
-   that rollout as failed. Run the refresh script by hand right after it rolls out: once the server runs on the new
-   data, the app reports running again.
+   that rollout as failed (and TrueNAS may stop the app). Run the refresh script by hand right after it rolls out: it
+   builds with the new image even with the app stopped. Then **Start** the app if it's stopped. A change to
+   `essence-car.lua` needs a rebuild too, though the server keeps running on the old data meanwhile (its log warns).
 
 ## Versions
 

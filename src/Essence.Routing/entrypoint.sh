@@ -8,12 +8,15 @@
 #   health  exits 0 when the server answers a lookup (the containers' healthcheck).
 #
 # Data built by one OSRM version may not load in another, so /data/current records the version that built it, and serve
-# refuses data from another one: after bumping the image's OSRM, run build again.
+# refuses data from another one: after bumping the image's OSRM, run build again. It also records the profile it was
+# built with (essence-car.lua), and serve warns when the image's differs: the data still loads, with the old rules.
 set -euo pipefail
 
 data=/data
 pbf_url=${ROUTING_PBF_URL:-https://download.geofabrik.de/north-america/canada/quebec-latest.osm.pbf}
 version_file=osrm-version
+profile_file=profile-sha256
+profile=/opt/essence-car.lua
 
 log() {
     echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) essence-routing: $*" >&2
@@ -21,6 +24,10 @@ log() {
 
 osrm_version() {
     osrm-routed --version
+}
+
+profile_hash() {
+    sha256sum "$profile" | cut -d ' ' -f 1
 }
 
 serve() {
@@ -36,6 +43,10 @@ serve() {
     if [ "$built_by" != "$running" ]; then
         log "the routing data in $current was built by OSRM $built_by, and this image runs $running: build it again."
         exit 1
+    fi
+
+    if [ "$(cat "$current/$profile_file" 2>/dev/null)" != "$(profile_hash)" ]; then
+        log "warning: the routing data in $current was built with another car profile than this image's: build it again to use the new one."
     fi
 
     log "serving the data built $(date -u -r "$current/$version_file" +%Y-%m-%d) by OSRM $running."
@@ -67,10 +78,11 @@ build() {
     done
 
     log "processing $(du -h "$pbf" | cut -f 1) of roads."
-    osrm-extract -p /opt/essence-car.lua "$pbf"
+    osrm-extract -p "$profile" "$pbf"
     osrm-partition "$next/quebec.osrm"
     osrm-customize "$next/quebec.osrm"
     osrm_version >"$next/$version_file"
+    profile_hash >"$next/$profile_file"
     rm "$pbf" "$pbf.md5"
 
     rm -rf "$data/previous"

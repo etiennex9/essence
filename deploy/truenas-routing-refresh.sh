@@ -16,6 +16,10 @@ set -eu
 data=${1:?usage: truenas-routing-refresh.sh <routing data folder> [app name, default essence]}
 app=${2:-essence}
 
+# The image deploy/truenas.yaml runs, for when the app is stopped and has no routing container (TrueNAS removes an app's
+# containers when it stops or fails to start, after an OSRM bump for one).
+image_ref=ghcr.io/etiennex9/essence-routing:latest
+
 if [ ! -d "$data" ]; then
     echo "$data isn't a folder: create the routing dataset first (README → Deploy → Routing)." >&2
     exit 1
@@ -28,19 +32,31 @@ if ! flock -n 9; then
     exit 1
 fi
 
-# TrueNAS names an app's compose project ix-<app>.
+# TrueNAS names an app's compose project ix-<app>. The build uses the image the routing container runs, so the data is
+# built by the OSRM version that serves it.
 container=$(docker ps --all --quiet --filter "label=com.docker.compose.project=ix-$app" --filter "label=com.docker.compose.service=routing")
-if [ -z "$container" ]; then
-    echo "no routing container in the $app app: add the routing service to its YAML (README → Deploy → Routing)." >&2
+if [ -n "$container" ]; then
+    image=$(docker inspect --format '{{.Image}}' "$container")
+elif docker image inspect "$image_ref" >/dev/null 2>&1; then
+    image=$image_ref
+    echo "$app: no routing container (the app is stopped, or the routing service isn't in its YAML): building with $image_ref."
+else
+    echo "no routing container in the $app app and no $image_ref image: add the routing service (README → Deploy → Routing)." >&2
     exit 1
 fi
-
-image=$(docker inspect --format '{{.Image}}' "$container")
 started=$(date +%s)
 if ! docker run --rm --user 1654:1654 --volume "$data:/data" "$image" build >"$data/.refresh.log" 2>&1; then
     echo "the build failed; the server still runs on the previous data. Its log:" >&2
     tail -n 20 "$data/.refresh.log" >&2
     exit 1
+fi
+
+# A stopped app's container is left stopped: TrueNAS starts it with the app.
+state=$([ -n "$container" ] && docker inspect --format '{{.State.Status}}' "$container" || echo none)
+if [ "$state" != running ] && [ "$state" != restarting ]; then
+    echo "$app: the routing data was rebuilt in $(( ($(date +%s) - started) / 60 )) minutes; the server uses it when the app starts."
+    tail -n 1 "$data/.refresh.log"
+    exit 0
 fi
 
 docker restart "$container" >/dev/null

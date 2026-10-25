@@ -6,8 +6,9 @@
 #     - postgres: its own dataset with the Generic preset (POSIX permissions), owned by 999:999, mode 700. Postgres won't
 #       start in a folder that inherits NFSv4 ACLs (the Apps preset).
 #     - data: owned by 1654:1654 (ingest), which creates the archive subfolder in it. NFSv4 ACLs are fine here.
-#     - data/routing: a dataset of its own, owned by 1654:1654. Build the routing data in it by hand first (README →
-#       Deploy → Routing): the routing service doesn't start without it.
+#     - data/routing: a dataset of its own, owned by 1654:1654 (apps/essence/routing if data is a plain folder; the
+#       routing service's source then says so). Build the routing data in it by hand first (README → Deploy → Routing):
+#       the routing service doesn't start without it.
 #   - 30180, if that port is taken. Point the reverse proxy for <your domain> at http://<NAS address>:30180:
 #     it serves the map and, under /api/, the API.
 #
