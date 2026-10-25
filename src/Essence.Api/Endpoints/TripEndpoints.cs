@@ -11,14 +11,6 @@ public static class TripEndpoints
     private const double MaxRangeKm = 2000;
     private const double MaxSpareKm = 200;
 
-    // Québec's bounding box, a little wider. A point outside it is refused before OSRM, whose data is Québec's alone and
-    // would snap it to the nearest road in Québec. Ottawa, Edmundston or Vermont are inside the box: the snapping
-    // distance refuses those.
-    private const double South = 44.9;
-    private const double North = 62.7;
-    private const double West = -79.9;
-    private const double East = -57;
-
     public static IEndpointRouteBuilder MapTripEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/trips").WithTags("Trips").RequireRateLimiting(RateLimiting.PolicyName);
@@ -31,8 +23,9 @@ public static class TripEndpoints
                 + "cheapest station on the way (a stop adds at most 1 km and 2 min), or else the smallest detour. The pick is the "
                 + "lowest cost within `maxDetourMin`, if it saves at least $0.25. On trips of 100 km or more, `rangeKm` (what the "
                 + "dashboard says is left) less `spareKm` says which stations can be reached and where to stop; when it reaches "
-                + "none, the whole range counts, or else the nearest station. Québec only: a start or destination more than "
-                + "1 km from a road is refused with 422, and so is one with no route. 503 when the routing server is down.")
+                + "none, the whole range counts, or else the nearest station. Québec only: a destination outside Québec's boundary, "
+                + "a start outside its box, or either more than 1 km from a road is refused with 422, and so is a trip with no "
+                + "route. 503 when the routing server is down.")
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
             .WithDataVersion();
@@ -77,13 +70,19 @@ public static class TripEndpoints
             return errors.ToProblem();
         }
 
+        // Points outside Québec are refused before OSRM, whose data is Québec's alone (with a few km past the border) and
+        // would snap them to the nearest road there. The destination must be inside the province's boundary: Ottawa's
+        // downtown or Derby Line, Vermont, are under 1 km from a Québec road. The start only inside its box, then near a
+        // road: a driver just across the border still gets the stations on the way into Québec.
         var (from, to) = (new LatLon(fromLat, fromLon), new LatLon(toLat, toLon));
-        foreach (var (point, name) in new[] { (from, "from"), (to, "to") })
+        if (!QuebecArea.InBox(from))
         {
-            if (point.Latitude is < South or > North || point.Longitude is < West or > East)
-            {
-                return NoRoad(name, "Outside Québec");
-            }
+            return NoRoad("from", "Outside Québec");
+        }
+
+        if (!QuebecArea.Contains(to))
+        {
+            return NoRoad("to", "Outside Québec");
         }
 
         var logger = loggers.CreateLogger(RoutingLog.Category);

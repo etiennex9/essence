@@ -20,11 +20,13 @@ builder.Services.AddEssenceDbContext(connectionString, o => o.UseQueryTrackingBe
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<StationSnapshot>();
 builder.Services.AddOsrmRouting(builder.Configuration);
+builder.Services.AddPhotonGeocoding(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks()
     .AddCheck<IngestHealthCheck>("ingest")
-    .AddCheck<RoutingHealthCheck>("routing", HealthStatus.Degraded);
+    .AddCheck<RoutingHealthCheck>("routing", HealthStatus.Degraded)
+    .AddCheck<GeocodingHealthCheck>("geocoding", HealthStatus.Degraded);
 builder.Services.AddPerIpRateLimiting(builder.Configuration);
 
 // Essence.Web's nginx forwards /api/ here with the client's address (for the rate limit) and the public scheme, host and
@@ -70,7 +72,11 @@ app.MapHealthChecks("/alive", new HealthCheckOptions { Predicate = _ => false })
 
 app.MapStationEndpoints();
 app.MapTripEndpoints();
+app.MapPlaceEndpoints();
 app.MapPriceEndpoints();
 app.MapImportEndpoints();
 
 app.Run();
+
+/// <summary>The API's entry point, public for Essence.Api.Tests' WebApplicationFactory.</summary>
+public partial class Program;

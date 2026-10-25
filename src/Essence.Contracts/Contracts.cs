@@ -182,3 +182,9 @@ public sealed record TripStation(
     bool MembersOnly,
     bool Reachable,
     bool OverDetourLimit);
+
+/// <summary>A place to go to, from the address search (<c>/places/search</c>) or for a point (<c>/places/reverse</c>).</summary>
+/// <param name="Label">What the place is called: "1000 Rue De La Gauchetière Ouest", "Rue Gaucher", "Laval", or a named place.</param>
+/// <param name="Detail">Where it is: "Montréal, QC H3A 4W5" for an address, the town for a street, the address for a named place.</param>
+/// <param name="Kind"><c>address</c>, <c>street</c>, <c>town</c> (or part of one), or <c>named</c> (a business, a park…).</param>
+public sealed record PlaceSuggestion(string Label, string Detail, double Latitude, double Longitude, string Kind);
