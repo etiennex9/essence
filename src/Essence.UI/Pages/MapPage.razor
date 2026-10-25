@@ -4,6 +4,8 @@
 @inject EssenceApiClient Api
 @inject FavoriteStations Favorites
 @inject ComparedStations Comparison
+@inject BestNearYou Best
+@inject CarProfiles Cars
 @inject IDeviceLocation DeviceLocation
 @inject IPreferenceStore Preferences
 @inject ReleaseNotes Notes
@@ -35,10 +37,10 @@
                     <span class="badge" aria-hidden="true">@Comparison.Count</span>
                 }
             </button>
-            <button type="button" class="tool" @onclick="() => LocateAsync(moveMap: true, fallBackToMontreal: false)"
-                    aria-label="@L["LocateMe"]" title="@L["LocateMe"]">
+            <button type="button" class="tool @(BestOpen ? "is-active" : null)" @onclick="ToggleBestAsync"
+                    aria-pressed="@(BestOpen ? "true" : "false")" aria-label="@L["BestNearYou"]" title="@L["BestNearYou"]">
                 <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round"><circle cx="12" cy="12" r="3" /><circle cx="12" cy="12" r="8" /><path d="M12 1v3M12 20v3M1 12h3M20 12h3" /></svg>
+                     stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Pump" /></svg>
             </button>
         </div>
     </div>
@@ -46,6 +48,41 @@
     <div class="status-slot">
         <UpdatePrompt Visible="@Updates.Available" OnReload="() => ReloadAsync(automatic: false)" />
         <StatusChip Message="@StatusMessage" Busy="@(_locating || _loading)" />
+        @* Phones only (see the CSS), and outside the status's live region, so it isn't announced at each refresh. *@
+        @if (ChipPick is { } pick)
+        {
+            var brand = BrandCatalog.For(pick.Brand);
+            <button type="button" class="best-chip" @onclick="() => ShowListAsync(BestView)">
+                <span class="logo @(brand.Monogram.Length > 1 ? "is-wide" : null)" style="--logo-bg: @brand.Background; --logo-fg: @brand.Foreground">
+                    @if (brand.LogoUrl is { } logoUrl)
+                    {
+                        <img src="@logoUrl" alt="" />
+                    }
+                    else
+                    {
+                        @brand.Monogram
+                    }
+                </span>
+                <span class="text">
+                    <span class="kicker">
+                        @L["BestChipKicker"]
+                        <span class="distance">@($"· {L["DistanceApprox", Formatting.Km(pick.DistanceKm, CultureInfo.CurrentCulture)]}")</span>
+                    </span>
+                    <span class="name">@($"{brand.Name ?? L["Independent"]} {Formatting.Price(pick.PriceCents, CultureInfo.CurrentCulture)}")</span>
+                </span>
+                @if (pick.Id != Best.Result?.ReferenceId)
+                {
+                    <span class="saves">
+                        @L["BestChipSaves", Formatting.Money(pick.SavesDollars, CultureInfo.CurrentCulture)]
+                        <span>@L["BestChipVsClosest"]</span>
+                    </span>
+                }
+                else
+                {
+                    <span class="saves is-neutral">@L["Closest"]</span>
+                }
+            </button>
+        }
     </div>
 
     @* Alone in the bottom-left corner (the map's own controls are bottom-right), under a bottom sheet while one is open. *@
@@ -69,6 +106,16 @@
     {
         <ComparisonPanel Fuel="@_fuel" UserLocation="_userLocation" OnClose="CloseListAsync" OnOpenStation="OpenListedStation" />
     }
+    else if (View == BestView)
+    {
+        <BestPanel Locating="_locating" LocationProblem="_locationProblem" OnClose="CloseListAsync" OnOpenStation="OpenListedStation"
+                   OnOpenCars="ShowCars" OnLocate="() => LocateAsync(moveMap: false, fallBackToMontreal: false)"
+                   OnUseMapCenter="UseMapCenterAsync" />
+    }
+    else if (View == CarsView)
+    {
+        <MyCarsPanel OnClose="CloseCarsAsync" />
+    }
 
     <AboutDialog @ref="_about" />
 </div>
@@ -77,6 +124,11 @@
     private const string FuelPreferenceKey = "essence.fuel";
     private const string FavoritesView = "favorites";
     private const string CompareView = "compare";
+    private const string BestView = "best";
+
+    /// <summary>My cars, pushed over Best near you.</summary>
+    private const string CarsView = "cars";
+
     private const double CompactBelowZoom = 12;
     private const double OverviewZoom = 5.5;
     private const double UserZoom = 13;
@@ -102,6 +154,10 @@
     /// <summary>The map is where the page means it to be at startup: on the user, a station, or a reloaded view.</summary>
     private bool _placed;
     private bool _locating;
+
+    /// <summary>Why the location couldn't be had, the last time it was asked for.</summary>
+    private LocationStatus? _locationProblem;
+
     private bool _loading;
     private bool _loaded;
     private int _visibleCount;
@@ -131,18 +187,40 @@
     /// <summary>The same for <c>?view=</c>, the list open.</summary>
     private bool _listPushed;
 
+    /// <summary>The same for <c>?view=cars</c>, pushed over <c>?view=best</c>.</summary>
+    private bool _carsPushed;
+
     /// <summary>A cold load with <c>?station=</c> centers on that station once it's loaded, instead of on the user.</summary>
     private bool _centerOnStation;
     private StationDetail? _pendingStation;
 
+    /// <summary>What the map was last fitted to for Best near you: where from, the pick and the closest.</summary>
+    private (GeoPoint Origin, long Pick, long? Closest)? _fitted;
+
+    /// <summary>A reload reopened Best near you on the view it had: the answer it gets again doesn't move the map.</summary>
+    private bool _keepView;
+
+    /// <summary>The emphasis last given to the markers (<see cref="MapInterop.SetEmphasisAsync"/>), sent again only when it changes.</summary>
+    private string? _emphasis;
+
     [SupplyParameterFromQuery(Name = "station")]
     public long? Station { get; set; }
 
-    /// <summary>The list open: <c>favorites</c> or <c>compare</c>.</summary>
+    /// <summary>The list open: <c>favorites</c>, <c>compare</c>, <c>best</c> or <c>cars</c>.</summary>
     [SupplyParameterFromQuery(Name = "view")]
     public string? View { get; set; }
 
-    private bool ListOpen => View is FavoritesView or CompareView;
+    private bool ListOpen => View is FavoritesView or CompareView or BestView or CarsView;
+
+    /// <summary>Best near you is open, maybe under My cars or a station's details.</summary>
+    private bool BestOpen => View is BestView or CarsView;
+
+    /// <summary>The Best near you the map shows while its pane is open; none while the one in is for another fuel.</summary>
+    private BestNearby? MapBest => BestOpen && Best.ResultQuery?.Fuel == _fuel ? Best.Result : null;
+
+    /// <summary>The pick the phone chip shows: once the user is located, while no pane is open.</summary>
+    private RankedStation? ChipPick =>
+        Station is null && !ListOpen && Best.Origin is { IsMapCenter: false } && Best.ResultQuery?.Fuel == _fuel ? Best.Result?.Pick : null;
 
     private string ComparisonLabel => Comparison.Count > 0 ? L["ComparisonCount", Comparison.Count] : L["Comparison"];
 
@@ -186,6 +264,8 @@
         Comparison.Changed += OnComparisonChanged;
         Updates.Changed += OnUpdateChanged;
         Updates.ReloadDue += OnReloadDue;
+        Best.Changed += OnBestChanged;
+        Cars.Changed += OnCarsChanged;
     }
 
     protected override async Task OnParametersSetAsync()
@@ -201,9 +281,21 @@
             _listPushed = false;
         }
 
+        if (View != CarsView)
+        {
+            _carsPushed = false;
+        }
+
+        if (!BestOpen)
+        {
+            _fitted = null;
+        }
+
         if (_map is not null)
         {
             await _map.SetSelectedAsync(Station);
+            await RenderMarkersAsync();
+            await FitToBestAsync();
         }
     }
 
@@ -223,6 +315,8 @@
         var saved = await _map.TakeSavedViewAsync();
         _fuel = Fuels.Normalize(saved?.Fuel ?? await Preferences.GetAsync(FuelPreferenceKey));
         _stations.SetFuel(_fuel);
+        await Best.SetFuelAsync(_fuel);
+        await Cars.SetFuelAsync(_fuel);
         await Favorites.LoadAsync();
         await Comparison.LoadAsync();
         var openedOnStation = Station is not null;
@@ -231,6 +325,8 @@
         {
             _stationPushed = saved.StationPushed && Station is not null;
             _listPushed = saved.ListPushed && ListOpen;
+            _carsPushed = saved.CarsPushed && View == CarsView;
+            _keepView = BestOpen;
         }
 
         var (center, zoom) = saved is null ? (Overview, OverviewZoom) : (new GeoPoint(saved.Lat, saved.Lon), saved.Zoom);
@@ -261,6 +357,7 @@
             // a page reloaded out of sight would otherwise show when it's back.
             _userLocation = new GeoPoint(userLat, userLon);
             await _map.ShowUserLocationAsync(_userLocation.Value);
+            await Best.SetOriginAsync(new BestOrigin(_userLocation.Value));
             StateHasChanged();
         }
 
@@ -269,7 +366,8 @@
 
     /// <summary>
     /// Shows where the user is and, with <paramref name="moveMap"/>, flies there. When the location isn't available,
-    /// <paramref name="fallBackToMontreal"/> (page load) shows Montréal instead of leaving the province overview.
+    /// <paramref name="fallBackToMontreal"/> (page load) shows Montréal instead of leaving the province overview. Best near you
+    /// ranks from the new location.
     /// </summary>
     private async Task LocateAsync(bool moveMap, bool fallBackToMontreal)
     {
@@ -277,6 +375,7 @@
         StateHasChanged();
         var location = await DeviceLocation.GetCurrentAsync();
         _locating = false;
+        _locationProblem = location.Status == LocationStatus.Ok ? null : location.Status;
 
         if (location.Status == LocationStatus.Ok)
         {
@@ -286,6 +385,8 @@
             {
                 await _map.FlyToAsync(location.Point, Math.Max(UserZoom, _viewport?.Zoom ?? 0));
             }
+
+            await Best.SetOriginAsync(new BestOrigin(location.Point, AccuracyMeters: location.AccuracyMeters));
         }
         else
         {
@@ -304,6 +405,7 @@
         StateHasChanged();
     }
 
+    /// <summary>The map's fuel; Best near you ranks for it, and the car being driven takes it.</summary>
     private async Task SetFuelAsync(string fuel)
     {
         if (!_stations.SetFuel(fuel))
@@ -313,6 +415,8 @@
 
         _fuel = fuel;
         await Preferences.SetAsync(FuelPreferenceKey, fuel);
+        await Best.SetFuelAsync(fuel);
+        await Cars.SetFuelAsync(fuel);
         await RenderMarkersAsync();
         if (_viewport is { } viewport)
         {
@@ -475,6 +579,7 @@
     public Task OnVisibilityChangedAsync(bool visible)
     {
         Updates.SetVisible(visible);
+        Best.SetVisible(visible);
         _hidden = !visible;
         if (_hidden)
         {
@@ -497,7 +602,7 @@
     {
         if (_mapReady)
         {
-            await _map!.ReloadAsync(new ReloadState(_fuel, _stationPushed, _listPushed), saveView: _placed, automatic);
+            await _map!.ReloadAsync(new ReloadState(_fuel, _stationPushed, _listPushed, _carsPushed), saveView: _placed, automatic);
         }
     }
 
@@ -510,10 +615,35 @@
 
         var visible = _stations.Visible(_viewport);
         _visibleCount = visible.Count;
-        await _map!.SetMarkersAsync(visible.Select(ToMarker).ToList());
+        var best = MapBest;
+        var markers = visible.Select(v => ToMarker(v, best)).ToList();
+        if (best is not null)
+        {
+            // A ranked station 9 km away is usually not among the stations fetched around the view, which setMarkers would drop.
+            var shown = markers.Select(m => m.Id).ToHashSet();
+            var prices = visible.Where(v => v.HasPrice).Select(v => v.Price!.PriceCents!.Value).Order().ToList();
+            markers.AddRange(best.Stations.Where(s => !shown.Contains(s.Id)).Select(s => ToMarker(s, best, prices)));
+        }
+
+        await SetEmphasisAsync(best);
+        await _map!.SetMarkersAsync(markers);
     }
 
-    private MarkerModel ToMarker(VisibleStation visible)
+    /// <summary>Best near you's pick and closest stand out on the map, and the stations it didn't list fade.</summary>
+    private async Task SetEmphasisAsync(BestNearby? best)
+    {
+        var listed = best?.Stations.Select(s => s.Id).ToList();
+        var key = best is null ? null : $"{best.Pick?.Id}|{best.ClosestId}|{string.Join(',', listed!)}";
+        if (key == _emphasis)
+        {
+            return;
+        }
+
+        _emphasis = key;
+        await _map!.SetEmphasisAsync(best?.Pick?.Id, best?.ClosestId, listed, L["BestValue"], L["Closest"]);
+    }
+
+    private MarkerModel ToMarker(VisibleStation visible, BestNearby? best)
     {
         var station = visible.Station;
         var brand = BrandCatalog.For(station.Brand);
@@ -521,21 +651,83 @@
         var price = Formatting.Price(visible.HasPrice ? visible.Price!.PriceCents : null, CultureInfo.CurrentCulture);
         string label = visible.HasPrice ? L["MarkerPrice", name, price] : L["MarkerUnavailable", name, _fuel];
         var favorite = Favorites.IsFavorite(station.Id);
+        return new MarkerModel(
+            station.Id, station.Latitude, station.Longitude, Label(label, station.Id, favorite, best), price, !visible.HasPrice,
+            ToneName(visible.Tone), visible.ZIndex, favorite, brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
+    }
+
+    /// <summary>A station Best near you ranked, drawn even though it's not among the stations fetched around the view.</summary>
+    private MarkerModel ToMarker(RankedStation station, BestNearby best, IReadOnlyList<decimal> visiblePrices)
+    {
+        var brand = BrandCatalog.For(station.Brand);
+        var price = Formatting.Price(station.PriceCents, CultureInfo.CurrentCulture);
+        string label = L["MarkerPrice", $"{brand.Name ?? L["Independent"]}, {station.Address}", price];
+        var favorite = Favorites.IsFavorite(station.Id);
+        var tone = StationViewport.ToneOf(station.PriceCents, visiblePrices);
+        return new MarkerModel(
+            station.Id, station.Latitude, station.Longitude, Label(label, station.Id, favorite, best), price, false, ToneName(tone),
+            visiblePrices.Count + 1, favorite, brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
+    }
+
+    /// <summary>A marker's label, with what makes its station stand out: a favorite, or Best near you's pick or closest.</summary>
+    private string Label(string label, long id, bool favorite, BestNearby? best)
+    {
         if (favorite)
         {
             label = L["MarkerFavorite", label];
         }
 
-        var tone = visible.Tone switch
+        if (best?.Pick?.Id == id)
         {
-            PriceTone.Low => "low",
-            PriceTone.Mid => "mid",
-            PriceTone.High => "high",
-            _ => "",
-        };
-        return new MarkerModel(
-            station.Id, station.Latitude, station.Longitude, label, price, !visible.HasPrice, tone, visible.ZIndex, favorite,
-            brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
+            label = L["MarkerBest", label];
+        }
+
+        if (best?.ClosestId == id)
+        {
+            label = L["MarkerClosest", label];
+        }
+
+        return label;
+    }
+
+    private static string ToneName(PriceTone tone) => tone switch
+    {
+        PriceTone.Low => "low",
+        PriceTone.Mid => "mid",
+        PriceTone.High => "high",
+        _ => "",
+    };
+
+    /// <summary>
+    /// With Best near you open, fits the map to where the user is, the pick and the closest, beside the pane: when it opens
+    /// and when they change, not when the same answer is refreshed.
+    /// </summary>
+    private async Task FitToBestAsync()
+    {
+        if (!_mapReady || View != BestView || Station is not null || MapBest is not { Pick: { } pick } best
+            || Best.Origin is not { } origin)
+        {
+            return;
+        }
+
+        var fitted = (origin.Point, pick.Id, best.ClosestId);
+        if (_fitted == fitted)
+        {
+            return;
+        }
+
+        _fitted = fitted;
+        if (_keepView)
+        {
+            _keepView = false;
+            return;
+        }
+
+        List<GeoPoint> points = [origin.Point, new(pick.Latitude, pick.Longitude)];
+        points.AddRange(best.Stations.Where(s => s.Id == best.ClosestId).Select(s => new GeoPoint(s.Latitude, s.Longitude)));
+        await _map!.FitBoundsAsync(
+            points.Min(p => p.Longitude), points.Min(p => p.Latitude), points.Max(p => p.Longitude), points.Max(p => p.Latitude),
+            besidePane: true);
     }
 
     public Task OnMarkerClickedAsync(long id)
@@ -560,8 +752,8 @@
         Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", id));
     }
 
-    /// <summary>Closes the top-most pane: the details, else the list.</summary>
-    public Task OnDismissAsync() => Station is not null ? CloseDetailsAsync() : CloseListAsync();
+    /// <summary>Closes the top-most pane: the details, else My cars, else the list.</summary>
+    public Task OnDismissAsync() => Station is not null ? CloseDetailsAsync() : View == CarsView ? CloseCarsAsync() : CloseListAsync();
 
     private Task ToggleListAsync(string view) => View == view && Station is null ? CloseListAsync() : ShowListAsync(view);
 
@@ -599,6 +791,66 @@
         else
         {
             Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("view", (string?)null), replace: true);
+        }
+    }
+
+    /// <summary>
+    /// The pump: opens Best near you, or closes it. Opening asks for the location again, so the answer is for where the
+    /// user is now; the pane shows while it's found.
+    /// </summary>
+    private async Task ToggleBestAsync()
+    {
+        if (View == BestView && Station is null)
+        {
+            await CloseListAsync();
+            return;
+        }
+
+        if (View == CarsView && Station is null)
+        {
+            await CloseCarsAsync();
+        }
+        else
+        {
+            await ShowListAsync(BestView);
+        }
+
+        await LocateAsync(moveMap: false, fallBackToMontreal: false);
+    }
+
+    /// <summary>Best near you ranks from the map's centre: the location is off, or approximate.</summary>
+    private async Task UseMapCenterAsync()
+    {
+        if (_viewport is { } viewport)
+        {
+            await Best.SetOriginAsync(new BestOrigin(viewport.Center, IsMapCenter: true));
+        }
+    }
+
+    /// <summary>My cars opens over Best near you as a history entry of its own, so Back returns to the pane.</summary>
+    private void ShowCars()
+    {
+        _carsPushed = true;
+        Navigation.NavigateTo(
+            Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = CarsView, ["station"] = null }));
+    }
+
+    private async Task CloseCarsAsync()
+    {
+        if (View != CarsView)
+        {
+            return;
+        }
+
+        if (_carsPushed)
+        {
+            _carsPushed = false;
+            await JS.InvokeVoidAsync("history.back");
+        }
+        else
+        {
+            // Opened cold: Best near you takes its place.
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("view", BestView), replace: true);
         }
     }
 
@@ -687,12 +939,33 @@
     /// <summary>Another release while the page is away or just back: it reloads by itself.</summary>
     private void OnReloadDue() => InvokeAsync(() => ReloadAsync(automatic: true));
 
+    /// <summary>A new Best near you: the map and the chip follow.</summary>
+    private void OnBestChanged() => InvokeAsync(async () =>
+    {
+        await RenderMarkersAsync();
+        await FitToBestAsync();
+        StateHasChanged();
+    });
+
+    /// <summary>Another car picked, or its fuel changed in My cars: the map takes the car's fuel.</summary>
+    private void OnCarsChanged() => InvokeAsync(async () =>
+    {
+        if (!Cars.IsTypical && Cars.Active.Fuel != _fuel)
+        {
+            await SetFuelAsync(Cars.Active.Fuel);
+        }
+
+        StateHasChanged();
+    });
+
     public async ValueTask DisposeAsync()
     {
         Favorites.Changed -= OnFavoritesChanged;
         Comparison.Changed -= OnComparisonChanged;
         Updates.Changed -= OnUpdateChanged;
         Updates.ReloadDue -= OnReloadDue;
+        Best.Changed -= OnBestChanged;
+        Cars.Changed -= OnCarsChanged;
         Updates.Stop();
         _loadCts?.Cancel();
         _retryCts?.Cancel();

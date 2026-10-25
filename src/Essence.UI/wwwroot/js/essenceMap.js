@@ -8,6 +8,11 @@ const VIEWPORT_DEBOUNCE_MS = 250;
 const PANE_SETTLE_MS = 260;
 const VISIBLE_MARGIN_PX = 48;
 
+// fitBounds keeps the points this far inside the area left uncovered: a marker's pill and flag stand above its point.
+const FIT_PADDING_PX = 56;
+const FIT_TOP_PX = 130; // under the toolbar, with room for a flag
+const FIT_MAX_ZOOM = 15;
+
 // The view a reload for a new release saves, for the page it reloads into: the version before writes it and the version
 // after reads it, so it's read leniently.
 const RELOAD_KEY = "essence.reload";
@@ -72,6 +77,7 @@ export function takeSavedView() {
         fuel: typeof view.fuel === "string" ? view.fuel : null,
         stationPushed: view.stationPushed === true,
         listPushed: view.listPushed === true,
+        carsPushed: view.carsPushed === true,
     };
 }
 
@@ -96,6 +102,9 @@ export function createMap(container, options, dotnet) {
     const markers = new Map(); // id → { marker, element, key }
     let selectedId = null;
     let userMarker = null;
+
+    // Best near you's pick and closest, with their flags' text, and the stations listed with them (null: none fade).
+    let emphasis = { pickId: null, closestId: null, listed: null, bestFlag: "", closestFlag: "" };
     let viewportTimer = 0;
 
     // flyTo and ensureVisible calls waiting to start their move (see reload).
@@ -146,13 +155,13 @@ export function createMap(container, options, dotnet) {
         call("OnVisibilityChanged", document.visibilityState === "visible");
     }
 
-    // The part of the map not covered by the details pane (a side panel or a bottom sheet), in container pixels.
-    // Called after the pane's entrance transition (PANE_SETTLE_MS) so its final position is measured.
-    function uncoveredArea() {
+    // The part of the map not covered by the details pane (a side panel or a bottom sheet), in container pixels; the whole
+    // map without besidePane. Called after the pane's entrance transition (PANE_SETTLE_MS) so its final position is measured.
+    function uncoveredArea(besidePane = true) {
         const area = container.getBoundingClientRect();
         let right = area.width;
         let bottom = area.height;
-        const pane = document.querySelector("[data-ess-pane]");
+        const pane = besidePane ? document.querySelector("[data-ess-pane]") : null;
         if (pane) {
             const rect = pane.getBoundingClientRect();
             if (rect.top > area.top + area.height / 3) {
@@ -165,11 +174,25 @@ export function createMap(container, options, dotnet) {
         return { width: area.width, height: area.height, right, bottom };
     }
 
+    function applyEmphasis(element, id) {
+        const best = id === emphasis.pickId;
+        const closest = !best && id === emphasis.closestId;
+        element.classList.toggle("is-best", best);
+        element.classList.toggle("is-closest", closest);
+        element.classList.toggle("is-dimmed", emphasis.listed !== null && !emphasis.listed.has(id) && id !== selectedId);
+        if (best || closest) {
+            element.dataset.flag = best ? emphasis.bestFlag : emphasis.closestFlag;
+        } else {
+            delete element.dataset.flag;
+        }
+    }
+
     function renderMarker(element, model) {
         element.dataset.tone = model.tone;
         element.classList.toggle("is-unavailable", model.unavailable);
         element.classList.toggle("is-favorite", model.favorite);
         element.classList.toggle("is-selected", model.id === selectedId);
+        applyEmphasis(element, model.id);
         element.style.zIndex = String(model.z + 1);
         element.setAttribute("aria-label", model.label);
         element.title = model.label;
@@ -261,6 +284,17 @@ export function createMap(container, options, dotnet) {
             selectedId = id ?? null;
             for (const [markerId, entry] of markers) {
                 entry.element.classList.toggle("is-selected", markerId === selectedId);
+                applyEmphasis(entry.element, markerId);
+            }
+        },
+
+        // Best near you: the pick and the closest stand out, flagged with bestFlag and closestFlag; with listedIds, the
+        // markers not in it fade. Null ids clear it.
+        setEmphasis(pickId, closestId, listedIds, bestFlag, closestFlag) {
+            const listed = listedIds ? new Set(listedIds) : null;
+            emphasis = { pickId: pickId ?? null, closestId: closestId ?? null, listed, bestFlag, closestFlag };
+            for (const [id, entry] of markers) {
+                applyEmphasis(entry.element, id);
             }
         },
 
@@ -293,6 +327,27 @@ export function createMap(container, options, dotnet) {
                 } else {
                     map.flyTo({ center: [lon, lat], zoom, offset });
                 }
+            }, besidePane ? PANE_SETTLE_MS : 0);
+        },
+
+        // Shows the box (degrees), with besidePane in the area the pane leaves uncovered, once the pane is in place.
+        fitBounds(west, south, east, north, besidePane) {
+            pendingMoves++;
+            setTimeout(() => {
+                pendingMoves--;
+                const { width, height, right, bottom } = uncoveredArea(besidePane);
+                let padding = {
+                    top: FIT_TOP_PX,
+                    left: FIT_PADDING_PX,
+                    right: width - right + FIT_PADDING_PX,
+                    bottom: height - bottom + FIT_PADDING_PX,
+                };
+                if (width - padding.left - padding.right < FIT_PADDING_PX || height - padding.top - padding.bottom < FIT_PADDING_PX) {
+                    // Too little left beside the pane (a short window): MapLibre wouldn't move at all.
+                    padding = FIT_PADDING_PX / 2;
+                }
+
+                map.fitBounds([[west, south], [east, north]], { padding, maxZoom: FIT_MAX_ZOOM, animate: !reducedMotion.matches });
             }, besidePane ? PANE_SETTLE_MS : 0);
         },
 

@@ -16,6 +16,8 @@
     --ess-on-accent: #ffffff;
     --ess-warning-bg: #faeeda;
     --ess-warning-text: #633806;
+    /* Money saved. */
+    --ess-good: #27500a;
     --ess-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
     --ess-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.12), 0 12px 32px rgba(0, 0, 0, 0.12);
     --ess-fuel-0: #0f6e56;
@@ -48,6 +50,7 @@
         --ess-on-accent: #042c53;
         --ess-warning-bg: #412402;
         --ess-warning-text: #fac775;
+        --ess-good: #97c459;
         --ess-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
         --ess-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.4);
         --ess-fuel-0: #5dcaa5;
@@ -216,13 +219,70 @@ body {
     box-shadow: 0 0 0 1px #ffffff, 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
-/* Zoomed out: brand-colored dots, centered on the station. The selected station keeps its full pill. */
-.ess-map--compact .ess-marker:not(.is-selected) {
+/* Best near you (MapInterop.SetEmphasisAsync): the pick gets a flag and a larger pill, the closest a flag and a dark ring,
+   and the stations not listed fade. The flag's text is the marker's data-flag. */
+.ess-marker.is-best,
+.ess-marker.is-closest {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.ess-marker.is-best {
+    z-index: 99999 !important;
+}
+
+.ess-marker.is-closest {
+    z-index: 99998 !important;
+}
+
+.ess-marker[data-flag]::before {
+    content: attr(data-flag);
+    margin-bottom: 4px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    background: #185fa5;
+    color: #ffffff;
+    font: 700 10px/1 var(--ess-font);
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    white-space: nowrap;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+}
+
+.ess-marker.is-closest[data-flag]::before {
+    background: #1d1d1b;
+}
+
+.ess-marker.is-best .ess-pill {
+    padding: 3px 10px 3px 3px;
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 600;
+    box-shadow: 0 0 0 2.5px #185fa5, 0 3px 8px rgba(0, 0, 0, 0.3);
+}
+
+.ess-marker.is-best .ess-logo {
+    width: 24px;
+    height: 24px;
+}
+
+.ess-marker.is-closest .ess-pill {
+    box-shadow: 0 0 0 2px #1d1d1b, 0 1px 3px rgba(0, 0, 0, 0.22);
+}
+
+.ess-marker.is-dimmed {
+    opacity: 0.4;
+}
+
+/* Zoomed out: brand-colored dots, centered on the station. The selected station and Best near you's pick keep their
+   full pill. */
+.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) {
     padding: 0;
     transform-origin: center;
 }
 
-.ess-map--compact .ess-marker:not(.is-selected) .ess-pill {
+.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-pill {
     padding: 0;
     gap: 0;
     background: transparent;
@@ -231,13 +291,14 @@ body {
     transform: translateY(50%);
 }
 
-.ess-map--compact .ess-marker:not(.is-selected) .ess-pill::before,
-.ess-map--compact .ess-marker:not(.is-selected) .ess-pill::after,
-.ess-map--compact .ess-marker:not(.is-selected) .ess-price {
+.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-pill::before,
+.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-pill::after,
+.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-price,
+.ess-map--compact .ess-marker:not(.is-selected):not(.is-best)::before {
     display: none;
 }
 
-.ess-map--compact .ess-marker:not(.is-selected) .ess-logo {
+.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-logo {
     width: 12px;
     height: 12px;
     font-size: 0;
@@ -245,18 +306,24 @@ body {
     box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35);
 }
 
-.ess-map--compact .ess-marker:not(.is-selected) .ess-logo > * {
+.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-logo > * {
     display: none;
 }
 
-/* As a dot, a favorite gets a gold ring instead of the star. */
-.ess-map--compact .ess-marker.is-favorite:not(.is-selected) .ess-logo {
+/* As a dot, a favorite gets a gold ring instead of the star, and the closest a dark one. */
+.ess-map--compact .ess-marker.is-favorite:not(.is-selected):not(.is-best) .ess-logo {
     width: 14px;
     height: 14px;
     border: 2.5px solid var(--ess-favorite);
 }
 
-.ess-map--compact .ess-marker:not(.is-selected) .ess-fav {
+.ess-map--compact .ess-marker.is-closest:not(.is-selected) .ess-logo {
+    width: 14px;
+    height: 14px;
+    border: 2.5px solid #1d1d1b;
+}
+
+.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-fav {
     display: none;
 }
 

@@ -13,7 +13,9 @@
     pointer-events: auto;
 }
 
+/* Out of the flow too, so the phone's Best near you chip (MapPage) sits right under the toolbar. */
 .status.is-empty {
+    position: absolute;
     visibility: hidden;
 }
 

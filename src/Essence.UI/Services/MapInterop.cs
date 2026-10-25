@@ -29,12 +29,21 @@ public sealed record MarkerModel(
 /// <summary>What the page keeps across a reload for a new release, besides the map's view.</summary>
 /// <param name="StationPushed">The page pushed the <c>?station=</c> history entry (MapPage), so closing still goes back.</param>
 /// <param name="ListPushed">The same for <c>?view=</c>.</param>
-public sealed record ReloadState(string Fuel, bool StationPushed, bool ListPushed);
+/// <param name="CarsPushed">The same for <c>?view=cars</c>, pushed over Best near you.</param>
+public sealed record ReloadState(string Fuel, bool StationPushed, bool ListPushed, bool CarsPushed);
 
 /// <summary>The view and state a reload for a new release left for the page it reloaded into.</summary>
 /// <param name="UserLat">Where the user's dot was, if it was shown.</param>
 public sealed record SavedView(
-    double Lat, double Lon, double Zoom, double? UserLat, double? UserLon, string? Fuel, bool StationPushed, bool ListPushed);
+    double Lat,
+    double Lon,
+    double Zoom,
+    double? UserLat,
+    double? UserLon,
+    string? Fuel,
+    bool StationPushed,
+    bool ListPushed,
+    bool CarsPushed);
 
 /// <summary>What the map reports back.</summary>
 public interface IMapListener
@@ -81,11 +90,23 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 
     public ValueTask SetSelectedAsync(long? id) => InvokeAsync("setSelected", id);
 
+    /// <summary>
+    /// Best near you on the map: the pick and the closest stand out, flagged with <paramref name="bestFlag"/> and
+    /// <paramref name="closestFlag"/>, and with <paramref name="listed"/>, the stations not in it fade. Nulls clear it.
+    /// </summary>
+    public ValueTask SetEmphasisAsync(
+        long? pickId, long? closestId, IReadOnlyCollection<long>? listed, string bestFlag, string closestFlag) =>
+        InvokeAsync("setEmphasis", pickId, closestId, listed, bestFlag, closestFlag);
+
     public ValueTask ShowUserLocationAsync(GeoPoint point) => InvokeAsync("showUserLocation", point.Latitude, point.Longitude);
 
     /// <param name="besidePane">Ends with the point in the middle of the area the details pane leaves uncovered.</param>
     public ValueTask FlyToAsync(GeoPoint point, double zoom, bool besidePane = false) =>
         InvokeAsync("flyTo", point.Latitude, point.Longitude, zoom, besidePane);
+
+    /// <summary>Shows a box; with <paramref name="besidePane"/>, in the area the pane leaves uncovered.</summary>
+    public ValueTask FitBoundsAsync(double west, double south, double east, double north, bool besidePane) =>
+        InvokeAsync("fitBounds", west, south, east, north, besidePane);
 
     /// <summary>Pans just enough to bring a point out from under the details pane.</summary>
     public ValueTask EnsureVisibleAsync(GeoPoint point) => InvokeAsync("ensureVisible", point.Latitude, point.Longitude);

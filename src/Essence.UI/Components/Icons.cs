@@ -14,4 +14,7 @@ internal static class Icons
 
     /// <summary>A paper plane: directions in Google Maps.</summary>
     public const string Directions = "M3 11l19-9-9 19-2-8-8-2z";
+
+    /// <summary>A fuel pump: Best near you.</summary>
+    public const string Pump = "M4 20V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v15M3 20h12M7 7h4M14 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3";
 }
