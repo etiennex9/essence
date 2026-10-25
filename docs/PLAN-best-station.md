@@ -386,7 +386,8 @@ address in Ontario returns nothing; with Photon stopped, search shows a message 
   a time): `mem_limit: 2g`, a 1 GB heap. No `UPDATE_*`, `PUID`/`PGID` or `JAVA_PARAMS`: the image runs as 1654 and the
   monthly refresh is a cron job, as for routing. `deploy/truenas-routing-refresh.sh` became
   `deploy/truenas-data-refresh.sh <routing|geocoding> <folder>`, one cron job per service (geocoding an hour after
-  routing). The first index is built by hand before the service is added, so the autodeploy's 10-minute wait isn't at
+  routing); it keeps its lock in `/run` and its build log beside itself, out of the dataset the container can write.
+  Compose's geocoding service has no memory limit, so `docker compose run geocoding build` isn't held to the server's. The first index is built by hand before the service is added, so the autodeploy's 10-minute wait isn't at
   risk; the healthcheck stays.
 - **Names follow routing's:** the service, dataset and image are `geocoding` (`/mnt/POOL/apps/essence/data/geocoding`,
   `essence-geocoding`), and `Geocoding:BaseUrl` defaults to `http://geocoding:2322/`.
@@ -407,10 +408,12 @@ address in Ontario returns nothing; with Photon stopped, search shows a message 
 - **The endpoints:** `/places/search` asks Photon for 20 (5 are kept) with the Québec box, the bias, the layers worth
   driving to and `osm_tag` exclusions (waterways, natural features, land use, boundaries); results whose `state` isn't
   Québec are still dropped. Each place comes once: the same name and town (a long street's stretches), or the same name
-  within 150 m (an address entered twice). A named place found only by its address (a business at "1000 de la
-  Gauchetière") is put after the places whose own name matches. `PlaceSuggestion.Kind` is `address`, `street`, `town` or
-  `named`; `Detail` is "Montréal, QC H3A 4W5" for an address. `/places/reverse` takes `lang` too, answers the nearest
-  address within 100 m, else the nearest street or named place within 1 km (404 when none), and only Québec's places.
+  within 150 m (an address entered twice). A named place at the house number typed whose name doesn't hold that number
+  (a business at "1000 de la Gauchetière") is put after the others, so the address comes first. Control characters in
+  `q` count as spaces. `PlaceSuggestion.Kind` is `address`, `street`, `town` or `named`; `Detail` is "Montréal, QC H3A
+  4W5" for an address. `/places/reverse` takes `lang` too, looks at the 20 places nearest the point, and answers the
+  nearest address within 100 m, else the nearest street or named place within 1 km (an address farther away names the
+  point by its road), 404 when none, and only Québec's places.
   Both take `lang` (`fr` by default, or `en`: Photon's `name:en`, "La Gauchetière Street West"). `RateLimiting:Search`
   is 60 a minute per IP, shared by search and reverse.
 - **Tests:** `tests/Essence.Api.Tests` is new (WebApplicationFactory, no database): the endpoints' rules against a stub
@@ -422,7 +425,8 @@ address in Ontario returns nothing; with Photon stopped, search shows a message 
   for (a trip, Home, Work, another place, which is named once found), and "Your places" has Set / Change / Cancel and
   Forget. The dashed Home and Work chips open it to set them (they used to show a hint). "Pick it on the map" closes the
   panes and the status chip says how. What a place found is for isn't kept across a reload (it reopens for a trip).
-  `PlaceSearch` keeps answers per text, language and 10 km area (50 at most); while a longer text is on its way, the
+  In the box, a first Escape clears the text and the next closes the pane (the map's own Escape handler leaves a
+  search box with text to it). `PlaceSearch` keeps answers per text, language and 10 km area (50 at most); while a longer text is on its way, the
   answers of the longest cached text it starts with show, cut to those it still matches, faded. Suggestions show the
   straight-line distance when the location is known, and the typed words in bold.
 - **Addresses kept:** `SavedPlace.Address` and `TripDestination.Address` (short: "1000 Rue De La Gauchetière Ouest,
