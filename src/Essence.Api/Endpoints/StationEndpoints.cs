@@ -4,6 +4,7 @@ using System.Linq.Expressions;
 using Essence.Contracts;
 using Essence.Data;
 using Essence.Data.Entities;
+using Essence.Ranking;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,6 +17,9 @@ public static class StationEndpoints
     private const int MaxNearbyLimit = 100;
     private const int DefaultHistoryDays = 30;
     private const int MaxHistoryDays = 366;
+    private const double MaxFillLitres = 200;
+    private const double MaxLitresPer100Km = 40;
+    private const double MaxDetourMinutes = 120;
 
     private static readonly Expression<Func<Station, StationSummary>> ToSummary = s => new StationSummary(
         s.Id, s.Name, s.Brand, s.Status, s.Address, s.PostalCode, s.Region, s.Latitude, s.Longitude, s.IsActive);
@@ -28,6 +32,16 @@ public static class StationEndpoints
             .WithDescription("Filters combine with AND. `q` searches the name, and the address and postal code ignoring case and accents.");
         group.MapGet("/nearby", Nearby)
             .WithSummary("Active stations near a point, closest first")
+            .WithDataVersion();
+        group.MapGet("/best", Best)
+            .WithSummary("Where to fill up near a point")
+            .WithDescription(
+                "Ranks the operating stations with an available price by what the fill-up costs once the gas burned getting there "
+                + "and back is counted. The closest is the reference the savings are counted against. A farther station is picked "
+                + "only if it saves at least $0.25, its round trip takes at most `maxDetourMin` longer than the closest's, and it "
+                + "still saves with roads twice the straight line; the others stay listed, with the reason. Distances are "
+                + "estimated: straight line × 1.3, driven at 40 km/h. Looks within `radiusKm`, widened to 25 km with fewer than 5 "
+                + "stations, else returns the closest at any distance.")
             .WithDataVersion();
         group.MapGet("/{id:long}", GetStation)
             .WithSummary("A station with its current prices")
@@ -183,6 +197,68 @@ public static class StationEndpoints
             })
             .ToList();
         return TypedResults.Ok(result);
+    }
+
+    private static async Task<Results<Ok<BestNearby>, ValidationProblem>> Best(
+        EssenceDbContext db,
+        StationSnapshot snapshot,
+        [Description("Latitude of the driver, in degrees.")] double lat,
+        [Description("Longitude of the driver, in degrees.")] double lon,
+        CancellationToken cancellationToken,
+        [Description("Régulier, Super or Diesel (accents optional). Required.")] string? fuel = null,
+        [Description("Litres bought at a stop.")] double fillL = 40,
+        [Description("The car's consumption, in L/100 km.")] double per100Km = 8.5,
+        [Description("true to include Costco, which sells to members only.")] bool costco = false,
+        [Description("The longest detour: how many minutes longer than the closest's a station's round trip may take to be picked.")]
+        double maxDetourMin = 10,
+        [Description("Search radius in kilometres (max 25).")] double radiusKm = SearchArea.DefaultRadiusKm)
+    {
+        var errors = new QueryErrors()
+            .Require(lat is >= -90 and <= 90, nameof(lat), "Must be between -90 and 90.")
+            .Require(lon is >= -180 and <= 180, nameof(lon), "Must be between -180 and 180.")
+            .Require(!string.IsNullOrWhiteSpace(fuel), nameof(fuel), "Required.")
+            .Require(fillL is > 0 and <= MaxFillLitres, nameof(fillL), $"Must be more than 0 and at most {MaxFillLitres}.")
+            .Require(per100Km is > 0 and <= MaxLitresPer100Km, nameof(per100Km), $"Must be more than 0 and at most {MaxLitresPer100Km}.")
+            .Require(maxDetourMin is >= 0 and <= MaxDetourMinutes, nameof(maxDetourMin), $"Must be between 0 and {MaxDetourMinutes}.")
+            .Require(radiusKm is > 0 and <= SearchArea.MaxRadiusKm, nameof(radiusKm), $"Must be more than 0 and at most {SearchArea.MaxRadiusKm}.");
+        var fuelType = await ResolveFuelAsync(db, fuel, errors, cancellationToken);
+        if (errors.Any || fuelType is null)
+        {
+            return errors.ToProblem();
+        }
+
+        var fuelId = fuelType.Id;
+        var stations = (await snapshot.GetAsync(db, cancellationToken)).Stations
+            .Select(s => (Station: s, Price: s.Prices.FirstOrDefault(p => p.FuelTypeId == fuelId)))
+            .Where(x => x.Price is { } price
+                && Eligibility.IsEligible(x.Station.Status, price.IsAvailable, price.PriceCents, x.Station.MembersOnly, costco))
+            .Select(x => (
+                x.Station,
+                PriceCents: x.Price!.PriceCents!.Value,
+                Km: Geo.DistanceKm(lat, lon, x.Station.Latitude, x.Station.Longitude)))
+            .ToList();
+        var (area, areaRadiusKm) = SearchArea.Select(stations, s => s.Km, radiusKm);
+
+        var candidates = area.Select(s => NearYou.Estimate(s.Station.Id, s.PriceCents, s.Km)).ToList();
+        var ranking = NearYou.Rank(candidates, new Car((decimal)fillL, (decimal)per100Km), maxDetourMin, byRoad: false);
+        if (ranking is null)
+        {
+            return TypedResults.Ok(new BestNearby(null, null, null, null, [], areaRadiusKm, ByRoad: false));
+        }
+
+        var byId = area.ToDictionary(s => s.Station.Id, s => s.Station);
+        RankedStation ToRanked(RankedCandidate ranked)
+        {
+            var station = byId[ranked.Id];
+            return new RankedStation(
+                station.Id, station.Name, station.Brand, station.Address, station.Latitude, station.Longitude,
+                ranked.Candidate.PriceCents, Math.Round(ranked.Candidate.DistanceKm, 2), null, ranked.Cost, ranked.Saves,
+                station.MembersOnly, ranked.OverDetourLimit, ranked.SavingUncertain);
+        }
+
+        return TypedResults.Ok(new BestNearby(
+            ToRanked(ranking.Pick), ranking.Reference.Id, ranking.Reference.Id, ranking.Cheapest.Id,
+            ranking.Listed.Select(ToRanked).ToList(), areaRadiusKm, ByRoad: false));
     }
 
     private static async Task<Results<Ok<List<PriceHistoryDto>>, NotFound, ValidationProblem>> GetPriceHistory(

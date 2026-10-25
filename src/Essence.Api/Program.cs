@@ -17,6 +17,7 @@ if (string.IsNullOrWhiteSpace(connectionString))
 // Connects as the read-only essence_reader role.
 builder.Services.AddEssenceDbContext(connectionString, o => o.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<StationSnapshot>();
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks().AddCheck<IngestHealthCheck>("ingest");

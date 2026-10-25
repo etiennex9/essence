@@ -76,3 +76,48 @@ public sealed record ImportDto(
     int Warnings,
     string Sha256,
     string? Error);
+
+/// <summary>Where to fill up around a point (<c>/stations/best</c>), counting the gas burned getting there and back.</summary>
+/// <param name="Pick">
+/// The station recommended: the best value within the car's longest detour, or the closest when nothing else saves at least
+/// $0.25. Null when no station has a price for the fuel.
+/// </param>
+/// <param name="ReferenceId">What the savings are counted against: the closest station with a price.</param>
+/// <param name="Stations">The stations worth showing, lowest cost first: the pick, the closest, the cheapest and a few that save.</param>
+/// <param name="RadiusKm">
+/// The straight-line radius the stations were found within: the one asked for, or 25 km when it was widened. Null when none
+/// within 25 km has a price, and <paramref name="Stations"/> holds the closest one at any distance.
+/// </param>
+/// <param name="ByRoad">Distances are by road; otherwise they're estimated (straight line × 1.3).</param>
+public sealed record BestNearby(
+    RankedStation? Pick,
+    long? ReferenceId,
+    long? ClosestId,
+    long? CheapestId,
+    IReadOnlyList<RankedStation> Stations,
+    double? RadiusKm,
+    bool ByRoad);
+
+/// <param name="PriceCents">Cents per litre of the fuel asked for.</param>
+/// <param name="DistanceKm">One way, by road or estimated (<see cref="BestNearby.ByRoad"/>).</param>
+/// <param name="DurationMin">One way, by road; null while distances are estimated.</param>
+/// <param name="CostDollars">The fill-up with the gas burned getting there and back.</param>
+/// <param name="SavesDollars">The reference's cost minus this one's; negative when it costs more.</param>
+/// <param name="MembersOnly">A Costco: it sells to members only.</param>
+/// <param name="OverDetourLimit">Its round trip takes longer than the closest's by more than the longest detour: not picked.</param>
+/// <param name="SavingUncertain">It saves by the estimate, but not with roads twice the straight line (a river between): not picked.</param>
+public sealed record RankedStation(
+    long Id,
+    string? Name,
+    string? Brand,
+    string Address,
+    double Latitude,
+    double Longitude,
+    decimal PriceCents,
+    double DistanceKm,
+    double? DurationMin,
+    decimal CostDollars,
+    decimal SavesDollars,
+    bool MembersOnly,
+    bool OverDetourLimit,
+    bool SavingUncertain);

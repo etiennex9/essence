@@ -46,7 +46,7 @@ public static class DataVersion
     }
 
     /// <summary>The fetch time of the latest version imported, to the second like HTTP dates; null before the first import.</summary>
-    private static async Task<DateTimeOffset?> LatestAsync(EssenceDbContext db, CancellationToken cancellationToken)
+    internal static async Task<DateTimeOffset?> LatestAsync(EssenceDbContext db, CancellationToken cancellationToken)
     {
         var fetchedAt = await db.Imports
             .Where(i => i.Status == ImportStatus.Succeeded)

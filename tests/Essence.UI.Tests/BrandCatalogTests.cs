@@ -1,3 +1,4 @@
+using Essence.Contracts;
 using Essence.UI.Services;
 
 namespace Essence.UI.Tests;
@@ -14,7 +15,16 @@ public class BrandCatalogTests
     [InlineData("Les Huiles Berthier Inc", "les-huiles-berthier-inc")]
     [InlineData("Énergie Express BD", "energie-express-bd")]
     public void Slugify_folds_accents_and_separators(string brand, string expected) =>
-        Assert.Equal(expected, BrandCatalog.Slugify(brand));
+        Assert.Equal(expected, Brands.Slugify(brand));
+
+    [Theory]
+    [InlineData("Costco", true)]
+    [InlineData(" COSTCO ", true)]
+    [InlineData("Costco Wholesale", false)]
+    [InlineData("Esso", false)]
+    [InlineData(null, false)]
+    public void Costco_sells_to_members_only(string? brand, bool expected) =>
+        Assert.Equal(expected, Brands.IsMembersOnly(brand));
 
     [Theory]
     [InlineData("Esso", "E")]

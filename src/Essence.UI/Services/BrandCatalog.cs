@@ -1,5 +1,4 @@
-using System.Globalization;
-using System.Text;
+using Essence.Contracts;
 
 namespace Essence.UI.Services;
 
@@ -10,7 +9,8 @@ public sealed record BrandStyle(string? Name, string Slug, string Monogram, stri
 
 /// <summary>
 /// How each brand looks on the map. Hand-picked colors for the biggest brands (about 90% of stations), a stable color for the
-/// others. Logos are optional drop-in files: add <c>wwwroot/brands/{slug}.svg</c> and its slug to <see cref="LogoSlugs"/>.
+/// others, by their <see cref="Brands.Slugify"/> slug. Logos are optional drop-in files: add <c>wwwroot/brands/{slug}.svg</c>
+/// and its slug to <see cref="LogoSlugs"/>.
 /// </summary>
 public static class BrandCatalog
 {
@@ -56,44 +56,12 @@ public static class BrandCatalog
             return NoBrand;
         }
 
-        var slug = Slugify(brand);
+        var slug = Brands.Slugify(brand);
         var (background, foreground) = KnownColors.TryGetValue(slug, out var known)
             ? known
             : FallbackColors[StableHash(slug) % (uint)FallbackColors.Length];
         var logoUrl = LogoSlugs.Contains(slug) ? $"{LogoBasePath}{slug}.svg" : null;
         return new BrandStyle(brand.Trim(), slug, Monogram(brand), background, foreground, logoUrl);
-    }
-
-    /// <summary>Lowercase, accents removed, every run of other characters turned into one dash: "Pétro-T" → "petro-t".</summary>
-    public static string Slugify(string brand)
-    {
-        var builder = new StringBuilder(brand.Length);
-        var pendingDash = false;
-        foreach (var c in brand.Normalize(NormalizationForm.FormD))
-        {
-            if (CharUnicodeInfo.GetUnicodeCategory(c) == UnicodeCategory.NonSpacingMark)
-            {
-                continue;
-            }
-
-            var lower = char.ToLowerInvariant(c);
-            if (lower is (>= 'a' and <= 'z') or (>= '0' and <= '9'))
-            {
-                if (pendingDash && builder.Length > 0)
-                {
-                    builder.Append('-');
-                }
-
-                builder.Append(lower);
-                pendingDash = false;
-            }
-            else
-            {
-                pendingDash = true;
-            }
-        }
-
-        return builder.ToString();
     }
 
     /// <summary>The first letter of the first two words: "Petro-Canada" → "PC", "R.L." → "RL", "Esso" → "E".</summary>

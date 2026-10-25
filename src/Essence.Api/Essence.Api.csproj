@@ -12,6 +12,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Essence.Contracts\Essence.Contracts.csproj" />
     <ProjectReference Include="..\Essence.Data\Essence.Data.csproj" />
+    <ProjectReference Include="..\Essence.Ranking\Essence.Ranking.csproj" />
   </ItemGroup>
 
 </Project>
