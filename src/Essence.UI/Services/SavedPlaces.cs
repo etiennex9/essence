@@ -18,6 +18,7 @@ public sealed record SavedPlace(string Id, PlaceKind Kind, string Name, double L
 {
     public const int MaxNameLength = 40;
 
+    [JsonIgnore]
     public GeoPoint Point => new(Latitude, Longitude);
 }
 

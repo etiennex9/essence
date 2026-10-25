@@ -380,3 +380,372 @@
     font-size: 12px;
     text-decoration: underline;
 }
+
+.tile .note {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ess-warning-text);
+}
+
+/* ---- Going somewhere? ---- */
+
+.where {
+    margin: 0 0 12px;
+}
+
+/* Home and Work go under the box when it would be too narrow to read (French, small phones). */
+.where-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+}
+
+/* Where address search goes (phase 3); for now it says how to pick a place. */
+.wbox {
+    flex: 1 1 180px;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    background: var(--ess-hover);
+    color: var(--ess-text-muted);
+    font: 500 14px/1.2 var(--ess-font);
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.wbox svg {
+    flex: none;
+}
+
+.place {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 44px;
+    max-width: 100%;
+    padding: 0 11px;
+    box-sizing: border-box;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 10px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 600 13px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+.place:hover {
+    background: var(--ess-hover);
+}
+
+.place span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Home or Work, not saved yet: a tap says how to save it. */
+.place.is-unset {
+    border-style: dashed;
+    color: var(--ess-text-muted);
+}
+
+.where-help {
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--ess-text-muted);
+}
+
+.where-help .link {
+    font-size: 12px;
+    text-decoration: underline;
+}
+
+/* A press and hold is how fingers pick a place, a right-click how mice do. */
+.where-help .mouse {
+    display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .where-help .touch {
+        display: none;
+    }
+
+    .where-help .mouse {
+        display: inline;
+    }
+}
+
+.where-off {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--ess-hover);
+    font-size: 12.5px;
+    line-height: 1.35;
+    color: var(--ess-text-muted);
+}
+
+/* ---- Best on the way ---- */
+
+.trip-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 46px;
+    padding: 0 4px 0 12px;
+    border-radius: 10px;
+    border: 0.5px solid color-mix(in srgb, var(--ess-accent) 30%, transparent);
+    background: var(--ess-selected);
+    color: var(--ess-accent);
+}
+
+.trip-bar svg {
+    flex: none;
+}
+
+.trip-bar .tx {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    color: var(--ess-text);
+}
+
+.trip-bar b {
+    font-size: 14px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trip-bar .tx span {
+    font-size: 12px;
+    color: var(--ess-text-muted);
+}
+
+.end {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ess-text-muted);
+    cursor: pointer;
+}
+
+.end:hover {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.chip {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 999px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 500 12px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+/* A 44 px target, without making the row taller. */
+button.chip {
+    position: relative;
+}
+
+button.chip::after {
+    content: "";
+    position: absolute;
+    inset: -4px 0;
+}
+
+.chip:hover {
+    background: var(--ess-hover);
+}
+
+.chip.is-range {
+    border-color: var(--ess-accent);
+    color: var(--ess-accent);
+    font-weight: 600;
+}
+
+.chip.is-range.is-unset {
+    border-style: dashed;
+}
+
+.chip.is-quiet {
+    border-style: dashed;
+    color: var(--ess-text-muted);
+    cursor: default;
+}
+
+.chip.is-quiet:hover {
+    background: var(--ess-surface);
+}
+
+.range-edit {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--ess-hover);
+}
+
+.range-edit p {
+    margin: 0 0 8px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.range-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.range-row label {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.number {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.number input {
+    width: 88px;
+    min-height: 44px;
+    box-sizing: border-box;
+    padding: 0 8px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 8px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 500 15px var(--ess-font);
+    text-align: right;
+}
+
+.number .unit {
+    font-size: 13px;
+    color: var(--ess-text-muted);
+}
+
+.save {
+    min-height: 44px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--ess-accent);
+    color: var(--ess-on-accent);
+    font: 600 14px var(--ess-font);
+    cursor: pointer;
+}
+
+/* Where to stop, or why not. */
+.need {
+    margin: 8px 0 0;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--ess-warning-bg);
+    color: var(--ess-warning-text);
+    font-size: 12.5px;
+    line-height: 1.35;
+}
+
+.need.is-fine {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+.need b {
+    font-weight: 600;
+}
+
+.result > .need + .hero,
+.result > .chips + .hero,
+.result > .range-edit + .hero {
+    margin-top: 8px;
+}
+
+.more {
+    display: block;
+    min-height: 44px;
+    margin: 6px auto 0;
+    padding: 0 10px;
+    border: 0;
+    background: none;
+    color: var(--ess-accent);
+    font: 600 13px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+/* Every station on the way, in order along the route. */
+.on-way {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.on-way li + li {
+    border-top: 0.5px solid var(--ess-border);
+}
+
+.on-way .row {
+    grid-template-columns: 52px auto 1fr auto;
+    grid-template-areas: "km logo name price" "km logo address saves";
+}
+
+.on-way .km {
+    grid-area: km;
+    align-self: center;
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.on-way .km small {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--ess-text-muted);
+}
+
+.on-way li.is-out {
+    opacity: 0.6;
+}
+
+.row-saves.is-neutral {
+    color: var(--ess-text-muted);
+}
+
+.row-saves.is-out {
+    color: var(--ess-warning-text);
+}

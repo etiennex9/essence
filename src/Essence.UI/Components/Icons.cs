@@ -17,4 +17,18 @@ internal static class Icons
 
     /// <summary>A fuel pump: Best near you.</summary>
     public const string Pump = "M4 20V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v15M3 20h12M7 7h4M14 9h2a2 2 0 0 1 2 2v5a1.5 1.5 0 0 0 3 0V8l-3-3";
+
+    /// <summary>A house: the saved place Home.</summary>
+    public const string Home = "M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z";
+
+    /// <summary>A briefcase: the saved place Work.</summary>
+    public const string Work = "M5 7h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2zM8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2";
+
+    /// <summary>A map pin: another saved place, or a dropped pin.</summary>
+    public const string Place = "M12 21s-7-6.2-7-11.5a7 7 0 0 1 14 0C19 14.8 12 21 12 21zM12 7a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5z";
+
+    /// <summary>A magnifier: where to go.</summary>
+    public const string Search = "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4";
+
+    public const string Plus = "M12 5v14M5 12h14";
 }

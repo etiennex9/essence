@@ -6,6 +6,8 @@
 @inject ComparedStations Comparison
 @inject BestNearYou Best
 @inject CarProfiles Cars
+@inject TripState Trips
+@inject SavedPlaces Places
 @inject IDeviceLocation DeviceLocation
 @inject IPreferenceStore Preferences
 @inject ReleaseNotes Notes
@@ -37,8 +39,8 @@
                     <span class="badge" aria-hidden="true">@Comparison.Count</span>
                 }
             </button>
-            <button type="button" class="tool @(BestOpen ? "is-active" : null)" @onclick="ToggleBestAsync"
-                    aria-pressed="@(BestOpen ? "true" : "false")" aria-label="@L["BestNearYou"]" title="@L["BestNearYou"]">
+            <button type="button" class="tool @(PumpActive ? "is-active" : null)" @onclick="ToggleBestAsync"
+                    aria-pressed="@(PumpActive ? "true" : "false")" aria-label="@L["BestNearYou"]" title="@L["BestNearYou"]">
                 <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
                      stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Pump" /></svg>
             </button>
@@ -66,7 +68,7 @@
                 <span class="text">
                     <span class="kicker">
                         @L["BestChipKicker"]
-                        <span class="distance">@($"· {L["DistanceApprox", Formatting.Km(pick.DistanceKm, CultureInfo.CurrentCulture)]}")</span>
+                        <span class="distance">@($"· {L[Best.Result?.ByRoad == true ? "DistanceByRoad" : "DistanceApprox", Formatting.Km(pick.DistanceKm, CultureInfo.CurrentCulture)]}")</span>
                     </span>
                     <span class="name">@($"{brand.Name ?? L["Independent"]} {Formatting.Price(pick.PriceCents, CultureInfo.CurrentCulture)}")</span>
                 </span>
@@ -82,6 +84,14 @@
                     <span class="saves is-neutral">@L["Closest"]</span>
                 }
             </button>
+            @if (Places.Work is { } work && !TripsUnavailable)
+            {
+                <button type="button" class="to-work" @onclick="() => StartTripAsync(TripDestination.To(work))">
+                    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Work" /></svg>
+                    @L["TripToWork"]
+                </button>
+            }
         }
     </div>
 
@@ -106,15 +116,23 @@
     {
         <ComparisonPanel Fuel="@_fuel" UserLocation="_userLocation" OnClose="CloseListAsync" OnOpenStation="OpenListedStation" />
     }
-    else if (View == BestView)
+    else if (View is BestView or TripView)
     {
-        <BestPanel Locating="_locating" LocationProblem="_locationProblem" OnClose="CloseListAsync" OnOpenStation="OpenListedStation"
+        <BestPanel Trip="@(View == TripView)" Locating="_locating" LocationProblem="_locationProblem"
+                   OnClose="() => View == TripView ? CloseTripAsync() : CloseListAsync()" OnOpenStation="OpenListedStation"
                    OnOpenCars="ShowCars" OnLocate="() => LocateAsync(moveMap: false, fallBackToMontreal: false)"
-                   OnUseMapCenter="UseMapCenterAsync" />
+                   OnUseMapCenter="UseMapCenterAsync" OnStartTrip="StartTripAsync" OnEndTrip="EndTripAsync" OnRefreshTrip="RefreshTripAsync"
+                   OnDropPinAtCenter="DropPinAtCenterAsync" />
     }
     else if (View == CarsView)
     {
         <MyCarsPanel OnClose="CloseCarsAsync" />
+    }
+
+    @if (_pin is { } pin)
+    {
+        <DroppedPin Point="pin" UserLocation="_userLocation" TripsUnavailable="TripsUnavailable" OnClose="ClearPinAsync"
+                    OnTrip="StartTripAsync" />
     }
 
     <AboutDialog @ref="_about" />
@@ -126,8 +144,14 @@
     private const string CompareView = "compare";
     private const string BestView = "best";
 
-    /// <summary>My cars, pushed over Best near you.</summary>
+    /// <summary>My cars, pushed over Best near you or a trip.</summary>
     private const string CarsView = "cars";
+
+    /// <summary>Best on the way, usually pushed over Best near you. No coordinates in the URL: the trip is TripState's.</summary>
+    private const string TripView = "trip";
+
+    /// <summary>Savings under this are "about the same" (Essence.Ranking's NearYou.SmallestSaving).</summary>
+    private const decimal SmallestSaving = 0.25m;
 
     private const double CompactBelowZoom = 12;
     private const double OverviewZoom = 5.5;
@@ -187,8 +211,26 @@
     /// <summary>The same for <c>?view=</c>, the list open.</summary>
     private bool _listPushed;
 
-    /// <summary>The same for <c>?view=cars</c>, pushed over <c>?view=best</c>.</summary>
+    /// <summary>The same for <c>?view=cars</c>, pushed over <c>?view=best</c> or <c>?view=trip</c>.</summary>
     private bool _carsPushed;
+
+    /// <summary>My cars was opened over the trip, which the map keeps showing.</summary>
+    private bool _carsOverTrip;
+
+    /// <summary>The same as <see cref="_carsPushed"/> for <c>?view=trip</c>, pushed over <c>?view=best</c>.</summary>
+    private bool _tripPushed;
+
+    /// <summary>The trip the tab had open is read (TripState.LoadAsync): a <c>?view=trip</c> without one falls back.</summary>
+    private bool _tripLoaded;
+
+    /// <summary>A press and hold dropped a pin here: its card shows.</summary>
+    private GeoPoint? _pin;
+
+    /// <summary>What the map draws of the trip (<see cref="RenderTripAsync"/>), drawn again only when it changes.</summary>
+    private (TripPlan? Plan, TripDestination? Destination) _drawnTrip;
+
+    /// <summary>The trip plan the map was last fitted to.</summary>
+    private TripPlan? _fittedPlan;
 
     /// <summary>A cold load with <c>?station=</c> centers on that station once it's loaded, instead of on the user.</summary>
     private bool _centerOnStation;
@@ -206,17 +248,29 @@
     [SupplyParameterFromQuery(Name = "station")]
     public long? Station { get; set; }
 
-    /// <summary>The list open: <c>favorites</c>, <c>compare</c>, <c>best</c> or <c>cars</c>.</summary>
+    /// <summary>The list open: <c>favorites</c>, <c>compare</c>, <c>best</c>, <c>trip</c> or <c>cars</c>.</summary>
     [SupplyParameterFromQuery(Name = "view")]
     public string? View { get; set; }
 
-    private bool ListOpen => View is FavoritesView or CompareView or BestView or CarsView;
+    private bool ListOpen => View is FavoritesView or CompareView or BestView or TripView or CarsView;
 
     /// <summary>Best near you is open, maybe under My cars or a station's details.</summary>
-    private bool BestOpen => View is BestView or CarsView;
+    private bool BestOpen => View is BestView || (View == CarsView && !_carsOverTrip);
+
+    /// <summary>A trip is open in Best on the way, maybe under My cars or a station's details: the map shows it.</summary>
+    private bool TripMode => Trips.IsOpen && (View == TripView || (View == CarsView && _carsOverTrip));
+
+    /// <summary>The pump's pane is open: Best near you, Best on the way, or My cars over one of them.</summary>
+    private bool PumpActive => View is BestView or TripView or CarsView;
+
+    /// <summary>Trips can't be planned now: the routing server answered 503, or Best near you fell back to estimates.</summary>
+    private bool TripsUnavailable => Trips.Unavailable || Best.Result is { ByRoad: false, Pick: not null };
 
     /// <summary>The Best near you the map shows while its pane is open; none while the one in is for another fuel.</summary>
     private BestNearby? MapBest => BestOpen && Best.ResultQuery?.Fuel == _fuel ? Best.Result : null;
+
+    /// <summary>The trip plan the map shows in trip mode; none while the one in is for another fuel.</summary>
+    private TripPlan? MapTrip => TripMode && Trips.PlanQuery?.Fuel == _fuel ? Trips.Plan : null;
 
     /// <summary>The pick the phone chip shows: once the user is located, while no pane is open.</summary>
     private RankedStation? ChipPick =>
@@ -244,7 +298,8 @@
                 return _loadError == ApiError.RateLimited ? L["RateLimited", (int)Math.Ceiling(_retryDelay.TotalSeconds)] : L["LoadFailed"];
             }
 
-            if (_viewport is { } viewport && !StationViewport.ShouldFetch(viewport))
+            // A trip is fitted whole, zoomed out: its stations come with it.
+            if (!TripMode && _viewport is { } viewport && !StationViewport.ShouldFetch(viewport))
             {
                 return L["ZoomIn"];
             }
@@ -266,6 +321,8 @@
         Updates.ReloadDue += OnReloadDue;
         Best.Changed += OnBestChanged;
         Cars.Changed += OnCarsChanged;
+        Trips.Changed += OnTripChanged;
+        Places.Changed += OnPlacesChanged;
     }
 
     protected override async Task OnParametersSetAsync()
@@ -284,6 +341,12 @@
         if (View != CarsView)
         {
             _carsPushed = false;
+            _carsOverTrip = false;
+        }
+
+        if (View is not (TripView or CarsView))
+        {
+            _tripPushed = false;
         }
 
         if (!BestOpen)
@@ -291,11 +354,26 @@
             _fitted = null;
         }
 
+        if (!TripMode)
+        {
+            _fittedPlan = null;
+        }
+
+        // A link to ?view=trip opened cold, or a trip ended in another way: Best near you takes its place.
+        if (View == TripView && _tripLoaded && !Trips.IsOpen)
+        {
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = BestView, ["station"] = null }),
+                replace: true);
+            return;
+        }
+
         if (_map is not null)
         {
             await _map.SetSelectedAsync(Station);
             await RenderMarkersAsync();
+            await RenderTripAsync();
             await FitToBestAsync();
+            await FitToTripAsync();
         }
     }
 
@@ -319,6 +397,18 @@
         await Cars.SetFuelAsync(_fuel);
         await Favorites.LoadAsync();
         await Comparison.LoadAsync();
+        await Places.LoadAsync();
+
+        // The trip the tab had open, as it was planned: a tab Android discarded while Google Maps navigated comes back to it.
+        await Trips.LoadAsync();
+        await Trips.SetFuelAsync(_fuel);
+        _tripLoaded = true;
+        if (View == TripView && !Trips.IsOpen)
+        {
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = BestView, ["station"] = null }),
+                replace: true);
+        }
+
         var openedOnStation = Station is not null;
         _centerOnStation = openedOnStation && saved is null;
         if (saved is not null)
@@ -326,7 +416,8 @@
             _stationPushed = saved.StationPushed && Station is not null;
             _listPushed = saved.ListPushed && ListOpen;
             _carsPushed = saved.CarsPushed && View == CarsView;
-            _keepView = BestOpen;
+            _tripPushed = saved.TripPushed && View == TripView;
+            _keepView = BestOpen || View == TripView;
         }
 
         var (center, zoom) = saved is null ? (Overview, OverviewZoom) : (new GeoPoint(saved.Lat, saved.Lon), saved.Zoom);
@@ -339,6 +430,8 @@
         _mapReady = true;
         Updates.Start();
         await _map.SetSelectedAsync(Station);
+        await RenderTripAsync();
+        await FitToTripAsync();
         if (_pendingStation is not null)
         {
             await ShowStationAsync(_pendingStation);
@@ -417,6 +510,7 @@
         await Preferences.SetAsync(FuelPreferenceKey, fuel);
         await Best.SetFuelAsync(fuel);
         await Cars.SetFuelAsync(fuel);
+        await Trips.SetFuelAsync(fuel);
         await RenderMarkersAsync();
         if (_viewport is { } viewport)
         {
@@ -602,7 +696,7 @@
     {
         if (_mapReady)
         {
-            await _map!.ReloadAsync(new ReloadState(_fuel, _stationPushed, _listPushed, _carsPushed), saveView: _placed, automatic);
+            await _map!.ReloadAsync(new ReloadState(_fuel, _stationPushed, _listPushed, _carsPushed, _tripPushed), saveView: _placed, automatic);
         }
     }
 
@@ -615,35 +709,69 @@
 
         var visible = _stations.Visible(_viewport);
         _visibleCount = visible.Count;
-        var best = MapBest;
-        var markers = visible.Select(v => ToMarker(v, best)).ToList();
-        if (best is not null)
+        var emphasis = MapEmphasisNow();
+        var markers = visible.Select(v => ToMarker(v, emphasis)).ToList();
+
+        // A ranked station 9 km away, or one along a trip zoomed out, is usually not among the stations fetched around the
+        // view, which setMarkers would drop.
+        var shown = markers.Select(m => m.Id).ToHashSet();
+        var prices = visible.Where(v => v.HasPrice).Select(v => v.Price!.PriceCents!.Value).Order().ToList();
+        if (MapBest is { } best)
         {
-            // A ranked station 9 km away is usually not among the stations fetched around the view, which setMarkers would drop.
-            var shown = markers.Select(m => m.Id).ToHashSet();
-            var prices = visible.Where(v => v.HasPrice).Select(v => v.Price!.PriceCents!.Value).Order().ToList();
-            markers.AddRange(best.Stations.Where(s => !shown.Contains(s.Id)).Select(s => ToMarker(s, best, prices)));
+            markers.AddRange(best.Stations.Where(s => shown.Add(s.Id))
+                .Select(s => ToMarker(s.Id, s.Brand, s.Address, s.Latitude, s.Longitude, s.PriceCents, emphasis, prices)));
         }
 
-        await SetEmphasisAsync(best);
+        if (MapTrip is { } trip)
+        {
+            markers.AddRange(trip.Stations.Where(s => shown.Add(s.Id))
+                .Select(s => ToMarker(s.Id, s.Brand, s.Address, s.Latitude, s.Longitude, s.PriceCents, emphasis, prices)));
+        }
+
+        await SetEmphasisAsync(emphasis);
         await _map!.SetMarkersAsync(markers);
     }
 
-    /// <summary>Best near you's pick and closest stand out on the map, and the stations it didn't list fade.</summary>
-    private async Task SetEmphasisAsync(BestNearby? best)
+    /// <summary>
+    /// What stands out on the map: Best near you's pick and closest, or the trip's pick and reference (on the way, or the
+    /// smallest detour), each flagged; the stations they don't list fade.
+    /// </summary>
+    /// <param name="SecondMarkerKey">The string that names the second station in its marker's label.</param>
+    private sealed record MapEmphasis(long? PickId, long? SecondId, IReadOnlyList<long> Listed, string SecondFlag, string SecondMarkerKey);
+
+    private MapEmphasis? MapEmphasisNow()
     {
-        var listed = best?.Stations.Select(s => s.Id).ToList();
-        var key = best is null ? null : $"{best.Pick?.Id}|{best.ClosestId}|{string.Join(',', listed!)}";
+        if (MapTrip is { } trip)
+        {
+            // The stations worth stopping at stand out along the route; the rest (out of range, or saving nothing) fade.
+            long?[] named = [trip.PickId, trip.ReferenceId, trip.BiggestSavingId];
+            return new MapEmphasis(
+                trip.PickId, trip.ReferenceId,
+                [.. trip.Stations.Where(s => named.Contains(s.Id) || (s.Reachable && s.SavesDollars >= SmallestSaving)).Select(s => s.Id)],
+                trip.ReferenceOnTheWay ? L["NoDetour"] : L["SmallestDetour"], trip.ReferenceOnTheWay ? "MarkerNoDetour" : "MarkerSmallestDetour");
+        }
+
+        return MapBest is { } best
+            ? new MapEmphasis(best.Pick?.Id, best.ClosestId, [.. best.Stations.Select(s => s.Id)], L["Closest"], "MarkerClosest")
+            : null;
+    }
+
+    /// <summary>The emphasis is sent again only when it changes.</summary>
+    private async Task SetEmphasisAsync(MapEmphasis? emphasis)
+    {
+        var key = emphasis is null
+            ? null
+            : $"{emphasis.PickId}|{emphasis.SecondId}|{emphasis.SecondFlag}|{string.Join(',', emphasis.Listed)}";
         if (key == _emphasis)
         {
             return;
         }
 
         _emphasis = key;
-        await _map!.SetEmphasisAsync(best?.Pick?.Id, best?.ClosestId, listed, L["BestValue"], L["Closest"]);
+        await _map!.SetEmphasisAsync(emphasis?.PickId, emphasis?.SecondId, emphasis?.Listed, L["BestValue"], emphasis?.SecondFlag ?? L["Closest"]);
     }
 
-    private MarkerModel ToMarker(VisibleStation visible, BestNearby? best)
+    private MarkerModel ToMarker(VisibleStation visible, MapEmphasis? emphasis)
     {
         var station = visible.Station;
         var brand = BrandCatalog.For(station.Brand);
@@ -652,39 +780,41 @@
         string label = visible.HasPrice ? L["MarkerPrice", name, price] : L["MarkerUnavailable", name, _fuel];
         var favorite = Favorites.IsFavorite(station.Id);
         return new MarkerModel(
-            station.Id, station.Latitude, station.Longitude, Label(label, station.Id, favorite, best), price, !visible.HasPrice,
+            station.Id, station.Latitude, station.Longitude, Label(label, station.Id, favorite, emphasis), price, !visible.HasPrice,
             ToneName(visible.Tone), visible.ZIndex, favorite, brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
     }
 
-    /// <summary>A station Best near you ranked, drawn even though it's not among the stations fetched around the view.</summary>
-    private MarkerModel ToMarker(RankedStation station, BestNearby best, IReadOnlyList<decimal> visiblePrices)
+    /// <summary>A station Best near you ranked, or one along the trip, drawn even though it's not among the stations fetched around the view.</summary>
+    private MarkerModel ToMarker(
+        long id, string? brandName, string address, double latitude, double longitude, decimal priceCents, MapEmphasis? emphasis,
+        IReadOnlyList<decimal> visiblePrices)
     {
-        var brand = BrandCatalog.For(station.Brand);
-        var price = Formatting.Price(station.PriceCents, CultureInfo.CurrentCulture);
-        string label = L["MarkerPrice", $"{brand.Name ?? L["Independent"]}, {station.Address}", price];
-        var favorite = Favorites.IsFavorite(station.Id);
-        var tone = StationViewport.ToneOf(station.PriceCents, visiblePrices);
+        var brand = BrandCatalog.For(brandName);
+        var price = Formatting.Price(priceCents, CultureInfo.CurrentCulture);
+        string label = L["MarkerPrice", $"{brand.Name ?? L["Independent"]}, {address}", price];
+        var favorite = Favorites.IsFavorite(id);
+        var tone = StationViewport.ToneOf(priceCents, visiblePrices);
         return new MarkerModel(
-            station.Id, station.Latitude, station.Longitude, Label(label, station.Id, favorite, best), price, false, ToneName(tone),
-            visiblePrices.Count + 1, favorite, brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
+            id, latitude, longitude, Label(label, id, favorite, emphasis), price, false, ToneName(tone), visiblePrices.Count + 1, favorite,
+            brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
     }
 
-    /// <summary>A marker's label, with what makes its station stand out: a favorite, or Best near you's pick or closest.</summary>
-    private string Label(string label, long id, bool favorite, BestNearby? best)
+    /// <summary>A marker's label, with what makes its station stand out: a favorite, the pick, or the closest (the trip's reference).</summary>
+    private string Label(string label, long id, bool favorite, MapEmphasis? emphasis)
     {
         if (favorite)
         {
             label = L["MarkerFavorite", label];
         }
 
-        if (best?.Pick?.Id == id)
+        if (emphasis?.PickId == id)
         {
             label = L["MarkerBest", label];
         }
 
-        if (best?.ClosestId == id)
+        if (emphasis?.SecondId == id)
         {
-            label = L["MarkerClosest", label];
+            label = L[emphasis.SecondMarkerKey, label];
         }
 
         return label;
@@ -730,6 +860,176 @@
             besidePane: true);
     }
 
+    /// <summary>
+    /// Draws the trip in trip mode: its route (dashed past where the range runs out), its destination and where the range
+    /// ends. Nothing otherwise.
+    /// </summary>
+    private async Task RenderTripAsync()
+    {
+        if (!_mapReady)
+        {
+            return;
+        }
+
+        var plan = MapTrip;
+        var destination = TripMode ? Trips.Destination : null;
+        if (ReferenceEquals(plan, _drawnTrip.Plan) && destination == _drawnTrip.Destination)
+        {
+            return;
+        }
+
+        _drawnTrip = (plan, destination);
+        await _map!.SetDestinationAsync(destination?.Point, destination is null ? "" : DestinationLabel(destination));
+        if (plan is null)
+        {
+            await _map.ClearRouteAsync();
+            await _map.SetRangeEndAsync(null, "");
+            return;
+        }
+
+        var (reached, beyond, rangeEnd) = TripPath.Split(plan.Path, plan.DistanceKm, plan.StopBeforeKm);
+        await _map.SetRouteAsync(reached, beyond, plan.HalfWidthKm * 1000);
+        await _map.SetRangeEndAsync(plan.StopBeforeKm > 0 ? rangeEnd : null, L["RangeEndsAt", Math.Round(plan.StopBeforeKm ?? 0)]);
+    }
+
+    private string DestinationLabel(TripDestination destination) => destination.Kind switch
+    {
+        PlaceKind.Home => L["Home"],
+        PlaceKind.Work => L["Work"],
+        PlaceKind.Other => destination.Name ?? "",
+        _ => L["DroppedPin"],
+    };
+
+    /// <summary>In Best on the way, fits the map to the route beside the pane: when a new plan comes in, not when it's the same.</summary>
+    private async Task FitToTripAsync()
+    {
+        if (!_mapReady || View != TripView || Station is not null || MapTrip is not { Path.Length: > 1 } plan
+            || ReferenceEquals(plan, _fittedPlan))
+        {
+            return;
+        }
+
+        _fittedPlan = plan;
+        if (_keepView)
+        {
+            _keepView = false;
+            return;
+        }
+
+        await _map!.FitBoundsAsync(
+            plan.Path.Min(p => p[0]), plan.Path.Min(p => p[1]), plan.Path.Max(p => p[0]), plan.Path.Max(p => p[1]), besidePane: true);
+    }
+
+    /// <summary>A press and hold on the map: a pin drops there, with its card.</summary>
+    public async Task OnMapHeldAsync(double latitude, double longitude)
+    {
+        _pin = new GeoPoint(latitude, longitude);
+        await _map!.SetPinAsync(_pin);
+        StateHasChanged();
+    }
+
+    /// <summary>The keyboard's way to a destination: a pin at the map's centre.</summary>
+    private Task DropPinAtCenterAsync() =>
+        _viewport is { } viewport ? OnMapHeldAsync(viewport.CenterLat, viewport.CenterLon) : Task.CompletedTask;
+
+    private async Task ClearPinAsync()
+    {
+        _pin = null;
+        if (_map is not null)
+        {
+            await _map.SetPinAsync(null);
+        }
+    }
+
+    /// <summary>
+    /// Opens Best on the way to a destination, planned from where the user is: the last location known, else asked for now,
+    /// else the map's centre.
+    /// </summary>
+    private async Task StartTripAsync(TripDestination destination)
+    {
+        var (origin, fromMapCenter) = Best.Origin is { } known ? (known.Point, known.IsMapCenter) : (_userLocation ?? default, false);
+        if (Best.Origin is null && _userLocation is null)
+        {
+            await LocateAsync(moveMap: false, fallBackToMontreal: false);
+            (origin, fromMapCenter) = _userLocation is { } located
+                ? (located, false)
+                : _viewport is { } viewport ? (viewport.Center, true) : (default, false);
+        }
+
+        if (origin == default)
+        {
+            return;
+        }
+
+        await ClearPinAsync();
+
+        // The trip is open once StartAsync returns its task (the plan comes after): the view can show it at once.
+        var starting = Trips.StartAsync(origin, destination, fromMapCenter);
+        await ShowTripAsync();
+        await starting;
+    }
+
+    /// <summary>
+    /// Shows Best on the way: pushed over Best near you, so Back returns to it, and otherwise in the place of the pane
+    /// open (or pushed when none is).
+    /// </summary>
+    private async Task ShowTripAsync()
+    {
+        if (View == TripView)
+        {
+            // The trip is under the details.
+            await CloseDetailsAsync();
+            return;
+        }
+
+        if (View == BestView && Station is null)
+        {
+            _tripPushed = true;
+            Navigation.NavigateTo(
+                Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = TripView, ["station"] = null }));
+            return;
+        }
+
+        await ShowListAsync(TripView);
+    }
+
+    /// <summary>Back to Best near you, keeping the trip (Forward shows it again).</summary>
+    private async Task CloseTripAsync()
+    {
+        if (View != TripView)
+        {
+            return;
+        }
+
+        if (_tripPushed)
+        {
+            _tripPushed = false;
+            await JS.InvokeVoidAsync("history.back");
+        }
+        else
+        {
+            Navigation.NavigateTo(
+                Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = BestView, ["station"] = null }), replace: true);
+        }
+    }
+
+    /// <summary>The trip bar's Close: the trip ends, back to Best near you.</summary>
+    private async Task EndTripAsync()
+    {
+        await Trips.EndAsync();
+        await CloseTripAsync();
+    }
+
+    /// <summary>Plans the trip again from where the user is now.</summary>
+    private async Task RefreshTripAsync()
+    {
+        await LocateAsync(moveMap: false, fallBackToMontreal: false);
+        if (_locationProblem is null && _userLocation is { } here)
+        {
+            await Trips.RefreshAsync(here);
+        }
+    }
+
     public Task OnMarkerClickedAsync(long id)
     {
         if (Station != id)
@@ -752,8 +1052,13 @@
         Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", id));
     }
 
-    /// <summary>Closes the top-most pane: the details, else My cars, else the list.</summary>
-    public Task OnDismissAsync() => Station is not null ? CloseDetailsAsync() : View == CarsView ? CloseCarsAsync() : CloseListAsync();
+    /// <summary>Closes what's on top: the dropped pin's card, the details, My cars, the trip (back to Best near you), else the list.</summary>
+    public Task OnDismissAsync() =>
+        _pin is not null ? ClearPinAsync()
+        : Station is not null ? CloseDetailsAsync()
+        : View == CarsView ? CloseCarsAsync()
+        : View == TripView ? CloseTripAsync()
+        : CloseListAsync();
 
     private Task ToggleListAsync(string view) => View == view && Station is null ? CloseListAsync() : ShowListAsync(view);
 
@@ -806,6 +1111,12 @@
             return;
         }
 
+        if (View == TripView && Station is null)
+        {
+            await CloseAllAsync();
+            return;
+        }
+
         if (View == CarsView && Station is null)
         {
             await CloseCarsAsync();
@@ -827,9 +1138,31 @@
         }
     }
 
-    /// <summary>My cars opens over Best near you as a history entry of its own, so Back returns to the pane.</summary>
+    /// <summary>The pump with the trip open: the whole pane closes, both history entries the page pushed with it.</summary>
+    private async Task CloseAllAsync()
+    {
+        var (tripPushed, listPushed) = (_tripPushed, _listPushed);
+        (_tripPushed, _listPushed) = (false, false);
+        if (tripPushed && listPushed)
+        {
+            await JS.InvokeVoidAsync("history.go", -2);
+        }
+        else if (!tripPushed && listPushed)
+        {
+            await JS.InvokeVoidAsync("history.back");
+        }
+        else
+        {
+            // Best near you was opened cold (or the trip replaced another pane): the trip's entry becomes the map.
+            Navigation.NavigateTo(
+                Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = null, ["station"] = null }), replace: true);
+        }
+    }
+
+    /// <summary>My cars opens over Best near you or the trip as a history entry of its own, so Back returns to the pane.</summary>
     private void ShowCars()
     {
+        _carsOverTrip = View == TripView;
         _carsPushed = true;
         Navigation.NavigateTo(
             Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = CarsView, ["station"] = null }));
@@ -939,6 +1272,18 @@
     /// <summary>Another release while the page is away or just back: it reloads by itself.</summary>
     private void OnReloadDue() => InvokeAsync(() => ReloadAsync(automatic: true));
 
+    /// <summary>A new plan, or the trip opened or ended: the map follows.</summary>
+    private void OnTripChanged() => InvokeAsync(async () =>
+    {
+        await RenderMarkersAsync();
+        await RenderTripAsync();
+        await FitToTripAsync();
+        StateHasChanged();
+    });
+
+    /// <summary>Home or Work saved or forgotten: the phone chip's "To Work" follows.</summary>
+    private void OnPlacesChanged() => InvokeAsync(StateHasChanged);
+
     /// <summary>A new Best near you: the map and the chip follow.</summary>
     private void OnBestChanged() => InvokeAsync(async () =>
     {
@@ -966,6 +1311,8 @@
         Updates.ReloadDue -= OnReloadDue;
         Best.Changed -= OnBestChanged;
         Cars.Changed -= OnCarsChanged;
+        Trips.Changed -= OnTripChanged;
+        Places.Changed -= OnPlacesChanged;
         Updates.Stop();
         _loadCts?.Cancel();
         _retryCts?.Cancel();

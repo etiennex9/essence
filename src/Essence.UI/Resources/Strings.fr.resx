@@ -420,4 +420,223 @@
   <data name="BestChipSaves" xml:space="preserve">
     <value>{0} de moins</value>
   </data>
+  <data name="BestOnTheWay" xml:space="preserve">
+    <value>Meilleur choix en chemin</value>
+  </data>
+  <data name="TripToHome" xml:space="preserve">
+    <value>Vers la maison</value>
+  </data>
+  <data name="TripToWork" xml:space="preserve">
+    <value>Vers le travail</value>
+  </data>
+  <data name="TripToPlace" xml:space="preserve">
+    <value>Vers {0}</value>
+  </data>
+  <data name="TripToPin" xml:space="preserve">
+    <value>Vers l’épingle</value>
+  </data>
+  <data name="EndTrip" xml:space="preserve">
+    <value>Retour aux stations près de vous</value>
+  </data>
+  <data name="RangeChip" xml:space="preserve">
+    <value>Autonomie {0} km · {1}</value>
+  </data>
+  <data name="RangeChipLabel" xml:space="preserve">
+    <value>Modifier l’autonomie : {0} km, entrée {1}</value>
+  </data>
+  <data name="RangeAdd" xml:space="preserve">
+    <value>Ajouter votre autonomie</value>
+  </data>
+  <data name="DetourChip" xml:space="preserve">
+    <value>Détour ≤ {0} min</value>
+  </data>
+  <data name="DetourChipLabel" xml:space="preserve">
+    <value>Détour maximal : {0} min. Modifier</value>
+  </data>
+  <data name="ShortTrip" xml:space="preserve">
+    <value>Trajet court : autonomie non vérifiée</value>
+  </data>
+  <data name="RangeAsk" xml:space="preserve">
+    <value>Un long trajet : entrez l’autonomie affichée au tableau de bord pour savoir où vous arrêter.</value>
+  </data>
+  <data name="RangeLabel" xml:space="preserve">
+    <value>Autonomie</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Enregistrer</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Annuler</value>
+  </data>
+  <data name="StopBefore" xml:space="preserve">
+    <value>Arrêtez-vous avant le km {0} :</value>
+  </data>
+  <data name="StopBeforeWhy" xml:space="preserve">
+    <value>vos {0} km d’autonomie, en gardant {1} km en réserve.</value>
+  </data>
+  <data name="NoStopNeeded" xml:space="preserve">
+    <value>Pas besoin d’arrêt :</value>
+  </data>
+  <data name="NoStopNeededWhy" xml:space="preserve">
+    <value>vos {0} km d’autonomie suffisent pour le trajet, en gardant {1} km en réserve.</value>
+  </data>
+  <data name="LowFuel" xml:space="preserve">
+    <value>Peu d’essence :</value>
+  </data>
+  <data name="LowFuelWhy" xml:space="preserve">
+    <value>avec {0} km d’autonomie, aucune station n’est à moins de vos {1} km de réserve. Voici la meilleure que vous pouvez encore atteindre.</value>
+  </data>
+  <data name="NoReachableStation" xml:space="preserve">
+    <value>Aucune station accessible sur ce trajet.</value>
+  </data>
+  <data name="KmAlong" xml:space="preserve">
+    <value>km {0}</value>
+  </data>
+  <data name="DetourMinutesKm" xml:space="preserve">
+    <value>+{0} min · détour de {1}</value>
+  </data>
+  <data name="OnYourWay" xml:space="preserve">
+    <value>Sur votre chemin</value>
+  </data>
+  <data name="NoDetour" xml:space="preserve">
+    <value>Sans détour</value>
+  </data>
+  <data name="SmallestDetour" xml:space="preserve">
+    <value>Le plus petit détour</value>
+  </data>
+  <data name="BiggestSaving" xml:space="preserve">
+    <value>Plus grosse économie</value>
+  </data>
+  <data name="TripWhy" xml:space="preserve">
+    <value>sur {0} L, détour compris, par rapport à {1}, sur votre chemin au km {2} ({3}).</value>
+  </data>
+  <data name="TripWhySmallestDetour" xml:space="preserve">
+    <value>sur {0} L, détour compris, par rapport à {1}, le plus petit détour (km {2}, {3}).</value>
+  </data>
+  <data name="TripWhyNothingSaves" xml:space="preserve">
+    <value>Aucune autre station accessible ne fait économiser {0} ou plus sur {1} L, détour compris.</value>
+  </data>
+  <data name="TripWhyDetour" xml:space="preserve">
+    <value>Celles qui font économiser plus prennent plus que votre détour maximal, {0} min.</value>
+  </data>
+  <data name="TripWhyOnly" xml:space="preserve">
+    <value>C’est la seule station sur le chemin qui affiche un prix pour le {0}.</value>
+  </data>
+  <data name="OverMinutes" xml:space="preserve">
+    <value>Plus de {0} min</value>
+  </data>
+  <data name="GoViaGoogleMaps" xml:space="preserve">
+    <value>Y passer · Google Maps</value>
+  </data>
+  <data name="GoViaNote" xml:space="preserve">
+    <value>Google Maps s’ouvre avec {0} comme arrêt en chemin.</value>
+  </data>
+  <data name="AllStationsOnTheWay" xml:space="preserve">
+    <value>Les {0} stations sur le chemin</value>
+  </data>
+  <data name="FewerStations" xml:space="preserve">
+    <value>Moins de stations</value>
+  </data>
+  <data name="StationsOnTheWay" xml:space="preserve">
+    <value>Stations sur le chemin</value>
+  </data>
+  <data name="PastYourRange" xml:space="preserve">
+    <value>Hors d’autonomie</value>
+  </data>
+  <data name="CostsMore" xml:space="preserve">
+    <value>{0} de plus</value>
+  </data>
+  <data name="TripPlannedAt" xml:space="preserve">
+    <value>Planifié à {0} d’où vous étiez.</value>
+  </data>
+  <data name="TripFromMapCenter" xml:space="preserve">
+    <value>Planifié à partir du centre de la carte.</value>
+  </data>
+  <data name="Refresh" xml:space="preserve">
+    <value>Actualiser</value>
+  </data>
+  <data name="ForgetPlace" xml:space="preserve">
+    <value>Oublier ce lieu</value>
+  </data>
+  <data name="TripUnavailable" xml:space="preserve">
+    <value>Les trajets ne sont pas disponibles en ce moment : le service d’itinéraires ne répond pas. Réessayez dans quelques minutes.</value>
+  </data>
+  <data name="TripNoRoad" xml:space="preserve">
+    <value>Aucune route près de ce point. Choisissez une destination sur une route au Québec.</value>
+  </data>
+  <data name="TripFailed" xml:space="preserve">
+    <value>Impossible de planifier ce trajet.</value>
+  </data>
+  <data name="TripRateLimited" xml:space="preserve">
+    <value>Trop de requêtes. Réessayez dans un instant.</value>
+  </data>
+  <data name="RangeEndsAt" xml:space="preserve">
+    <value>Fin de l’autonomie · km {0}</value>
+  </data>
+  <data name="MarkerNoDetour" xml:space="preserve">
+    <value>{0}, sans détour</value>
+  </data>
+  <data name="MarkerSmallestDetour" xml:space="preserve">
+    <value>{0}, le plus petit détour</value>
+  </data>
+  <data name="GoingSomewhere" xml:space="preserve">
+    <value>Vous allez quelque part?</value>
+  </data>
+  <data name="GoingSomewhereTouch" xml:space="preserve">
+    <value>Maintenez le doigt sur la carte là où vous allez.</value>
+  </data>
+  <data name="GoingSomewhereMouse" xml:space="preserve">
+    <value>Faites un clic droit sur la carte là où vous allez.</value>
+  </data>
+  <data name="UseMapCenterAsDestination" xml:space="preserve">
+    <value>Utiliser le centre de la carte comme destination</value>
+  </data>
+  <data name="PlaceHint" xml:space="preserve">
+    <value>Placez une épingle à cet endroit (maintenez le doigt sur la carte ou faites un clic droit), puis enregistrez-la comme {0}.</value>
+  </data>
+  <data name="TripsUnavailableShort" xml:space="preserve">
+    <value>Les trajets ne sont pas disponibles en ce moment.</value>
+  </data>
+  <data name="Home" xml:space="preserve">
+    <value>Maison</value>
+  </data>
+  <data name="Work" xml:space="preserve">
+    <value>Travail</value>
+  </data>
+  <data name="SavedPlacesLabel" xml:space="preserve">
+    <value>Vos lieux</value>
+  </data>
+  <data name="DroppedPin" xml:space="preserve">
+    <value>Épingle</value>
+  </data>
+  <data name="FromYou" xml:space="preserve">
+    <value>À {0} de vous</value>
+  </data>
+  <data name="RemovePin" xml:space="preserve">
+    <value>Retirer l’épingle</value>
+  </data>
+  <data name="BestOnTheWayHere" xml:space="preserve">
+    <value>Meilleur choix en chemin vers ici</value>
+  </data>
+  <data name="SaveAs" xml:space="preserve">
+    <value>Enregistrer comme {0}</value>
+  </data>
+  <data name="SavePlace" xml:space="preserve">
+    <value>Enregistrer</value>
+  </data>
+  <data name="SavePlaceLabel" xml:space="preserve">
+    <value>Enregistrer ce lieu sous un nom</value>
+  </data>
+  <data name="PlaceName" xml:space="preserve">
+    <value>Nom</value>
+  </data>
+  <data name="PlaceNamePlaceholder" xml:space="preserve">
+    <value>Chalet, gym…</value>
+  </data>
+  <data name="SavedAs" xml:space="preserve">
+    <value>Enregistré comme {0}.</value>
+  </data>
+  <data name="DetourMinutesShort" xml:space="preserve">
+    <value>+{0} min</value>
+  </data>
 </root>

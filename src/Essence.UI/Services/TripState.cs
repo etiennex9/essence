@@ -9,6 +9,7 @@ namespace Essence.UI.Services;
 /// <param name="Name">An <see cref="PlaceKind.Other"/> place's name.</param>
 public sealed record TripDestination(double Latitude, double Longitude, PlaceKind? Kind = null, string? Name = null)
 {
+    [JsonIgnore]
     public GeoPoint Point => new(Latitude, Longitude);
 
     public static TripDestination To(SavedPlace place) => new(place.Latitude, place.Longitude, place.Kind, place.Name);

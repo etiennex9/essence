@@ -1,0 +1,153 @@
+@inject SavedPlaces Places
+@inject IStringLocalizer<Strings> L
+
+@* The card for a pin dropped by a press and hold on the map (or at its centre, from the keyboard): Best on the way there,
+   or save it as Home, Work, or a place with a name. Without address search (phase 3), the pin has no address: it says how
+   far it is. *@
+<section class="pin-card" role="dialog" aria-labelledby="ess-pin-title" tabindex="-1" @ref="_element">
+    <div class="top">
+        <span class="tx">
+            <span class="kicker">@L["DroppedPin"]</span>
+            <b id="ess-pin-title">@(DistanceKm is { } km ? L["FromYou", L["DistanceApprox", Formatting.Km(km, CultureInfo.CurrentCulture)]] : Coordinates)</b>
+            @if (DistanceKm is not null)
+            {
+                <span class="sub">@Coordinates</span>
+            }
+        </span>
+        <button type="button" class="icon-btn" @onclick="OnClose" aria-label="@L["RemovePin"]" title="@L["RemovePin"]">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round"><path d="@Icons.Close" /></svg>
+        </button>
+    </div>
+
+    @if (TripsUnavailable)
+    {
+        <p class="note">@L["TripsUnavailableShort"]</p>
+    }
+    else
+    {
+        <button type="button" class="primary" @onclick="TripAsync">
+            <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Pump" /></svg>
+            @L["BestOnTheWayHere"]
+        </button>
+    }
+
+    @if (_saved is { } saved)
+    {
+        <p class="note" role="status">@L["SavedAs", NameOf(saved)]</p>
+    }
+    else if (_naming)
+    {
+        <form class="naming" @onsubmit="SaveOtherAsync">
+            <label for="ess-pin-name">@L["PlaceName"]</label>
+            <input id="ess-pin-name" type="text" maxlength="@SavedPlace.MaxNameLength" autocomplete="off" placeholder="@L["PlaceNamePlaceholder"]"
+                   @bind="_name" @bind:event="oninput" @ref="_nameInput" />
+            <button type="submit" class="save" disabled="@string.IsNullOrWhiteSpace(_name)">@L["SavePlace"]</button>
+            <button type="button" class="link" @onclick="() => _naming = false">@L["Cancel"]</button>
+        </form>
+    }
+    else
+    {
+        <div class="saves">
+            <button type="button" @onclick="() => SaveAsync(PlaceKind.Home)" aria-label="@L["SaveAs", L["Home"]]">
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Home" /></svg>
+                @L["Home"]
+            </button>
+            <button type="button" @onclick="() => SaveAsync(PlaceKind.Work)" aria-label="@L["SaveAs", L["Work"]]">
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Work" /></svg>
+                @L["Work"]
+            </button>
+            <button type="button" @onclick="StartNaming" aria-label="@L["SavePlaceLabel"]">
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round"><path d="@Icons.Plus" /></svg>
+                @L["SavePlace"]
+            </button>
+        </div>
+    }
+</section>
+
+@code {
+    private ElementReference _element;
+    private ElementReference _nameInput;
+    private GeoPoint? _shown;
+    private SavedPlace? _saved;
+    private bool _naming;
+    private bool _focusName;
+    private bool _focusCard;
+    private string _name = "";
+
+    [Parameter, EditorRequired]
+    public GeoPoint Point { get; set; }
+
+    /// <summary>Where the user is, if known: the card says how far the pin is.</summary>
+    [Parameter]
+    public GeoPoint? UserLocation { get; set; }
+
+    /// <summary>Trips can't be planned now: the pin can still be saved.</summary>
+    [Parameter]
+    public bool TripsUnavailable { get; set; }
+
+    /// <summary>The pin removed (its Close button).</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>Best on the way to the pin, or to the place it was just saved as.</summary>
+    [Parameter]
+    public EventCallback<TripDestination> OnTrip { get; set; }
+
+    private double? DistanceKm => UserLocation is { } user ? Geo.DistanceKm(user, Point) : null;
+
+    private string Coordinates => string.Create(CultureInfo.CurrentCulture, $"{Point.Latitude:0.0000}, {Point.Longitude:0.0000}");
+
+    protected override void OnParametersSet()
+    {
+        if (_shown != Point)
+        {
+            // Another pin: the card starts over, and takes the focus, so the keyboard's path leads here.
+            (_shown, _saved, _naming, _name, _focusCard) = (Point, null, false, "", true);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusCard)
+        {
+            _focusCard = false;
+            await _element.FocusAsync();
+        }
+
+        if (_focusName)
+        {
+            _focusName = false;
+            await _nameInput.FocusAsync();
+        }
+    }
+
+    private Task TripAsync() =>
+        OnTrip.InvokeAsync(_saved is { } saved ? TripDestination.To(saved) : new TripDestination(Point.Latitude, Point.Longitude));
+
+    private async Task SaveAsync(PlaceKind kind) => _saved = await Places.SaveAsync(kind, Point);
+
+    private void StartNaming() => (_naming, _focusName) = (true, true);
+
+    private async Task SaveOtherAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            return;
+        }
+
+        _naming = false;
+        _saved = await Places.SaveAsync(PlaceKind.Other, Point, _name);
+    }
+
+    private string NameOf(SavedPlace place) => place.Kind switch
+    {
+        PlaceKind.Home => L["Home"],
+        PlaceKind.Work => L["Work"],
+        _ => place.Name,
+    };
+}

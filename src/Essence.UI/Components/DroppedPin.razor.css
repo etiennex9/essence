@@ -1,0 +1,210 @@
+/* Over the map and any bottom sheet on phones; under the toolbar, left of the side panel, on wide screens. */
+.pin-card {
+    position: absolute;
+    z-index: 25;
+    left: 12px;
+    right: 12px;
+    bottom: max(16px, env(safe-area-inset-bottom));
+    padding: 14px;
+    border-radius: 16px;
+    border: 0.5px solid var(--ess-border);
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    box-shadow: var(--ess-shadow-lg);
+    font-family: var(--ess-font);
+    animation: card-in 180ms ease-out;
+}
+
+.pin-card:focus {
+    outline: none;
+}
+
+.pin-card:focus-visible {
+    outline: 2px solid var(--ess-accent);
+    outline-offset: 2px;
+}
+
+@media (min-width: 768px) {
+    .pin-card {
+        top: calc(max(12px, env(safe-area-inset-top)) + 54px);
+        right: auto;
+        bottom: auto;
+        width: 360px;
+    }
+}
+
+@keyframes card-in {
+    from {
+        transform: translateY(12px);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .pin-card {
+        animation: none;
+    }
+}
+
+.top {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+}
+
+.tx {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.kicker {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: var(--ess-text-muted);
+}
+
+.tx b {
+    margin-top: 3px;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+.sub {
+    margin-top: 2px;
+    font-size: 12.5px;
+    color: var(--ess-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.icon-btn {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    margin: -6px -6px 0 0;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ess-text-muted);
+    cursor: pointer;
+}
+
+.icon-btn:hover {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+.primary {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    width: 100%;
+    min-height: 48px;
+    margin-top: 12px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--ess-accent);
+    color: var(--ess-on-accent);
+    font: 600 15px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+.primary:hover {
+    filter: brightness(1.08);
+}
+
+.saves {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.saves button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    min-height: 44px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 10px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 600 13px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+.saves button:hover {
+    background: var(--ess-hover);
+}
+
+.naming {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.naming label {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.naming input {
+    flex: 1 1 140px;
+    min-width: 0;
+    min-height: 44px;
+    box-sizing: border-box;
+    padding: 0 10px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 10px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 400 15px var(--ess-font);
+}
+
+.save {
+    min-height: 44px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--ess-accent);
+    color: var(--ess-on-accent);
+    font: 600 14px var(--ess-font);
+    cursor: pointer;
+}
+
+.save:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.link {
+    min-height: 44px;
+    border: 0;
+    padding: 0 4px;
+    background: none;
+    color: var(--ess-accent);
+    font: 500 14px var(--ess-font);
+    cursor: pointer;
+}
+
+.note {
+    margin: 10px 0 0;
+    font-size: 13px;
+    color: var(--ess-text-muted);
+}
+
+.pin-card button:focus-visible,
+.pin-card input:focus-visible {
+    outline: 2px solid var(--ess-accent);
+    outline-offset: 2px;
+}
