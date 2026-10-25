@@ -4,7 +4,8 @@ namespace Essence.Ranking;
 /// <param name="DistanceKm">From the driver to the station, one way.</param>
 /// <param name="ExtraKm">What going there adds to the drive: near you, there and back.</param>
 /// <param name="ExtraMinutes">How long driving <paramref name="ExtraKm"/> takes.</param>
-public sealed record Candidate(long Id, decimal PriceCents, double DistanceKm, double ExtraKm, double ExtraMinutes);
+/// <param name="DurationMinutes">From the driver to the station, one way, by road; null when estimated.</param>
+public sealed record Candidate(long Id, decimal PriceCents, double DistanceKm, double ExtraKm, double ExtraMinutes, double? DurationMinutes = null);
 
 /// <param name="Cost">The fill-up with the driving it takes (<see cref="Costs.Fill"/>).</param>
 /// <param name="Saves">The reference's cost minus this one's; negative when it costs more.</param>
@@ -58,6 +59,21 @@ public static class NearYou
     /// <summary>How many other stations that save are listed, among the pickable ones and among the rest.</summary>
     public const int ListedPerGroup = 4;
 
+    /// <summary>At most this many stations are measured by road: OSRM's table is limited to 200 (osrm-routed's --max-table-size).</summary>
+    public const int MaxByRoad = 200;
+
+    /// <summary>The nearest stations measured by road whatever their price, so the closest by road is among them.</summary>
+    public const int NearestByRoad = 10;
+
+    /// <summary>A station that snaps farther than this from its road is left out by road: its coordinates are off.</summary>
+    public const double MaxStationSnapMeters = 300;
+
+    /// <summary>
+    /// Ranking by road needs the driver within this of a road; farther (a lake, the woods, past the border, where the
+    /// data has no road), the distances are estimated.
+    /// </summary>
+    public const double MaxDriverSnapMeters = 1000;
+
     /// <summary>
     /// A candidate whose distance is estimated from the straight line (× <see cref="RoadFactor"/>), there and back, at
     /// <see cref="EstimatedSpeedKmh"/>.
@@ -67,6 +83,51 @@ public static class NearYou
         var oneWayKm = straightKm * RoadFactor;
         var extraKm = 2 * oneWayKm;
         return new Candidate(id, priceCents, oneWayKm, extraKm, extraKm / EstimatedSpeedKmh * 60);
+    }
+
+    /// <summary>
+    /// The stations worth measuring by road, at most <see cref="MaxByRoad"/>: the <see cref="NearestByRoad"/> nearest, then
+    /// every one cheaper than the nearest, nearest first. A station that costs more than the nearest and is farther can't
+    /// be the pick.
+    /// </summary>
+    public static List<T> SelectByRoad<T>(IReadOnlyCollection<T> stations, Func<T, double> straightKm, Func<T, decimal> priceCents)
+    {
+        var nearestFirst = stations.OrderBy(straightKm).ToList();
+        if (nearestFirst.Count == 0)
+        {
+            return nearestFirst;
+        }
+
+        var nearestPrice = priceCents(nearestFirst[0]);
+        return [.. nearestFirst.Take(NearestByRoad)
+            .Concat(nearestFirst.Skip(NearestByRoad).Where(s => priceCents(s) < nearestPrice))
+            .Take(MaxByRoad)];
+    }
+
+    /// <summary>
+    /// Candidates by road from two tables on the same points: <paramref name="outbound"/> from the driver (its one source)
+    /// to each station, and <paramref name="back"/> from each station to the driver. A station with no road either way, or
+    /// that snaps more than <see cref="MaxStationSnapMeters"/> from its road, is left out.
+    /// </summary>
+    /// <param name="stations">The stations, in the tables' order.</param>
+    public static List<Candidate> ByRoad(IReadOnlyList<(long Id, decimal PriceCents)> stations, OsrmTable outbound, OsrmTable back)
+    {
+        var candidates = new List<Candidate>(stations.Count);
+        for (var i = 0; i < stations.Count; i++)
+        {
+            if (outbound.Destinations[i].SnapMeters > MaxStationSnapMeters
+                || outbound.DistancesMeters[0][i] is not { } thereMeters || outbound.DurationsSeconds[0][i] is not { } thereSeconds
+                || back.DistancesMeters[i][0] is not { } backMeters || back.DurationsSeconds[i][0] is not { } backSeconds)
+            {
+                continue;
+            }
+
+            candidates.Add(new Candidate(
+                stations[i].Id, stations[i].PriceCents, thereMeters / 1000, (thereMeters + backMeters) / 1000, (thereSeconds + backSeconds) / 60,
+                thereSeconds / 60));
+        }
+
+        return candidates;
     }
 
     /// <summary>Ranks the candidates (each id once) for a car; null when there are none.</summary>
