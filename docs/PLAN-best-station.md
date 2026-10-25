@@ -1,8 +1,8 @@
 # Plan: Best near you and Best on the way
 
 > **Status (2026-10-25):** designed with the owner through mockups and Q&A; every decision below was confirmed by the
-> owner. Phase 1 is built (see "Phase 1 as built" for where it differs from the steps); phases 2–4 aren't. Work in phase
-> order: each phase ships on its own and is usable without the next.
+> owner. Phases 1 and 2 are built (see "Phase 1 as built" and "Phase 2 as built" for where they differ from the steps);
+> phases 3 and 4 aren't. Work in phase order: each phase ships on its own and is usable without the next.
 > To resume: tell Claude *"Implement docs/PLAN-best-station.md, phase N"*.
 
 ## Context
@@ -277,6 +277,79 @@ station within 10 min of detour (its KmAlong ≤ StopBeforeKm); a station on an 
 above 0; a pin dropped in Ottawa or in a lake gets "No road near this point"; Best near you shows minutes; stopping the
 routing container makes trips answer 503 and Best near you fall back to estimates, and the UI hides trip mode with a
 message instead of breaking; a trip survives leaving for Google Maps and coming back.
+
+**Phase 2 as built** (where it differs from the steps above, or settles what they left open):
+- **Snapping without hints.** OSRM v26.10.0 returns every hint as zeros, and its `nearest` service ignores
+  `snapping=any`, so hints can't carry the route's snapping into the tables. A call has one snapping for all its points,
+  so the API first snaps the candidate stations alone with the profile's default (one table call, `OsrmClient.SnapAsync`:
+  their own roads, autoroutes left out), drops those more than 300 m from their road (`Snapping.OnTheirRoads`), then asks
+  for its tables with `snapping=any` on the points where the stations met their roads. The driver and a trip's ends snap
+  to any road, as the route does, and the stations stay on theirs. Best near you makes three calls (snap, there, back), a
+  trip four (route, snap, two tables). The 1 km check on the driver uses the table's source.
+- **The service-road case**, against the real data: on the A-40, the Petro-Canada on the Dorval service road reads a
+  0.1 km, 1.3 min detour (OSRM's own route through it: 0.3 km, 2 min), since the service road runs beside the autoroute
+  between ramps; above 0, as asked, and inside the "on the way" thresholds. Montréal to Québec finds 13 stations on the
+  way (1 before snapping was fixed).
+- Best near you also falls back to estimates when the driver is more than 1 km from a road (the plan only said "OSRM
+  down"), and an estimate forced by the server's failure is sent `no-store` without the import's version, or the same
+  request would get a 304 and keep it after the server was back. By road it measures the 10 nearest and every station
+  cheaper than the dearest of them (not than the nearest: the closest by road, the reference, may be another of the
+  ten, across a river). `RankedStation.DurationMin` is the one-way time by road.
+- `OsrmClient` and the response parsing live in Essence.Ranking (they need only `HttpClient`), so they're tested with a
+  stub handler in Ranking.Tests; there's no API test project. The API registers it with the standard resilience handler
+  (3 s per attempt, one retry after 200 ms, a circuit breaker that opens when half of at least 4 calls in 30 s failed,
+  for 30 s) and a 1 s connect timeout. A stopped container's name takes about 4 s to fail to resolve on Docker Desktop, which no timeout shortens: the
+  first two requests after it stops take 6–7 s, then the breaker answers in milliseconds. The health check is a `nearest`.
+- Polly's own logs are off in the API (`"Polly": "None"`): it logged every failed attempt as an error with a stack trace.
+  The `Essence.Api.Routing` category logs one line per failure, without the request path. nginx logs only critical
+  errors under `/api/`: an upstream error names the request, query string included.
+- **Contracts:** `TripPlan` adds `HalfWidthKm` (for the corridor on the map), `LongTrip` (the range counts) and
+  `ReferenceOnTheWay` (else the reference is the smallest detour); `TripStation` has `DistanceKm`, start → station by
+  road. 422s carry `point`: `from` or `to`. Points outside a Québec bounding box (44.9–62.7° N, 79.9–57° W) are refused
+  before OSRM.
+- **The range** counts only on trips of 100 km or more, in the API too (the UI always sends the car's range). Candidates
+  past the range are cut at range + half-width, not range − spare + half-width, so the low-fuel case (the whole range)
+  still has its stations, and the 5 first along the route are always kept. The bins are taken a round at a time (each
+  bin's closest, then cheapest, second closest, second and third cheapest) until 100, then the cheapest of the rest.
+  The biggest saving is also null when it saves under $0.25.
+- **Not met as written:** a pin in downtown Ottawa by the river, or at Derby Line, Vermont, is under 1 km from a Québec
+  road (Gatineau, Stanstead) and gets a trip there; south Ottawa, Edmundston, lakes and the Gulf get "No road near this
+  point". A Québec boundary test (OSM's relation, simplified) would close it.
+- **Durations** are OSRM's car profile as is: Montréal to Québec takes 3 h 26 min (about 2 h 40 by Google), since car.lua
+  drives at 80 % of posted limits (`speed_reduction`). Detour minutes are consistent with it, but the longest detour is
+  stricter than it reads. Left for the owner to decide (see the hand-over).
+- **The image:** the healthcheck is `essence-routing health`, a curl of `nearest` (curl is installed for the build), not
+  bash's `/dev/tcp`. The data also records the car profile's hash; serve warns (and still serves) when the image's
+  differs. The refresh script builds with the routing image on the host when the app has no routing container (TrueNAS
+  removes a stopped or failed app's containers) and leaves a stopped container stopped. Where `data` is a plain folder
+  rather than a dataset, the routing dataset goes at `POOL/apps/essence/routing` (README). Measured here on the October 2026 extract: 1.16 GB download (22 min at Geofabrik's rate), 1.5 min of
+  processing on 24 cores, a 6.6 GB RAM peak in osrm-extract, 909 MB of data, about 670 MB to serve it: `mem_limit: 2g`.
+- **UI navigation:** `?view=trip` is pushed over Best near you (`TripPushed`); started from the bare map or another pane, it
+  takes `ShowListAsync`'s place. The pane's Close goes back to Best near you and keeps the trip (Forward reopens it); the
+  trip bar's ✕ ends it; the pump closes the whole pane (`history.go(-2)` when both entries were pushed). Started over
+  details or My cars pushed over Best near you, the trip takes their entry and still counts as pushed. My cars over a
+  trip keeps the trip on the map (`CarsOverTrip`, in the reload state too). A trip starts from a fresh location (the
+  one known may be hours old), or from the map's centre when Best near you ranks from there.
+- **The stored trip** includes its plan, so a restored tab shows it without asking the API again (planned once); it's
+  planned again on load only when its plan doesn't answer the fuel and car (changed in another tab, or it had failed),
+  once the map is up. After a 503, trips aren't offered for 2 minutes,
+  nor while Best near you's answer is estimated.
+- **The range chip** asks inline on long trips while the car has no range, edits it on a tap, and shows the time it was
+  typed today, else the date. Typing it on the typical car sets the car up, as any change to it does.
+- **"Going somewhere?"** is a box without search until phase 3, then Home and Work (dashed until saved: a tap says how)
+  and the other places, all in one wrapping row; the hint says press and hold, or right-click with a mouse (by
+  `pointer: fine`). Other places are forgotten from the trip's footer; at most 20 are kept.
+- **The dropped pin's card** has no address until phase 3: "Dropped pin", the straight-line distance and the coordinates.
+  Save names an other place inline; a pin saved before *Best on the way here* names the trip after the place.
+- **Press and hold:** MapLibre fires `contextmenu` only after a `mousedown`, so Android's long press doesn't reach it; the
+  550 ms touch timer covers every touch device, and right-clicks cover mice.
+- **The map:** `setRoute(path, beyond, halfWidthMeters)`: the UI splits the path where the range runs out (`TripPath`).
+  The layers go over every road and area, under the labels drawn after them: OpenFreeMap's dark style has labels before
+  its roads, so "below the first symbol layer" hid the route there. The corridor fades out between zooms 10 and 13, or
+  a short trip would tint the whole map. All the trip's stations are
+  markers; those neither reachable nor saving at least $0.25 fade (the pick, the reference and the biggest saving never
+  do), and the reference takes the closest's ring and the flag "No detour" or "Smallest detour".
+- **Not checked:** Google Maps' `waypoints` with `dir_action=navigate` on Android (needs a phone).
 
 ## Phase 3: Address search (Photon)
 **Ships:** "Going somewhere?" with autocomplete, addresses for dropped pins and saved places.
