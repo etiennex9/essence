@@ -2,8 +2,8 @@
 --
 -- A station on a service road beside an autoroute would otherwise snap to the autoroute, which passes closer, and its
 -- detour would read 0 although getting there means leaving at an exit. With motorways and their ramps not start points,
--- stations snap to their own road. A trip's origin and destination still snap anywhere: the API asks for them with
--- snapping=any and passes their hints on to the table calls.
+-- stations snap to their own road. A driver and a trip's destination still snap anywhere: the API snaps the stations
+-- first, then asks for its tables with snapping=any on the points where the stations met their roads.
 
 api_version = 4
 

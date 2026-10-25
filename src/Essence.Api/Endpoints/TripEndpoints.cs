@@ -127,16 +127,18 @@ public static class TripEndpoints
             var maxKmAlong = range is not null && tripKm >= OnTheWay.LongTripKm ? range.RangeKm + halfWidthKm : (double?)null;
             var candidates = OnTheWay.SelectCandidates(near, maxKmAlong);
 
-            // 4. Start → destination and → each station, then each station → destination. The ends keep the route's snapping.
+            // 4. The stations on their own roads, then start → destination and → each station, and each station →
+            // destination. On any road, like the route, so the ends snap where the route's did.
             TripRoads? roads = new(tripKm, route.DurationSeconds / 60, []);
-            if (candidates.Count > 0)
+            var snapped = await osrm.SnapAsync([.. candidates.Select(c => new LatLon(byId[c.Id].Latitude, byId[c.Id].Longitude))], cancellationToken);
+            var onRoads = Snapping.OnTheirRoads(candidates, snapped);
+            if (onRoads.Count > 0)
             {
-                List<LatLon> points = [from, to, .. candidates.Select(c => new LatLon(byId[c.Id].Latitude, byId[c.Id].Longitude))];
-                List<string?> hints = [route.Waypoints[0].Hint, route.Waypoints[1].Hint, .. candidates.Select(_ => (string?)null)];
-                var stations = Enumerable.Range(2, candidates.Count).ToList();
-                var fromStart = await osrm.TableAsync(points, hints, [0], [1, .. stations], cancellationToken);
-                var toDestination = await osrm.TableAsync(points, hints, stations, [1], cancellationToken);
-                roads = OnTheWay.ByRoad(candidates, fromStart, toDestination);
+                List<LatLon> points = [from, to, .. onRoads.Select(s => s.OnRoad)];
+                var stations = Enumerable.Range(2, onRoads.Count).ToList();
+                var fromStart = await osrm.TableAsync(points, [0], [1, .. stations], anyRoad: true, cancellationToken);
+                var toDestination = await osrm.TableAsync(points, stations, [1], anyRoad: true, cancellationToken);
+                roads = OnTheWay.ByRoad([.. onRoads.Select(s => s.Station)], fromStart, toDestination);
                 if (roads is null)
                 {
                     return NoRoad("to", "No route to this point");

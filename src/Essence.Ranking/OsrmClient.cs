@@ -6,9 +6,9 @@ using System.Text.Json;
 namespace Essence.Ranking;
 
 /// <summary>Where OSRM put a point on its roads.</summary>
-/// <param name="Hint">Lets a later call use the same snapping (OSRM's <c>hints</c>); null when it wasn't asked for.</param>
-/// <param name="SnapMeters">From the point to the road it was snapped to.</param>
-public sealed record OsrmWaypoint(string? Hint, double SnapMeters);
+/// <param name="Location">The point on the road.</param>
+/// <param name="SnapMeters">From the point asked for to the road it was snapped to.</param>
+public sealed record OsrmWaypoint(LatLon Location, double SnapMeters);
 
 /// <param name="Geometry">The full line, encoded with precision 6 (<see cref="Polyline.Decode"/>).</param>
 /// <param name="Waypoints">The start, then the end.</param>
@@ -43,16 +43,23 @@ public sealed class OsrmException(OsrmFailure failure, string? code, string mess
 }
 
 /// <summary>
-/// Calls to an OSRM server (osrm-routed, the car profile) for Best near you and Best on the way. Every failure is an
-/// <see cref="OsrmException"/>; only cancellation by the caller throws something else. Timeouts and retries belong to the
-/// <see cref="HttpClient"/>'s handlers (the API's resilience pipeline).
+/// Calls to an OSRM server (osrm-routed with Essence's car profile) for Best near you and Best on the way. Every failure is
+/// an <see cref="OsrmException"/>; only cancellation by the caller throws something else. Timeouts and retries belong to
+/// the <see cref="HttpClient"/>'s handlers (the API's resilience pipeline).
 /// </summary>
+/// <remarks>
+/// Snapping comes two ways. By default a point snaps to the profile's start points, which leave out autoroutes, so that a
+/// station on a service road beside one snaps to its own road; with "any road", a driver or a destination snaps to the
+/// nearest road, an autoroute included. One call has one way for all its points, and OSRM 26's hints are empty, so they
+/// can't carry one call's snapping into another: stations are snapped first (<see cref="SnapAsync"/>), and their points on
+/// their roads then go into tables on any road, where they stay on those roads.
+/// </remarks>
 public sealed class OsrmClient(HttpClient http)
 {
-    /// <summary>Where a point snaps, on any road (an autoroute included), with its hint for later calls.</summary>
+    /// <summary>Where a point snaps by default (OSRM's nearest, which takes no other snapping).</summary>
     public async Task<OsrmWaypoint> NearestAsync(LatLon point, CancellationToken cancellationToken)
     {
-        using var document = await GetAsync($"nearest/v1/driving/{Format(point)}?number=1&snapping=any", cancellationToken);
+        using var document = await GetAsync($"nearest/v1/driving/{Format(point)}?number=1&generate_hints=false", cancellationToken);
         var waypoints = Waypoints(document.RootElement, "waypoints");
         return waypoints.Count > 0 ? waypoints[0] : throw Malformed("no waypoint");
     }
@@ -61,7 +68,7 @@ public sealed class OsrmClient(HttpClient http)
     public async Task<OsrmRoute> RouteAsync(LatLon from, LatLon to, CancellationToken cancellationToken)
     {
         using var document = await GetAsync(
-            $"route/v1/driving/{Format(from)};{Format(to)}?overview=full&geometries=polyline6&steps=false&snapping=any",
+            $"route/v1/driving/{Format(from)};{Format(to)}?overview=full&geometries=polyline6&steps=false&generate_hints=false&snapping=any",
             cancellationToken);
         var root = document.RootElement;
         if (!root.TryGetProperty("routes", out var routes) || routes.ValueKind != JsonValueKind.Array || routes.GetArrayLength() == 0)
@@ -84,30 +91,40 @@ public sealed class OsrmClient(HttpClient http)
     }
 
     /// <summary>
-    /// The road distances and durations from each source to each destination, both given as indices into
-    /// <paramref name="points"/>. A point with a hint (from an earlier call) keeps that call's snapping; the others snap to
-    /// the profile's start points, which leave out autoroutes.
+    /// Where each point snaps by default, autoroutes left out: the stations' own roads. One table call, whose distances
+    /// aren't needed.
     /// </summary>
-    public async Task<OsrmTable> TableAsync(
-        IReadOnlyList<LatLon> points,
-        IReadOnlyList<string?> hints,
-        IReadOnlyList<int> sources,
-        IReadOnlyList<int> destinations,
-        CancellationToken cancellationToken)
+    public async Task<IReadOnlyList<OsrmWaypoint>> SnapAsync(IReadOnlyList<LatLon> points, CancellationToken cancellationToken)
     {
-        if (hints.Count != points.Count)
+        if (points.Count == 0)
         {
-            throw new ArgumentException("One hint (or null) per point.", nameof(hints));
+            return [];
         }
 
+        var table = await TableAsync(points, [0], [.. Enumerable.Range(0, points.Count)], anyRoad: false, cancellationToken);
+        return table.Destinations;
+    }
+
+    /// <summary>
+    /// The road distances and durations from each source to each destination, both given as indices into
+    /// <paramref name="points"/>.
+    /// </summary>
+    /// <param name="anyRoad">The points snap to any road, an autoroute included; otherwise to the profile's start points.</param>
+    public async Task<OsrmTable> TableAsync(
+        IReadOnlyList<LatLon> points,
+        IReadOnlyList<int> sources,
+        IReadOnlyList<int> destinations,
+        bool anyRoad,
+        CancellationToken cancellationToken)
+    {
         var path = new StringBuilder("table/v1/driving/")
             .AppendJoin(';', points.Select(Format))
             .Append("?annotations=distance,duration&generate_hints=false")
             .Append("&sources=").AppendJoin(';', sources)
             .Append("&destinations=").AppendJoin(';', destinations);
-        if (hints.Any(h => h is not null))
+        if (anyRoad)
         {
-            path.Append("&hints=").AppendJoin(';', hints.Select(h => h ?? ""));
+            path.Append("&snapping=any");
         }
 
         using var document = await GetAsync(path.ToString(), cancellationToken);
@@ -182,10 +199,15 @@ public sealed class OsrmClient(HttpClient http)
             throw Malformed($"no {name}");
         }
 
-        return [.. array.EnumerateArray().Select(w => new OsrmWaypoint(
-            w.TryGetProperty("hint", out var hint) && hint.ValueKind == JsonValueKind.String ? hint.GetString() : null,
-            Number(w, "distance")))];
+        return [.. array.EnumerateArray().Select(w => new OsrmWaypoint(Location(w), Number(w, "distance")))];
     }
+
+    /// <summary>OSRM's [longitude, latitude].</summary>
+    private static LatLon Location(JsonElement waypoint) =>
+        waypoint.TryGetProperty("location", out var location) && location.ValueKind == JsonValueKind.Array
+            && location.GetArrayLength() == 2 && location[0].ValueKind == JsonValueKind.Number && location[1].ValueKind == JsonValueKind.Number
+            ? new LatLon(location[1].GetDouble(), location[0].GetDouble())
+            : throw Malformed("a waypoint without a location");
 
     private static double?[][] Matrix(JsonElement root, string name)
     {

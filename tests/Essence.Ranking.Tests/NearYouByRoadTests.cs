@@ -32,20 +32,13 @@ public class NearYouByRoadTests
     public void Candidates_by_road_count_there_and_back()
     {
         (long, decimal)[] stations = [(1, 166.9m), (2, 155.9m), (3, 160m), (4, 158m)];
-        var outbound = new OsrmTable(
-            [[800, 9_000, null, 2_000]],
-            [[96, 960, null, 200]],
-            [new("u", 4)],
-            [new(null, 5), new(null, 30), new(null, 10), new(null, 301)]);
-        var back = new OsrmTable(
-            [[1_100], [9_400], [3_000], [2_100]],
-            [[120], [1_000], [300], [210]],
-            [new(null, 5), new(null, 30), new(null, 10), new(null, 301)],
-            [new("u", 4)]);
+        OsrmWaypoint[] onRoads = [.. Enumerable.Repeat(new OsrmWaypoint(new(45.5, -73.5), 0), 4)];
+        var outbound = new OsrmTable([[800, 9_000, null, 2_000]], [[96, 960, null, 200]], [onRoads[0]], onRoads);
+        var back = new OsrmTable([[1_100], [9_400], [3_000], [null]], [[120], [1_000], [300], [null]], onRoads, [onRoads[0]]);
 
         var candidates = NearYou.ByRoad(stations, outbound, back);
 
-        // 3 has no road there, and 4 snaps 301 m from its road.
+        // 3 has no road there, and 4 none back.
         Assert.Equal(
             [new Candidate(1, 166.9m, 0.8, 1.9, 216 / 60.0, 96 / 60.0), new Candidate(2, 155.9m, 9, 18.4, 1_960 / 60.0, 16)],
             candidates);

@@ -34,6 +34,8 @@ public class OnTheWayTests
 
     private static RankedTripCandidate Find(TripRanking ranking, long id) => Assert.Single(ranking.Ranked, r => r.Id == id);
 
+    private static OsrmWaypoint Waypoint(double snapMeters) => new(new LatLon(45.5, -73.5), snapMeters);
+
     [Fact]
     public void With_180_km_of_range_the_road_trip_stops_before_km_150_at_the_best_value_within_10_min()
     {
@@ -269,22 +271,22 @@ public class OnTheWayTests
     {
         RouteStation[] stations = [new(Shell, 164.4m, 125, 0.1), new(Sonic, 156.9m, 90, 4), new(Costco, 154.9m, 220, 1)];
         var fromStart = new OsrmTable(
-            [[250_000, 125_100, 95_000, 221_000]],
-            [[9_000, 4_510, 3_600, 7_980]],
-            [new("o", 3)],
-            [new(null, 12), new(null, 8), new(null, 20), new(null, 450)]);
+            [[250_000, 125_100, 95_000, null]],
+            [[9_000, 4_510, 3_600, null]],
+            [Waypoint(3)],
+            [Waypoint(12), Waypoint(0), Waypoint(0), Waypoint(0)]);
         var toDestination = new OsrmTable(
             [[124_900], [null], [29_500]],
             [[4_490], [3_000], [1_100]],
-            [new(null, 8), new(null, 20), new(null, 450)],
-            [new(null, 12)]);
+            [Waypoint(0), Waypoint(0), Waypoint(0)],
+            [Waypoint(12)]);
 
         var roads = OnTheWay.ByRoad(stations, fromStart, toDestination)!;
 
         Assert.Equal(250, roads.DirectKm);
         Assert.Equal(150, roads.DirectMinutes);
 
-        // Sonic has no road on to the destination, and Costco snaps 450 m from its road.
+        // Sonic has no road on to the destination, and Costco none from the start.
         var shell = Assert.Single(roads.Candidates);
         Assert.Equal(new TripCandidate(Shell, 164.4m, 125, 125.1, 4_510 / 60.0, 124.9, 4_490 / 60.0), shell);
     }
@@ -292,8 +294,8 @@ public class OnTheWayTests
     [Fact]
     public void No_road_to_the_destination_has_no_road_distances()
     {
-        var fromStart = new OsrmTable([[null, 1_000]], [[null, 60]], [new("o", 3)], [new(null, 5), new(null, 5)]);
-        var toDestination = new OsrmTable([[null]], [[null]], [new(null, 5)], [new(null, 5)]);
+        var fromStart = new OsrmTable([[null, 1_000]], [[null, 60]], [Waypoint(3)], [Waypoint(5), Waypoint(5)]);
+        var toDestination = new OsrmTable([[null]], [[null]], [Waypoint(5)], [Waypoint(5)]);
 
         Assert.Null(OnTheWay.ByRoad([new(Shell, 164.4m, 1, 0.1)], fromStart, toDestination));
     }

@@ -270,9 +270,9 @@ public static class StationEndpoints
     }
 
     /// <summary>
-    /// Best near you by road: the driver snapped to any road (an autoroute included), then one table from the driver to the
-    /// stations and one back. Null, for the estimate instead, when the routing server fails, the driver is more than
-    /// <see cref="NearYou.MaxDriverSnapMeters"/> from a road, or no station has a road there and back.
+    /// Best near you by road: the stations snapped to their own roads, then one table from the driver to them and one
+    /// back, the driver on any road (an autoroute included). Null, for the estimate instead, when the routing server fails,
+    /// the driver is more than <see cref="NearYou.MaxDriverSnapMeters"/> from a road, or no station has a road there and back.
     /// </summary>
     private static async Task<NearbyRanking?> RankByRoadAsync(
         OsrmClient osrm,
@@ -291,18 +291,23 @@ public static class StationEndpoints
 
         try
         {
-            var snapped = await osrm.NearestAsync(driver, cancellationToken);
-            if (snapped.SnapMeters > NearYou.MaxDriverSnapMeters)
+            var snapped = await osrm.SnapAsync([.. measured.Select(s => new LatLon(s.Station.Latitude, s.Station.Longitude))], cancellationToken);
+            var onRoads = Snapping.OnTheirRoads(measured, snapped);
+            if (onRoads.Count == 0)
             {
                 return null;
             }
 
-            List<LatLon> points = [driver, .. measured.Select(s => new LatLon(s.Station.Latitude, s.Station.Longitude))];
-            List<string?> hints = [snapped.Hint, .. measured.Select(_ => (string?)null)];
-            var stations = Enumerable.Range(1, measured.Count).ToList();
-            var outbound = await osrm.TableAsync(points, hints, [0], stations, cancellationToken);
-            var back = await osrm.TableAsync(points, hints, stations, [0], cancellationToken);
-            var candidates = NearYou.ByRoad([.. measured.Select(s => (s.Station.Id, s.PriceCents))], outbound, back);
+            List<LatLon> points = [driver, .. onRoads.Select(s => s.OnRoad)];
+            var stations = Enumerable.Range(1, onRoads.Count).ToList();
+            var outbound = await osrm.TableAsync(points, [0], stations, anyRoad: true, cancellationToken);
+            if (outbound.Sources[0].SnapMeters > NearYou.MaxDriverSnapMeters)
+            {
+                return null;
+            }
+
+            var back = await osrm.TableAsync(points, stations, [0], anyRoad: true, cancellationToken);
+            var candidates = NearYou.ByRoad([.. onRoads.Select(s => (s.Station.Station.Id, s.Station.PriceCents))], outbound, back);
             return NearYou.Rank(candidates, car, maxDetourMin, byRoad: true);
         }
         catch (OsrmException ex)

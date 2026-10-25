@@ -65,9 +65,6 @@ public static class NearYou
     /// <summary>The nearest stations measured by road whatever their price, so the closest by road is among them.</summary>
     public const int NearestByRoad = 10;
 
-    /// <summary>A station that snaps farther than this from its road is left out by road: its coordinates are off.</summary>
-    public const double MaxStationSnapMeters = 300;
-
     /// <summary>
     /// Ranking by road needs the driver within this of a road; farther (a lake, the woods, past the border, where the
     /// data has no road), the distances are estimated.
@@ -106,8 +103,8 @@ public static class NearYou
 
     /// <summary>
     /// Candidates by road from two tables on the same points: <paramref name="outbound"/> from the driver (its one source)
-    /// to each station, and <paramref name="back"/> from each station to the driver. A station with no road either way, or
-    /// that snaps more than <see cref="MaxStationSnapMeters"/> from its road, is left out.
+    /// to each station, and <paramref name="back"/> from each station to the driver. A station with no road either way is
+    /// left out.
     /// </summary>
     /// <param name="stations">The stations, in the tables' order.</param>
     public static List<Candidate> ByRoad(IReadOnlyList<(long Id, decimal PriceCents)> stations, OsrmTable outbound, OsrmTable back)
@@ -115,8 +112,7 @@ public static class NearYou
         var candidates = new List<Candidate>(stations.Count);
         for (var i = 0; i < stations.Count; i++)
         {
-            if (outbound.Destinations[i].SnapMeters > MaxStationSnapMeters
-                || outbound.DistancesMeters[0][i] is not { } thereMeters || outbound.DurationsSeconds[0][i] is not { } thereSeconds
+            if (outbound.DistancesMeters[0][i] is not { } thereMeters || outbound.DurationsSeconds[0][i] is not { } thereSeconds
                 || back.DistancesMeters[i][0] is not { } backMeters || back.DurationsSeconds[i][0] is not { } backSeconds)
             {
                 continue;

@@ -166,8 +166,8 @@ public static class OnTheWay
     /// <summary>
     /// The trip's road distances from two tables on the same points (start, destination, stations): <paramref name="fromStart"/>
     /// from the start (its one source) to the destination then each station, and <paramref name="toDestination"/> from each
-    /// station to the destination. A station with no road either way, or that snaps more than
-    /// <see cref="NearYou.MaxStationSnapMeters"/> from its road, is left out. Null when there's no road to the destination.
+    /// station to the destination. A station with no road either way is left out. Null when there's no road to the
+    /// destination.
     /// </summary>
     /// <param name="stations">The stations, in the tables' order.</param>
     public static TripRoads? ByRoad(IReadOnlyList<RouteStation> stations, OsrmTable fromStart, OsrmTable toDestination)
@@ -180,8 +180,7 @@ public static class OnTheWay
         var candidates = new List<TripCandidate>(stations.Count);
         for (var i = 0; i < stations.Count; i++)
         {
-            if (fromStart.Destinations[i + 1].SnapMeters > NearYou.MaxStationSnapMeters
-                || fromStart.DistancesMeters[0][i + 1] is not { } toMeters || fromStart.DurationsSeconds[0][i + 1] is not { } toSeconds
+            if (fromStart.DistancesMeters[0][i + 1] is not { } toMeters || fromStart.DurationsSeconds[0][i + 1] is not { } toSeconds
                 || toDestination.DistancesMeters[i][0] is not { } onwardMeters || toDestination.DurationsSeconds[i][0] is not { } onwardSeconds)
             {
                 continue;
