@@ -1,7 +1,8 @@
 # Plan: Best near you and Best on the way
 
-> **Status (2026-10-24):** designed with the owner through mockups and Q&A; nothing is built yet. Every decision below was
-> confirmed by the owner. Work in phase order: each phase ships on its own and is usable without the next.
+> **Status (2026-10-25):** designed with the owner through mockups and Q&A; every decision below was confirmed by the
+> owner. Phase 1 is built (see "Phase 1 as built" for where it differs from the steps); phases 2–4 aren't. Work in phase
+> order: each phase ships on its own and is usable without the next.
 > To resume: tell Claude *"Implement docs/PLAN-best-station.md, phase N"*.
 
 ## Context
@@ -65,13 +66,16 @@ browser ──/api/──> nginx (web) ──> Essence.Api ──> PostgreSQL (r
   prices, keyed on the latest import (make `DataVersion.LatestAsync` internal and reuse it), behind a `SemaphoreSlim` so
   a new import loads once. Filtering (status, availability, Costco) happens on the snapshot. `/stations/nearby` can't be
   reused: it returns the 100 closest, which in Montréal covers only a few km, and it checks neither status nor
-  availability. The Costco test uses the brand slug: move `BrandCatalog.Slugify` into Essence.Contracts so the API and
-  the UI share it.
+  availability. The Costco test uses the brand slug: `Slugify` moved into Essence.Contracts (`Brands.Slugify`,
+  `Brands.IsMembersOnly`) so the API and the UI share it. The snapshot sets each station's `MembersOnly` when it loads, so
+  Essence.Ranking only takes a members-only flag and keeps no dependency.
 - **Contracts** (positional `sealed record`s, shared with the UI; each needs a `[JsonSerializable]` in the UI's
   `EssenceJsonContext`). Money is `decimal`, each cost rounded to the cent (`MidpointRounding.AwayFromZero`), and Saves is
   the difference of the rounded costs, so the hero's figure matches the tiles. Sketch, to refine while building:
-  - `BestNearby(RankedStation? Pick, long? ReferenceId, long? ClosestId, long? CheapestId, IReadOnlyList<RankedStation> Stations, double RadiusKm, bool ByRoad)`
-  - `RankedStation(Id, Name, Brand, Address, Latitude, Longitude, PriceCents, DistanceKm, DurationMin?, CostDollars, SavesDollars, MembersOnly)`
+  - `BestNearby(RankedStation? Pick, long? ReferenceId, long? ClosestId, long? CheapestId, IReadOnlyList<RankedStation> Stations, double? RadiusKm, bool ByRoad)`
+    (`RadiusKm` null: nothing priced within 25 km, `Stations` holds the closest priced station at any distance)
+  - `RankedStation(Id, Name, Brand, Address, Latitude, Longitude, PriceCents, DistanceKm, DurationMin?, CostDollars, SavesDollars, MembersOnly, OverDetourLimit, SavingUncertain)`
+    (the last two say why a station that saves isn't the pick)
   - `TripPlan(double[][] Path, double DistanceKm, double DurationMin, double? StopBeforeKm, bool LowFuel, IReadOnlyList<TripStation> Stations, long? PickId, long? ReferenceId, long? BiggestSavingId)` (`Path` is [lon, lat] pairs, simplified)
   - `TripStation(…RankedStation fields…, KmAlong, DetourKm, DetourMin, Reachable, OverDetourLimit)`
   - `PlaceSuggestion(Label, Detail, Latitude, Longitude, Kind)`
@@ -138,7 +142,8 @@ straight line × 1.3, shown with "≈", until phase 2.
 7. **Map** (`essenceMap.js`, `MapInterop`):
    - The ranked stations are merged into the marker models in `RenderMarkersAsync`. A station 9 km away is usually not
      in `StationViewport`, and `setMarkers` deletes any marker it isn't given.
-   - `setEmphasis(pickId, closestId, dimOthers)` toggling `is-best`, `is-closest`, `is-dimmed` like `setSelected`, also
+   - `setEmphasis(pickId, closestId, listedIds, bestFlag, closestFlag)` toggling `is-best`, `is-closest`, `is-dimmed` (the
+     markers not in `listedIds`) like `setSelected`, with the flags' text localized by C#, also
      applied in `renderMarker`; CSS for the "BEST VALUE" flag and the closest ring, and the compact-zoom selectors
      extended so the pick stays a pill. "Best value" and "closest" also go in the markers' `aria-label` (`ToMarker`).
    - `fitBounds(w, s, e, n, besidePane)` with padding from `uncoveredArea()`, counted in `pendingMoves`.
@@ -153,6 +158,22 @@ shows up only with `costco=true`; the pick is never across the river from the us
 factor; a station whose round trip is more than 10 min longer than the closest's is listed but not picked; the pane matches the mockup at 390 px and on desktop, in both languages; switching car or fuel re-ranks; the pick
 has a marker even when it's outside the viewport fetch; the chip disappears while a pane is open; Back from My cars
 returns to the pane; a release reload reopens the pane.
+
+**Phase 1 as built** (where it differs from the steps above, or settles what they left open):
+- The 2.0-factor safety rule recomputes both the station's and the closest's cost with roads twice the straight line.
+- The response lists the pick, the closest, the cheapest, and the 4 lowest-cost stations that save among those that could
+  be picked, then 4 among those that can't (past the longest detour, or uncertain by road): those mark the reason. The
+  pane's "Also worth it" shows 3, pickable ones first. When the closest stays the pick although another saves, the hero
+  says why (the longest detour, or distances being estimated) instead of "About the same".
+- The pump opens the pane at once and then asks for the location (the pane shows "Finding your location…"), rather than
+  opening it once located.
+- `BestNearYou` asks as soon as the location is known, pane open or not, so the phone chip has a pick.
+- My cars saves each change as it's made, so its button is Done rather than the mockup's Save. The car profile has no
+  range fields yet: phase 2 adds the typed range and its time.
+- The phone chip has shorter texts of its own (French didn't fit), with the distance beside "Best near you". The status
+  chip's empty live region no longer takes room in `.status-slot`, so the chip sits right under the toolbar.
+- The Google Maps link asks for driving directions (`travelmode=driving`); the hero's Go adds `dir_action=navigate`.
+- A release reload that reopens Best near you keeps the view it had instead of fitting the map again.
 
 ## Phase 2: Road distances and Best on the way
 **Ships:** distances and minutes by road in Best near you; trip mode with a dropped pin or a saved place as destination.
