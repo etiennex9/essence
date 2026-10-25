@@ -23,7 +23,7 @@ const HOLD_SLOP_PX = 10;
 const HOLD_REPEAT_MS = 800;
 const HOLD_CLICK_MS = 700;
 
-// A trip's route (setRoute): GeoJSON sources and layers drawn under the style's labels.
+// A trip's route (setRoute): GeoJSON sources and layers drawn over the roads, under the labels.
 const ROUTE_SOURCE = "ess-route";
 const BEYOND_SOURCE = "ess-route-beyond";
 const ROUTE_LAYERS = ["ess-route-corridor", "ess-route-casing", "ess-route-line", "ess-route-beyond-casing", "ess-route-beyond"];
@@ -273,8 +273,8 @@ export function createMap(container, options, dotnet) {
         }
     }
 
-    // The route under the style's first labels, in the theme's accent; past the range, dashed grey. A new style (the dark
-    // mode switching) drops custom layers, so they're added again on each style.load.
+    // The route under the style's labels, in the theme's accent; past the range, dashed grey. A new style (the dark mode
+    // switching) drops custom layers, so they're added again on each style.load.
     function addRouteLayers() {
         if (!styleReady) {
             return;
@@ -285,7 +285,10 @@ export function createMap(container, options, dotnet) {
             return;
         }
 
-        const before = map.getStyle().layers.find(l => l.type === "symbol")?.id;
+        // Over every road and area, under the labels drawn after them: the dark style has labels before its roads.
+        const layers = map.getStyle().layers;
+        const lastShape = layers.findLastIndex(l => l.type !== "symbol");
+        const before = layers.slice(lastShape + 1).find(l => l.type === "symbol")?.id;
         const accent = cssColor("--ess-accent", "#185fa5");
         const casing = cssColor("--ess-surface", "#ffffff");
         const round = { "line-cap": "round", "line-join": "round" };
