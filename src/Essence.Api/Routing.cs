@@ -16,9 +16,14 @@ public static class OsrmRouting
     /// <summary>An answer within this, or the attempt is given up; one retry. A trip takes three calls.</summary>
     private static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(3);
 
+    /// <summary>Connecting to the server, within an attempt.</summary>
+    private static readonly TimeSpan ConnectTimeout = TimeSpan.FromSeconds(1);
+
     /// <summary>
     /// The <see cref="OsrmClient"/> for the routing container, with a resilience pipeline: about 3 s per attempt and one
-    /// retry, and a circuit breaker so that while the server is down, Best near you falls back to estimates at once.
+    /// retry, and a circuit breaker so that while the server is down, Best near you falls back to estimates at once. A
+    /// stopped container's name can take seconds to fail to resolve (4 s on Docker Desktop), which no timeout here
+    /// shortens: the breaker opens after the first few failures and tries again every 30 s.
     /// </summary>
     public static IServiceCollection AddOsrmRouting(this IServiceCollection services, IConfiguration configuration)
     {
@@ -34,6 +39,12 @@ public static class OsrmRouting
                 client.Timeout = Timeout.InfiniteTimeSpan; // The resilience pipeline owns timeouts.
                 client.MaxResponseContentBufferSize = 16 * 1024 * 1024;
             })
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+            {
+                // The server is a container away: one that doesn't answer a connection fails the attempt early.
+                ConnectTimeout = ConnectTimeout,
+                PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+            })
             .AddStandardResilienceHandler(o =>
             {
                 o.AttemptTimeout.Timeout = AttemptTimeout;
@@ -42,7 +53,7 @@ public static class OsrmRouting
                 o.TotalRequestTimeout.Timeout = AttemptTimeout * 2 + TimeSpan.FromSeconds(1);
                 o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
                 o.CircuitBreaker.MinimumThroughput = 4;
-                o.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(15);
+                o.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
             });
         return services;
     }
