@@ -33,6 +33,9 @@ public sealed class TripState : IDisposable
     private readonly ISessionStore _session;
     private readonly TimeProvider _time;
     private CancellationTokenSource? _planCts;
+
+    /// <summary>What the request on its way asks; <see cref="PlanQuery"/> stays what <see cref="Plan"/> answers until it's in.</summary>
+    private TripQuery? _pendingQuery;
     private DateTimeOffset? _unavailableAt;
     private Task? _loading;
 
@@ -100,43 +103,37 @@ public sealed class TripState : IDisposable
         }
 
         (Origin, FromMapCenter) = (origin, fromMapCenter);
-        PlanQuery = null;
-        await PlanAsync();
+        await PlanAsync(force: true);
     }
 
     /// <summary>Asks again after a failure.</summary>
-    public Task RetryAsync()
-    {
-        PlanQuery = null;
-        return PlanAsync();
-    }
+    public Task RetryAsync() => PlanAsync(force: true);
 
     /// <summary>Closes the trip: back to Best near you.</summary>
     public async Task EndAsync()
     {
         _planCts?.Cancel();
         (Destination, Origin, FromMapCenter) = (null, null, false);
-        (Plan, PlanQuery, PlannedAt, Error, Loading) = (null, null, null, ApiError.None, false);
+        (Plan, PlanQuery, PlannedAt, Error, Loading, _pendingQuery) = (null, null, null, ApiError.None, false, null);
         await _session.RemoveAsync(StorageKey);
         Changed?.Invoke();
     }
 
+    /// <summary>
+    /// The map's fuel. With a trip open, it's planned again when its plan doesn't answer the fuel and the car any more:
+    /// after either changed, and after a restored trip whose plan was missing or for other inputs.
+    /// </summary>
     public Task SetFuelAsync(string fuel)
     {
-        if (fuel == Fuel)
-        {
-            return Task.CompletedTask;
-        }
-
         Fuel = fuel;
         return PlanAsync();
     }
 
     /// <summary>
-    /// Plans the open trip for the current inputs, unless its plan already answers them. A newer call cancels an older
-    /// one still on its way.
+    /// Plans the open trip for the current inputs, unless its plan already answers them (or, with
+    /// <paramref name="force"/>, even then). A newer call cancels an older one still on its way.
     /// </summary>
-    private async Task PlanAsync()
+    private async Task PlanAsync(bool force = false)
     {
         if (Destination is not { } destination || Origin is not { } origin)
         {
@@ -148,14 +145,14 @@ public sealed class TripState : IDisposable
         var query = new TripQuery(
             origin.Latitude, origin.Longitude, destination.Latitude, destination.Longitude, Fuel, car.FillLitres, car.LitresPer100Km,
             car.CostcoMember, car.MaxDetourMinutes, car.RangeKm, car.SpareKm);
-        if (query == PlanQuery && (Loading || (Plan is not null && Error == ApiError.None)))
+        if (!force && ((Loading && query == _pendingQuery) || (!Loading && query == PlanQuery && Plan is not null && Error == ApiError.None)))
         {
             return;
         }
 
         _planCts?.Cancel();
         var cts = _planCts = new CancellationTokenSource();
-        PlanQuery = query;
+        _pendingQuery = query;
         (Loading, Error) = (true, ApiError.None);
         Changed?.Invoke();
 
@@ -174,17 +171,17 @@ public sealed class TripState : IDisposable
             return;
         }
 
-        Loading = false;
+        (Loading, _pendingQuery) = (false, null);
         Error = result.Error;
         _unavailableAt = result.Error == ApiError.Unavailable ? _time.GetUtcNow() : null;
         if (result.Value is { } plan)
         {
-            (Plan, PlannedAt) = (plan, _time.GetUtcNow());
+            (Plan, PlanQuery, PlannedAt) = (plan, query, _time.GetUtcNow());
         }
         else
         {
             // A plan for other inputs would mislead.
-            (Plan, PlannedAt) = (null, null);
+            (Plan, PlanQuery, PlannedAt) = (null, null, null);
         }
 
         await SaveAsync();
@@ -227,7 +224,7 @@ public sealed class TripState : IDisposable
             ? _session.SetAsync(
                 StorageKey,
                 JsonSerializer.Serialize(
-                    new StoredTrip(destination, origin, FromMapCenter, Plan is null ? null : PlanQuery, Plan, PlannedAt),
+                    new StoredTrip(destination, origin, FromMapCenter, PlanQuery, Plan, PlannedAt),
                     TripStateJsonContext.Default.StoredTrip))
             : ValueTask.CompletedTask;
 

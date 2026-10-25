@@ -29,8 +29,8 @@ public class TripStateTests
 
     public TripStateTests() => _cars = new CarProfiles(_preferences);
 
-    private TripState NewTrip() =>
-        new(new EssenceApiClient(new HttpClient(new StubHandler(this)) { BaseAddress = new Uri("http://api.test/") }), _cars, _session, _time);
+    private TripState NewTrip(CarProfiles? cars = null) =>
+        new(new EssenceApiClient(new HttpClient(new StubHandler(this)) { BaseAddress = new Uri("http://api.test/") }), cars ?? _cars, _session, _time);
 
     [Fact]
     public async Task A_trip_is_planned_from_the_start_for_the_car()
@@ -119,6 +119,41 @@ public class TripStateTests
 
         Assert.Equal(2, _requests.Count);
         Assert.Contains("fuel=Diesel", _requests[1].Query);
+    }
+
+    [Fact]
+    public async Task A_restored_trip_whose_car_changed_meanwhile_is_planned_again()
+    {
+        var trip = NewTrip();
+        await trip.StartAsync(Montreal, Quebec);
+        trip.Dispose();
+
+        // Another tab typed the range.
+        var cars = new CarProfiles(_preferences);
+        await cars.SetRangeAsync(250, _time.GetUtcNow());
+        var restored = NewTrip(cars);
+        await restored.LoadAsync();
+        await restored.SetFuelAsync(Fuels.Default);
+
+        Assert.Equal(2, _requests.Count);
+        Assert.Contains("&rangeKm=250&", _requests[1].Query);
+    }
+
+    [Fact]
+    public async Task A_restored_trip_that_had_failed_is_planned_again()
+    {
+        _status = HttpStatusCode.ServiceUnavailable;
+        var trip = NewTrip();
+        await trip.StartAsync(Montreal, Quebec);
+        trip.Dispose();
+
+        _status = HttpStatusCode.OK;
+        var restored = NewTrip();
+        await restored.LoadAsync();
+        await restored.SetFuelAsync(Fuels.Default);
+
+        Assert.Equal(2, _requests.Count);
+        Assert.NotNull(restored.Plan);
     }
 
     [Fact]

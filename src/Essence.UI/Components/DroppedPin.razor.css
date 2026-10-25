@@ -84,9 +84,9 @@
     flex: none;
     display: grid;
     place-items: center;
-    width: 36px;
-    height: 36px;
-    margin: -6px -6px 0 0;
+    width: 44px;
+    height: 44px;
+    margin: -10px -10px 0 0;
     border: 0;
     border-radius: 50%;
     background: transparent;

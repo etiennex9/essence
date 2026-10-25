@@ -19,9 +19,13 @@ const HOLD_MS = 550;
 const HOLD_SLOP_PX = 10;
 
 // Android fires contextmenu around when the touch timer does: a second hold this soon after is the same one. The click
-// that ends a hold mustn't count as a click on the map, which would close the pane.
+// that ends a hold (when the finger lifts, however long after) mustn't count as a click on the map, which would close the
+// pane.
 const HOLD_REPEAT_MS = 800;
 const HOLD_CLICK_MS = 700;
+
+// What a press and hold on doesn't drop a pin: a marker, or the map's own buttons.
+const NOT_HELD = ".ess-marker, .maplibregl-ctrl";
 
 // A trip's route (setRoute): GeoJSON sources and layers drawn over the roads, under the labels.
 const ROUTE_SOURCE = "ess-route";
@@ -101,6 +105,7 @@ export function takeSavedView() {
         listPushed: view.listPushed === true,
         carsPushed: view.carsPushed === true,
         tripPushed: view.tripPushed === true,
+        carsOverTrip: view.carsOverTrip === true,
     };
 }
 
@@ -147,7 +152,6 @@ export function createMap(container, options, dotnet) {
 
     // The trip on the map: its route (null: none), destination, where the range runs out, and a dropped pin.
     let route = null;
-    let styleReady = false;
     let destinationMarker = null;
     let rangeEndMarker = null;
     let pinMarker = null;
@@ -155,6 +159,7 @@ export function createMap(container, options, dotnet) {
     // Press and hold.
     let holdTimer = 0;
     let holdStart = null;
+    let heldThisTouch = false;
     let lastHoldAt = 0;
     let swallowClickUntil = 0;
 
@@ -207,13 +212,14 @@ export function createMap(container, options, dotnet) {
         }
 
         lastHoldAt = now;
+        heldThisTouch = true;
         swallowClickUntil = now + HOLD_CLICK_MS;
         const { lng, lat } = map.unproject(point);
         call("OnMapHeld", lat, lng);
     }
 
     function onContextMenu(e) {
-        if (e.originalEvent.target.closest?.(".ess-marker")) {
+        if (e.originalEvent.target.closest?.(NOT_HELD)) {
             return;
         }
 
@@ -228,7 +234,8 @@ export function createMap(container, options, dotnet) {
 
     function onTouchStart(e) {
         cancelHold();
-        if (e.touches.length !== 1 || e.target.closest?.(".ess-marker")) {
+        heldThisTouch = false;
+        if (e.touches.length !== 1 || e.target.closest?.(NOT_HELD)) {
             return;
         }
 
@@ -239,6 +246,14 @@ export function createMap(container, options, dotnet) {
             holdTimer = 0;
             held(holdStart.point);
         }, HOLD_MS);
+    }
+
+    function onTouchEnd() {
+        cancelHold();
+        if (heldThisTouch) {
+            heldThisTouch = false;
+            swallowClickUntil = Date.now() + HOLD_CLICK_MS;
+        }
     }
 
     function onTouchMove(e) {
@@ -274,17 +289,20 @@ export function createMap(container, options, dotnet) {
     }
 
     // The route under the style's labels, in the theme's accent; past the range, dashed grey. A new style (the dark mode
-    // switching) drops custom layers, so they're added again on each style.load.
+    // switching) drops custom layers, so they're added again on each style.load; while a style is loading, adding them
+    // throws, and style.load adds them once it's in.
     function addRouteLayers() {
-        if (!styleReady) {
-            return;
+        try {
+            removeRouteLayers();
+            if (route) {
+                addRouteLayersNow();
+            }
+        } catch {
+            // Not loaded yet.
         }
+    }
 
-        removeRouteLayers();
-        if (!route) {
-            return;
-        }
-
+    function addRouteLayersNow() {
         // Over every road and area, under the labels drawn after them: the dark style has labels before its roads.
         const layers = map.getStyle().layers;
         const lastShape = layers.findLastIndex(l => l.type !== "symbol");
@@ -316,10 +334,6 @@ export function createMap(container, options, dotnet) {
         }, before);
     }
 
-    function onStyleLoad() {
-        styleReady = true;
-        addRouteLayers();
-    }
 
     // Shows, moves or (lat null) removes one of the trip's markers.
     function placeMarker(existing, lat, lon, create) {
@@ -340,7 +354,6 @@ export function createMap(container, options, dotnet) {
     }
 
     function onSchemeChange(e) {
-        styleReady = false;
         map.setStyle(e.matches ? options.darkStyleUrl : options.styleUrl);
     }
 
@@ -431,11 +444,11 @@ export function createMap(container, options, dotnet) {
     map.on("click", onMapClick);
     map.on("contextmenu", onContextMenu);
     map.on("movestart", cancelHold);
-    map.on("style.load", onStyleLoad);
+    map.on("style.load", addRouteLayers);
     container.addEventListener("touchstart", onTouchStart, { passive: true });
     container.addEventListener("touchmove", onTouchMove, { passive: true });
-    container.addEventListener("touchend", cancelHold);
-    container.addEventListener("touchcancel", cancelHold);
+    container.addEventListener("touchend", onTouchEnd);
+    container.addEventListener("touchcancel", onTouchEnd);
     document.addEventListener("keydown", onKeyDown);
     darkScheme.addEventListener("change", onSchemeChange);
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -630,8 +643,8 @@ export function createMap(container, options, dotnet) {
             cancelHold();
             container.removeEventListener("touchstart", onTouchStart);
             container.removeEventListener("touchmove", onTouchMove);
-            container.removeEventListener("touchend", cancelHold);
-            container.removeEventListener("touchcancel", cancelHold);
+            container.removeEventListener("touchend", onTouchEnd);
+            container.removeEventListener("touchcancel", onTouchEnd);
             document.removeEventListener("keydown", onKeyDown);
             darkScheme.removeEventListener("change", onSchemeChange);
             document.removeEventListener("visibilitychange", onVisibilityChange);

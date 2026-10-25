@@ -400,8 +400,8 @@
         await Places.LoadAsync();
 
         // The trip the tab had open, as it was planned: a tab Android discarded while Google Maps navigated comes back to it.
+        // Planned again (once the map is up) only if its plan doesn't answer this fuel and car.
         await Trips.LoadAsync();
-        await Trips.SetFuelAsync(_fuel);
         _tripLoaded = true;
         if (View == TripView && !Trips.IsOpen)
         {
@@ -416,8 +416,9 @@
             _stationPushed = saved.StationPushed && Station is not null;
             _listPushed = saved.ListPushed && ListOpen;
             _carsPushed = saved.CarsPushed && View == CarsView;
-            _tripPushed = saved.TripPushed && View == TripView;
-            _keepView = BestOpen || View == TripView;
+            _carsOverTrip = saved.CarsOverTrip && View == CarsView;
+            _tripPushed = saved.TripPushed && (View == TripView || _carsOverTrip);
+            _keepView = BestOpen || View == TripView || _carsOverTrip;
         }
 
         var (center, zoom) = saved is null ? (Overview, OverviewZoom) : (new GeoPoint(saved.Lat, saved.Lon), saved.Zoom);
@@ -432,6 +433,7 @@
         await _map.SetSelectedAsync(Station);
         await RenderTripAsync();
         await FitToTripAsync();
+        var planning = Trips.SetFuelAsync(_fuel);
         if (_pendingStation is not null)
         {
             await ShowStationAsync(_pendingStation);
@@ -441,8 +443,9 @@
 
         if (saved is null)
         {
-            // Opened on a station: that's where the map goes, and the location only adds the user's dot.
-            await LocateAsync(moveMap: !openedOnStation, fallBackToMontreal: true);
+            // Opened on a station, or on the trip (a tab restored while Google Maps navigated): that's what the map shows,
+            // and the location only adds the user's dot.
+            await LocateAsync(moveMap: !openedOnStation && View != TripView, fallBackToMontreal: true);
         }
         else if (saved is { UserLat: { } userLat, UserLon: { } userLon })
         {
@@ -455,6 +458,7 @@
         }
 
         _placed = true;
+        await planning;
     }
 
     /// <summary>
@@ -510,12 +514,14 @@
         await Preferences.SetAsync(FuelPreferenceKey, fuel);
         await Best.SetFuelAsync(fuel);
         await Cars.SetFuelAsync(fuel);
-        await Trips.SetFuelAsync(fuel);
+        var planning = Trips.SetFuelAsync(fuel);
         await RenderMarkersAsync();
         if (_viewport is { } viewport)
         {
             await LoadAsync(viewport);
         }
+
+        await planning;
     }
 
     public async Task OnViewportChangedAsync(Viewport viewport)
@@ -696,7 +702,8 @@
     {
         if (_mapReady)
         {
-            await _map!.ReloadAsync(new ReloadState(_fuel, _stationPushed, _listPushed, _carsPushed, _tripPushed), saveView: _placed, automatic);
+            await _map!.ReloadAsync(
+                new ReloadState(_fuel, _stationPushed, _listPushed, _carsPushed, _tripPushed, _carsOverTrip), saveView: _placed, automatic);
         }
     }
 
@@ -939,23 +946,29 @@
         {
             await _map.SetPinAsync(null);
         }
+
+        StateHasChanged();
     }
 
     /// <summary>
-    /// Opens Best on the way to a destination, planned from where the user is: the last location known, else asked for now,
-    /// else the map's centre.
+    /// Opens Best on the way to a destination, planned from where the user is now: the location is asked for again (the
+    /// one known may be hours old), and without it, the trip starts where Best near you ranks from, or the map's centre. A
+    /// user who had Best near you rank from the map's centre starts there, without being asked again.
     /// </summary>
     private async Task StartTripAsync(TripDestination destination)
     {
-        var (origin, fromMapCenter) = Best.Origin is { } known ? (known.Point, known.IsMapCenter) : (_userLocation ?? default, false);
-        if (Best.Origin is null && _userLocation is null)
+        if (Best.Origin is not { IsMapCenter: true })
         {
             await LocateAsync(moveMap: false, fallBackToMontreal: false);
-            (origin, fromMapCenter) = _userLocation is { } located
-                ? (located, false)
-                : _viewport is { } viewport ? (viewport.Center, true) : (default, false);
         }
 
+        var (origin, fromMapCenter) = Best.Origin is { IsMapCenter: true } && _viewport is { } center
+            ? (center.Center, true)
+            : _locationProblem is null && _userLocation is { } here
+            ? (here, false)
+            : Best.Origin is { } known ? (known.Point, known.IsMapCenter)
+            : _viewport is { } viewport ? (viewport.Center, true)
+            : (default, false);
         if (origin == default)
         {
             return;
@@ -987,6 +1000,16 @@
             _tripPushed = true;
             Navigation.NavigateTo(
                 Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = TripView, ["station"] = null }));
+            return;
+        }
+
+        // Details or My cars pushed over Best near you: the trip takes their entry, over Best near you all the same.
+        if ((View == BestView && _stationPushed) || (View == CarsView && _carsPushed && !_carsOverTrip))
+        {
+            (_stationPushed, _carsPushed, _tripPushed) = (false, false, true);
+            Navigation.NavigateTo(
+                Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = TripView, ["station"] = null }),
+                replace: true);
             return;
         }
 
