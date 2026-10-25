@@ -84,20 +84,22 @@ public static class NearYou
 
     /// <summary>
     /// The stations worth measuring by road, at most <see cref="MaxByRoad"/>: the <see cref="NearestByRoad"/> nearest, then
-    /// every one cheaper than the nearest, nearest first. A station that costs more than the nearest and is farther can't
-    /// be the pick.
+    /// every one cheaper than the dearest of them, nearest first. The closest by road, which the savings are counted
+    /// against, is one of the nearest, though not always the nearest in a straight line (a river between): a farther
+    /// station that costs more than every one of them can't be the pick.
     /// </summary>
     public static List<T> SelectByRoad<T>(IReadOnlyCollection<T> stations, Func<T, double> straightKm, Func<T, decimal> priceCents)
     {
         var nearestFirst = stations.OrderBy(straightKm).ToList();
-        if (nearestFirst.Count == 0)
+        var nearest = nearestFirst.Take(NearestByRoad).ToList();
+        if (nearest.Count == 0)
         {
-            return nearestFirst;
+            return nearest;
         }
 
-        var nearestPrice = priceCents(nearestFirst[0]);
-        return [.. nearestFirst.Take(NearestByRoad)
-            .Concat(nearestFirst.Skip(NearestByRoad).Where(s => priceCents(s) < nearestPrice))
+        var dearestNearby = nearest.Max(priceCents);
+        return [.. nearest
+            .Concat(nearestFirst.Skip(NearestByRoad).Where(s => priceCents(s) < dearestNearby))
             .Take(MaxByRoad)];
     }
 

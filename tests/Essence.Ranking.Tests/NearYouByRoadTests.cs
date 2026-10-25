@@ -5,7 +5,7 @@ public class NearYouByRoadTests
     [Fact]
     public void The_ten_nearest_are_measured_then_every_cheaper_one_nearest_first()
     {
-        // The nearest sells at 165; every third station farther away is cheaper.
+        // The dearest of the ten nearest sells at 165; every third station farther away is cheaper.
         var stations = Enumerable.Range(0, 300).Select(i => (Id: i, Km: i * 0.1, Price: i % 3 == 0 && i > 0 ? 160m : 165m)).ToList();
 
         var measured = NearYou.SelectByRoad(stations, s => s.Km, s => s.Price);
@@ -14,6 +14,17 @@ public class NearYouByRoadTests
         Assert.All(measured.Skip(10), s => Assert.Equal(160m, s.Price));
         Assert.Equal(measured.OrderBy(s => s.Km), measured);
         Assert.Equal(10 + 96, measured.Count);
+    }
+
+    [Fact]
+    public void A_station_cheaper_than_any_of_the_nearest_is_measured_though_not_than_the_nearest()
+    {
+        // The nearest is across the river at 160; by road the closest may be one at 175, which the 170s beat.
+        var stations = Enumerable.Range(0, 12).Select(i => (Id: i, Km: i * 0.1, Price: i == 0 ? 160m : i < 10 ? 175m : 170m)).ToList();
+
+        var measured = NearYou.SelectByRoad(stations, s => s.Km, s => s.Price);
+
+        Assert.Equal(Enumerable.Range(0, 12), measured.Select(s => s.Id));
     }
 
     [Fact]

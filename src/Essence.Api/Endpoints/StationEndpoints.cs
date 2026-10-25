@@ -39,8 +39,8 @@ public static class StationEndpoints
                 "Ranks the operating stations with an available price by what the fill-up costs once the gas burned getting there "
                 + "and back is counted. The closest is the reference the savings are counted against. A farther station is picked "
                 + "only if it saves at least $0.25 and its round trip takes at most `maxDetourMin` longer than the closest's; the "
-                + "others stay listed, with the reason. Distances are by road (the 10 nearest and every station cheaper than the "
-                + "nearest, at most 200). When the routing server is down, or the point is more than 1 km from a road, they're "
+                + "others stay listed, with the reason. Distances are by road (the 10 nearest and every station cheaper than one of "
+                + "them, at most 200). When the routing server is down, or the point is more than 1 km from a road, they're "
                 + "estimated instead (`byRoad` false): straight line × 1.3, driven at 40 km/h, and a farther station must also "
                 + "save with roads twice the straight line. Looks within `radiusKm`, widened to 25 km with fewer than 5 stations, "
                 + "else returns the closest at any distance.")
@@ -206,6 +206,7 @@ public static class StationEndpoints
         StationSnapshot snapshot,
         OsrmClient osrm,
         ILoggerFactory loggers,
+        HttpContext http,
         [Description("Latitude of the driver, in degrees.")] double lat,
         [Description("Longitude of the driver, in degrees.")] double lon,
         CancellationToken cancellationToken,
@@ -245,7 +246,7 @@ public static class StationEndpoints
 
         // By road when the routing server answers; road and estimated figures are never mixed in one ranking.
         var car = new Car((decimal)fillL, (decimal)per100Km);
-        var byRoad = await RankByRoadAsync(osrm, loggers, new LatLon(lat, lon), area, car, maxDetourMin, cancellationToken);
+        var byRoad = await RankByRoadAsync(osrm, loggers, http, new LatLon(lat, lon), area, car, maxDetourMin, cancellationToken);
         var ranking = byRoad
             ?? NearYou.Rank(area.Select(s => NearYou.Estimate(s.Station.Id, s.PriceCents, s.Km)).ToList(), car, maxDetourMin, byRoad: false);
         if (ranking is null)
@@ -273,10 +274,12 @@ public static class StationEndpoints
     /// Best near you by road: the stations snapped to their own roads, then one table from the driver to them and one
     /// back, the driver on any road (an autoroute included). Null, for the estimate instead, when the routing server fails,
     /// the driver is more than <see cref="NearYou.MaxDriverSnapMeters"/> from a road, or no station has a road there and back.
+    /// An estimate the server's failure forced isn't cached: the same request asks again.
     /// </summary>
     private static async Task<NearbyRanking?> RankByRoadAsync(
         OsrmClient osrm,
         ILoggerFactory loggers,
+        HttpContext http,
         LatLon driver,
         IReadOnlyCollection<(SnapshotStation Station, decimal PriceCents, double Km)> area,
         Car car,
@@ -313,6 +316,7 @@ public static class StationEndpoints
         catch (OsrmException ex)
         {
             loggers.CreateLogger(RoutingLog.Category).LogOsrmFailure(ex);
+            DataVersion.DontCache(http);
             return null;
         }
     }

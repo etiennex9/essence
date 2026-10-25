@@ -13,7 +13,7 @@ public sealed class RoutingOptions
 
 public static class OsrmRouting
 {
-    /// <summary>An answer within this, or the attempt is given up; one retry. A trip takes three calls.</summary>
+    /// <summary>An answer within this, or the attempt is given up; one retry. A trip takes four calls, Best near you three.</summary>
     private static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(3);
 
     /// <summary>Connecting to the server, within an attempt.</summary>
@@ -23,7 +23,7 @@ public static class OsrmRouting
     /// The <see cref="OsrmClient"/> for the routing container, with a resilience pipeline: about 3 s per attempt and one
     /// retry, and a circuit breaker so that while the server is down, Best near you falls back to estimates at once. A
     /// stopped container's name can take seconds to fail to resolve (4 s on Docker Desktop), which no timeout here
-    /// shortens: the breaker opens after the first few failures and tries again every 30 s.
+    /// shortens: the breaker opens once half the calls of the last 30 s failed (4 at least), and tries again every 30 s.
     /// </summary>
     public static IServiceCollection AddOsrmRouting(this IServiceCollection services, IConfiguration configuration)
     {
@@ -53,6 +53,10 @@ public static class OsrmRouting
                 o.TotalRequestTimeout.Timeout = AttemptTimeout * 2 + TimeSpan.FromSeconds(1);
                 o.CircuitBreaker.SamplingDuration = TimeSpan.FromSeconds(30);
                 o.CircuitBreaker.MinimumThroughput = 4;
+
+                // Polly's default, 10 %, is meant for its default minimum of 100 calls: with 4, one timeout among the
+                // last few calls would open the circuit for 30 s.
+                o.CircuitBreaker.FailureRatio = 0.5;
                 o.CircuitBreaker.BreakDuration = TimeSpan.FromSeconds(30);
             });
         return services;

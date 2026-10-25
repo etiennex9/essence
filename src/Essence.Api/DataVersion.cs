@@ -11,8 +11,16 @@ namespace Essence.Api;
 /// </summary>
 public static class DataVersion
 {
+    private static readonly object UncachedKey = new();
+
     public static RouteHandlerBuilder WithDataVersion(this RouteHandlerBuilder builder) =>
         builder.AddEndpointFilter(FilterAsync).Produces(StatusCodes.Status304NotModified);
+
+    /// <summary>
+    /// This answer isn't the data's alone (Best near you estimated while the routing server was down): it's sent without
+    /// the version and marked <c>no-store</c>, so the same request asks again instead of getting a 304 for it.
+    /// </summary>
+    public static void DontCache(HttpContext http) => http.Items[UncachedKey] = true;
 
     private static async ValueTask<object?> FilterAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
     {
@@ -35,7 +43,11 @@ public static class DataVersion
         // Only a 200 carries the version: a 400 or 404 isn't data to cache.
         http.Response.OnStarting(() =>
         {
-            if (http.Response.StatusCode == StatusCodes.Status200OK)
+            if (http.Items.ContainsKey(UncachedKey))
+            {
+                http.Response.Headers.CacheControl = "no-store";
+            }
+            else if (http.Response.StatusCode == StatusCodes.Status200OK)
             {
                 SetHeaders(http.Response, version);
             }
