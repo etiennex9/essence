@@ -208,6 +208,9 @@
         Search.Changed += OnChanged;
         Places.Changed += OnChanged;
         await Places.LoadAsync();
+
+        // Once they're in: opened first (a reload on ?view=places), the panel renders before they are.
+        _ = LookUpAddressesAsync();
     }
 
     protected override void OnParametersSet()
@@ -220,11 +223,6 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender)
-        {
-            _ = LookUpAddressesAsync();
-        }
-
         if (_focusSearch)
         {
             _focusSearch = false;
@@ -325,7 +323,8 @@
                 </span>
             </button>
             <button type="button" class="edit @(choosing ? "is-on" : null)" aria-pressed="@(choosing ? "true" : "false")"
-                    aria-label="@L["SetPlaceLabel", name]" @onclick="() => Choose(purpose)">
+                    aria-label="@L[choosing ? "CancelChoosingLabel" : place is null ? "SetPlaceLabel" : "ChangePlaceLabel", name]"
+                    @onclick="() => Choose(purpose)">
                 @(choosing ? L["Cancel"] : place is null ? L["SetPlace"] : L["Change"])
             </button>
         </li>;

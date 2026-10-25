@@ -8,7 +8,8 @@
    the address search is down, the pin has no address: its coordinates show, and the rest works. *@
 <section class="pin-card" role="dialog" aria-labelledby="ess-pin-title" tabindex="-1" @ref="_element">
     <div class="top">
-        <span class="tx">
+        @* Read out when the address comes, or that the pin is outside Québec. *@
+        <span class="tx" aria-live="polite">
             <span class="kicker">@Kicker</span>
             <b id="ess-pin-title" class="@(_lookup is null ? "is-pending" : null)">@Title</b>
             @if (Sub is { Length: > 0 } sub)

@@ -115,8 +115,8 @@ public static class Places
 
     /// <summary>
     /// The suggestions for what was typed: in Québec, each place once, at most <see cref="MaxSuggestions"/>, in Photon's
-    /// order, except that a named place found only by its address (a business at "1000 de la Gauchetière") comes after the
-    /// places whose own name matches: the address itself first.
+    /// order, except that a named place found by its address (a business at the "1000" of "1000 de la Gauchetière", whose
+    /// name doesn't hold that number) comes after the others: the address itself first.
     /// </summary>
     public static IReadOnlyList<(PhotonPlace Place, PlaceLabel Label)> Suggestions(IEnumerable<PhotonPlace> places, string typed)
     {
@@ -124,7 +124,7 @@ public static class Places
         var ordered = places
             .Select(p => (Place: p, Label: QuebecArea.IsQuebec(p.State) ? Describe(p) : null))
             .Where(x => x.Label is not null)
-            .OrderBy(x => x.Label!.Kind == PlaceKinds.Named && !Words(x.Label.Label).Any(w => words.Any(t => w.StartsWith(t, StringComparison.Ordinal))));
+            .OrderBy(x => FoundByItsAddress(x.Place, x.Label!, words));
         var kept = new List<(PhotonPlace Place, PlaceLabel Label)>();
         foreach (var (place, label) in ordered.Select(x => (x.Place, x.Label!)))
         {
@@ -151,26 +151,32 @@ public static class Places
 
     /// <summary>
     /// What to call a point, from the places nearest it (<see cref="PhotonClient.ReverseAsync"/>, nearest first): the
-    /// nearest address within 100 m, else the nearest place. Null when there's none.
+    /// nearest address within 100 m, else the nearest street or named place. An address farther away names the point by
+    /// its street only (a pin on a range road is on that road, not at the house 400 m down it). Null when there's none.
     /// </summary>
     public static (PhotonPlace Place, PlaceLabel Label)? Nearest(LatLon point, IReadOnlyList<PhotonPlace> nearest)
     {
-        var described = nearest.Select(p => (Place: p, Label: Describe(p))).Where(x => x.Label is not null).ToList();
+        var described = nearest
+            .Select(p => (Place: p, Label: Describe(p)))
+            .Select(x => x.Label?.Kind == PlaceKinds.Address
+                && Geo.DistanceKm(point.Latitude, point.Longitude, x.Place.Location.Latitude, x.Place.Location.Longitude) > AddressPreferredWithinKm
+                    ? (x.Place, Label: Labelled(x.Place.Street, Town(x.Place), PlaceKinds.Street))
+                    : x)
+            .Where(x => x.Label is not null)
+            .ToList();
         if (described.Count == 0)
         {
             return null;
         }
 
-        var address = described.FirstOrDefault(x => x.Label!.Kind == PlaceKinds.Address
-            && Geo.DistanceKm(point.Latitude, point.Longitude, x.Place.Location.Latitude, x.Place.Location.Longitude) <= AddressPreferredWithinKm);
-        var (place, label) = address.Place is not null ? address : described[0];
+        var (place, label) = described.Find(x => x.Label!.Kind == PlaceKinds.Address) is { Place: not null } address ? address : described[0];
         return (place, label!);
     }
 
     /// <summary>The place's label, or null when it has nothing to be called by.</summary>
     public static PlaceLabel? Describe(PhotonPlace place)
     {
-        var town = place.City ?? place.Locality ?? place.District ?? place.County;
+        var town = Town(place);
         var street = place.HouseNumber is { } number && place.Street is { } name ? $"{number} {name}" : place.Street;
         switch (place.Type)
         {
@@ -213,6 +219,15 @@ public static class Places
 
         return string.Join(' ', builder.ToString().Split(' ', StringSplitOptions.RemoveEmptyEntries));
     }
+
+    private static string? Town(PhotonPlace place) => place.City ?? place.Locality ?? place.District ?? place.County;
+
+    /// <summary>A named place at the house number typed, whose name doesn't hold that number: found by its address.</summary>
+    private static bool FoundByItsAddress(PhotonPlace place, PlaceLabel label, string[] typed) =>
+        label.Kind == PlaceKinds.Named
+        && place.HouseNumber is { } number
+        && typed.Contains(Fold(number))
+        && !Words(label.Label).Contains(Fold(number));
 
     private static string[] Words(string text) => Fold(text).Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries);
 

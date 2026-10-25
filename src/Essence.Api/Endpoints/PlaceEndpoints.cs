@@ -10,8 +10,10 @@ public static class PlaceEndpoints
     internal const int MinQueryLength = 3;
     internal const int MaxQueryLength = 100;
 
-    /// <summary>A pin's lookup asks for this many places around it, to prefer an address to a nearer street.</summary>
-    private const int ReverseLimit = 5;
+    /// <summary>
+    /// A pin's lookup asks for this many places around it, to find its address among the shops and streets nearer it.
+    /// </summary>
+    private const int ReverseLimit = 20;
 
     private static readonly string[] Languages = ["fr", "en"];
 
@@ -47,7 +49,9 @@ public static class PlaceEndpoints
         [Description("Longitude of the user, in degrees. With `lat`.")] double? lon = null,
         [Description("fr (the default) or en: the language of the names and addresses.")] string? lang = null)
     {
-        var query = string.Join(' ', (q ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        // Control characters count as spaces, as they do for Photon, which refuses a blank text.
+        var spaced = new string([.. (q ?? "").Select(c => char.IsControl(c) || char.IsWhiteSpace(c) ? ' ' : c)]);
+        var query = string.Join(' ', spaced.Split(' ', StringSplitOptions.RemoveEmptyEntries));
         var errors = new QueryErrors()
             .Require(query.Length is >= MinQueryLength and <= MaxQueryLength, nameof(q),
                 $"Must be between {MinQueryLength} and {MaxQueryLength} characters.")

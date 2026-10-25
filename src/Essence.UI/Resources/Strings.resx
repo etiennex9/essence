@@ -720,4 +720,10 @@
   <data name="OutsideQuebecWhy" xml:space="preserve">
     <value>Trips and places stay in Québec.</value>
   </data>
+  <data name="ChangePlaceLabel" xml:space="preserve">
+    <value>Change {0}’s address</value>
+  </data>
+  <data name="CancelChoosingLabel" xml:space="preserve">
+    <value>Cancel choosing {0}’s address</value>
+  </data>
 </root>

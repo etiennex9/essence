@@ -127,6 +127,45 @@ public class PlacesTests
     }
 
     [Fact]
+    public void Businesses_at_the_number_typed_come_after_the_address_whatever_their_names()
+    {
+        string[] tenants = ["Banque Laurentienne", "Deloitte", "Lavery Avocats", "Dentisterie Centre-Ville", "Café Dépôt"];
+        var suggestions = Places.Suggestions(
+        [
+            .. tenants.Select((name, i) => House("1000", "Rue De La Gauchetière Ouest", name: name, osmKey: "office",
+                at: new LatLon(45.4984 + i * 0.00001, -73.5665))),
+            House("1000", "Rue De La Gauchetière Ouest", at: new LatLon(45.4988, -73.5666)),
+        ], "1000 de la gauch");
+
+        Assert.Equal(["1000 Rue De La Gauchetière Ouest", .. tenants[..4]], suggestions.Select(s => s.Label.Label));
+    }
+
+    [Fact]
+    public void A_business_found_by_its_name_keeps_its_place()
+    {
+        var suggestions = Places.Suggestions(
+        [
+            House("1000", "Rue De La Gauchetière Ouest", name: "Deloitte", osmKey: "office"),
+            House("1000", "Rue De La Gauchetière Ouest", at: new LatLon(45.4988, -73.5666)),
+        ], "deloitte montreal");
+
+        Assert.Equal(["Deloitte", "1000 Rue De La Gauchetière Ouest"], suggestions.Select(s => s.Label.Label));
+    }
+
+    [Fact]
+    public void A_pin_far_from_any_address_is_named_by_the_road_it_s_on()
+    {
+        var pin = new LatLon(46.3000, -72.9000);
+
+        var nearest = Places.Nearest(pin,
+        [
+            House("1234", "Rang Saint-Joseph", city: "Saint-Barnabé", at: new LatLon(46.3036, -72.9000)),
+        ]);
+
+        Assert.Equal(new PlaceLabel("Rang Saint-Joseph", "Saint-Barnabé", PlaceKinds.Street), nearest!.Value.Label);
+    }
+
+    [Fact]
     public void A_pin_is_named_by_the_nearest_address_within_100_m()
     {
         var nearest = Places.Nearest(Downtown,

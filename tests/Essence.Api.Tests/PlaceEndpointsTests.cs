@@ -96,6 +96,16 @@ public sealed class PlaceEndpointsTests : IDisposable
     }
 
     [Fact]
+    public async Task Control_characters_count_as_spaces_and_a_blank_search_is_refused()
+    {
+        var blank = await Client.GetAsync("/places/search?q=%1C%1C%1C", TestContext.Current.CancellationToken);
+        await Client.GetAsync("/places/search?q=rue%09gaucher%0A", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.BadRequest, blank.StatusCode);
+        Assert.StartsWith("/api?q=rue%20gaucher&", Assert.Single(_requests).PathAndQuery);
+    }
+
+    [Fact]
     public async Task A_search_typed_too_long_is_refused()
     {
         var response = await Client.GetAsync($"/places/search?q={new string('a', 101)}", TestContext.Current.CancellationToken);
@@ -110,7 +120,7 @@ public sealed class PlaceEndpointsTests : IDisposable
             "/places/reverse?lat=45.4988&lon=-73.5666&lang=en", TestContext.Current.CancellationToken);
 
         Assert.Equal("1000 Rue De La Gauchetière Ouest", place!.Label);
-        Assert.StartsWith("/reverse?lat=45.4988&lon=-73.5666&lang=en&radius=1&limit=5", Assert.Single(_requests).PathAndQuery);
+        Assert.StartsWith("/reverse?lat=45.4988&lon=-73.5666&lang=en&radius=1&limit=20", Assert.Single(_requests).PathAndQuery);
     }
 
     [Theory]

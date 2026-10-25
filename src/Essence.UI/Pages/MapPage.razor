@@ -979,6 +979,8 @@
     /// </summary>
     private async Task StartTripAsync(TripDestination destination)
     {
+        // A trip the user starts is fitted, even if a release reload kept the view of the pane it started from.
+        _keepView = false;
         if (Best.Origin is not { IsMapCenter: true })
         {
             await LocateAsync(moveMap: false, fallBackToMontreal: false);

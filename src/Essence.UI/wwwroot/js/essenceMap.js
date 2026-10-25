@@ -348,8 +348,9 @@ export function createMap(container, options, dotnet) {
     }
 
     function onKeyDown(e) {
-        // Esc in a modal dialog (About) closes that dialog only, not the pane behind it.
-        if (e.key === "Escape" && !document.querySelector("dialog:modal")) {
+        // Esc in a modal dialog (About) closes that dialog only, not the pane behind it; in the address search with text
+        // typed, it clears the text (PlacesPanel), and the next one closes the pane.
+        if (e.key === "Escape" && !document.querySelector("dialog:modal") && !(e.target.matches?.("input[type=search]") && e.target.value)) {
             call("OnDismiss");
         }
     }

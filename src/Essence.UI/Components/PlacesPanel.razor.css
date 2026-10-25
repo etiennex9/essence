@@ -41,8 +41,8 @@
     flex: none;
     display: grid;
     place-items: center;
-    width: 40px;
-    height: 40px;
+    width: 44px;
+    height: 44px;
     border: 0;
     border-radius: 50%;
     background: transparent;
@@ -232,6 +232,7 @@
 }
 
 .edit {
+    position: relative;
     flex: none;
     display: grid;
     place-items: center;
@@ -244,6 +245,13 @@
     color: var(--ess-text);
     font: 600 12.5px/1 var(--ess-font);
     cursor: pointer;
+}
+
+/* A 44 px target, without making the row taller. */
+.edit::after {
+    content: "";
+    position: absolute;
+    inset: -4px 0;
 }
 
 .edit:hover {

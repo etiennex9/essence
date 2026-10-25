@@ -38,8 +38,12 @@ if [ ! -d "$data" ]; then
     exit 1
 fi
 
+# The lock and the build's log stay out of the dataset, which the service's container can write: root would follow a link
+# planted there. The log goes beside this script, in the scripts dataset only root can write.
+log=$(cd "$(dirname "$0")" && pwd)/.essence-$service-refresh.log
+
 # One refresh at a time: a second would build into the same next folder.
-exec 9>"$data/.refresh.lock"
+exec 9>"/run/essence-$service-refresh.lock"
 if ! flock -n 9; then
     echo "a refresh is already running for $data." >&2
     exit 1
@@ -58,9 +62,9 @@ else
     exit 1
 fi
 started=$(date +%s)
-if ! docker run --rm --user 1654:1654 --volume "$data:/data" "$image" build >"$data/.refresh.log" 2>&1; then
+if ! docker run --rm --user 1654:1654 --volume "$data:/data" "$image" build >"$log" 2>&1; then
     echo "the $service build failed; the server still runs on the previous data. Its log:" >&2
-    tail -n 20 "$data/.refresh.log" >&2
+    tail -n 20 "$log" >&2
     exit 1
 fi
 
@@ -68,7 +72,7 @@ fi
 state=$([ -n "$container" ] && docker inspect --format '{{.State.Status}}' "$container" || echo none)
 if [ "$state" != running ] && [ "$state" != restarting ]; then
     echo "$app: the $service data was rebuilt in $(( ($(date +%s) - started) / 60 )) minutes; the server uses it when the app starts."
-    tail -n 1 "$data/.refresh.log"
+    tail -n 1 "$log"
     exit 0
 fi
 
@@ -80,7 +84,7 @@ for _ in $(seq 60); do
     status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container")
     if [ "$status" = healthy ]; then
         echo "$app: the $service data was rebuilt in $(( ($(date +%s) - started) / 60 )) minutes and the server runs on it."
-        tail -n 1 "$data/.refresh.log"
+        tail -n 1 "$log"
         exit 0
     fi
 done

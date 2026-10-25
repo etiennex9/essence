@@ -199,6 +199,20 @@ public class PlaceSearchTests
     }
 
     [Fact]
+    public async Task An_emoji_typed_or_in_a_label_is_searched_and_highlighted_like_any_text()
+    {
+        var search = NewSearch();
+
+        search.Type("📍 1000 Rue De La Gauch", Montreal, "fr");
+        await AnsweredAsync(search, () => _time.Advance(PlaceSearch.Debounce));
+
+        Assert.Equal(3, search.Suggestions.Count);
+        Assert.Equal([(0, 4), (9, 2), (12, 2), (15, 5)], PlaceSearch.Highlights("1000 Rue De La Gauchetière Ouest", "📍 1000 de la gauch"));
+        Assert.Equal([(8, 5)], PlaceSearch.Highlights("Café 📍 Gaucher", "gauch"));
+        Assert.True(PlaceSearch.Matches(new PlaceSuggestion("Café 📍 Gaucher", "Montréal", 45.5, -73.6, "named"), "café gau"));
+    }
+
+    [Fact]
     public void Accents_are_matched_without_moving_the_highlights() =>
         Assert.Equal([(4, 5)], PlaceSearch.Highlights("Rue Évangéline", "evang"));
 
