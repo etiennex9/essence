@@ -401,7 +401,7 @@
     gap: 6px;
 }
 
-/* Where address search goes (phase 3); for now it says how to pick a place. */
+/* Opens the address search (PlacesPanel). */
 .wbox {
     flex: 1 1 180px;
     min-width: 0;
@@ -415,9 +415,16 @@
     background: var(--ess-hover);
     color: var(--ess-text-muted);
     font: 500 14px/1.2 var(--ess-font);
+    text-align: left;
+    border: 0;
+    cursor: pointer;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+
+.wbox:hover {
+    color: var(--ess-text);
 }
 
 .wbox svg {
@@ -451,7 +458,7 @@
     white-space: nowrap;
 }
 
-/* Home or Work, not saved yet: a tap says how to save it. */
+/* Home or Work, not saved yet: a tap opens the address search to set it. */
 .place.is-unset {
     border-style: dashed;
     color: var(--ess-text-muted);

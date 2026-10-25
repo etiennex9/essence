@@ -31,4 +31,10 @@ internal static class Icons
     public const string Search = "M11 4a7 7 0 1 0 0 14 7 7 0 0 0 0-14zM20 20l-4-4";
 
     public const string Plus = "M12 5v14M5 12h14";
+
+    /// <summary>A building: an address, in the address search.</summary>
+    public const string Building = "M4 21V5l8-3 8 3v16M9 21v-4h6v4M8 8h.01M12 8h.01M16 8h.01M8 12h.01M12 12h.01M16 12h.01";
+
+    /// <summary>A road: a street, in the address search.</summary>
+    public const string Street = "M5 21L9 3M19 21L15 3M12 4v2M12 10v3M12 17v3";
 }

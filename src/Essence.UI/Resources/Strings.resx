@@ -591,9 +591,6 @@
   <data name="UseMapCenterAsDestination" xml:space="preserve">
     <value>Use the map centre as destination</value>
   </data>
-  <data name="PlaceHint" xml:space="preserve">
-    <value>Drop a pin there (press and hold the map, or right-click it), then save it as {0}.</value>
-  </data>
   <data name="TripsUnavailableShort" xml:space="preserve">
     <value>Trips aren’t available right now.</value>
   </data>
@@ -638,5 +635,89 @@
   </data>
   <data name="DetourMinutesShort" xml:space="preserve">
     <value>+{0} min</value>
+  </data>
+  <data name="PlacesTitle" xml:space="preserve">
+    <value>Where to?</value>
+  </data>
+  <data name="SetHomeTitle" xml:space="preserve">
+    <value>Set Home</value>
+  </data>
+  <data name="SetWorkTitle" xml:space="preserve">
+    <value>Set Work</value>
+  </data>
+  <data name="AddPlaceTitle" xml:space="preserve">
+    <value>Add a place</value>
+  </data>
+  <data name="AddPlaceHelp" xml:space="preserve">
+    <value>Cottage, school, the gym…</value>
+  </data>
+  <data name="SearchPlaceLabel" xml:space="preserve">
+    <value>Search an address or a place</value>
+  </data>
+  <data name="SearchPlacePlaceholder" xml:space="preserve">
+    <value>Address, street, town or place</value>
+  </data>
+  <data name="ClearSearch" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="Suggestions" xml:space="preserve">
+    <value>Suggestions</value>
+  </data>
+  <data name="PlacesFound" xml:space="preserve">
+    <value>Places found: {0}</value>
+  </data>
+  <data name="SearchNothing" xml:space="preserve">
+    <value>No address in Québec matches “{0}”.</value>
+  </data>
+  <data name="SearchUnavailable" xml:space="preserve">
+    <value>Address search isn’t available right now. Pick the place on the map instead: press and hold it, or right-click it.</value>
+  </data>
+  <data name="SearchRateLimited" xml:space="preserve">
+    <value>Too many searches in a row. Wait a moment, then type again.</value>
+  </data>
+  <data name="SearchFailed" xml:space="preserve">
+    <value>The search didn’t answer. Type again to retry.</value>
+  </data>
+  <data name="StreetIn" xml:space="preserve">
+    <value>Street · {0}</value>
+  </data>
+  <data name="PickOnMap" xml:space="preserve">
+    <value>Pick it on the map</value>
+  </data>
+  <data name="PickOnMapTouch" xml:space="preserve">
+    <value>Or press and hold anywhere on the map, any time.</value>
+  </data>
+  <data name="PickOnMapMouse" xml:space="preserve">
+    <value>Or right-click anywhere on the map, any time.</value>
+  </data>
+  <data name="PickOnMapNotice" xml:space="preserve">
+    <value>Press and hold the map where it is, or right-click it.</value>
+  </data>
+  <data name="NotSet" xml:space="preserve">
+    <value>Not set</value>
+  </data>
+  <data name="Choosing" xml:space="preserve">
+    <value>Choosing…</value>
+  </data>
+  <data name="SetPlace" xml:space="preserve">
+    <value>Set</value>
+  </data>
+  <data name="SetPlaceLabel" xml:space="preserve">
+    <value>Set {0}’s address</value>
+  </data>
+  <data name="ForgetPlaceLabel" xml:space="preserve">
+    <value>Forget {0}</value>
+  </data>
+  <data name="AddressAttribution" xml:space="preserve">
+    <value>Addresses in Québec, from OpenStreetMap. Your places are saved on this device only.</value>
+  </data>
+  <data name="FindingAddress" xml:space="preserve">
+    <value>Finding the address…</value>
+  </data>
+  <data name="OutsideQuebec" xml:space="preserve">
+    <value>Outside Québec</value>
+  </data>
+  <data name="OutsideQuebecWhy" xml:space="preserve">
+    <value>Trips and places stay in Québec.</value>
   </data>
 </root>

@@ -14,9 +14,14 @@ public enum PlaceKind
 }
 
 /// <param name="Name">The name the user gave an <see cref="PlaceKind.Other"/> place; empty for Home and Work (the UI names them).</param>
-public sealed record SavedPlace(string Id, PlaceKind Kind, string Name, double Latitude, double Longitude)
+/// <param name="Address">
+/// Its address, short ("1000 Rue De La Gauchetière Ouest, Montréal"), from the address search; null until it's known (a
+/// place saved while the search was down, or before it existed).
+/// </param>
+public sealed record SavedPlace(string Id, PlaceKind Kind, string Name, double Latitude, double Longitude, string? Address = null)
 {
     public const int MaxNameLength = 40;
+    public const int MaxAddressLength = 120;
 
     [JsonIgnore]
     public GeoPoint Point => new(Latitude, Longitude);
@@ -50,11 +55,11 @@ public sealed class SavedPlaces(IPreferenceStore preferences)
     public Task LoadAsync() => _loading ??= LoadCoreAsync();
 
     /// <summary>Saves a place: Home or Work replaces the one saved before; another is added with its name.</summary>
-    public async Task<SavedPlace> SaveAsync(PlaceKind kind, GeoPoint point, string name = "")
+    public async Task<SavedPlace> SaveAsync(PlaceKind kind, GeoPoint point, string name = "", string? address = null)
     {
         await LoadAsync();
         name = kind == PlaceKind.Other ? Trim(name) : "";
-        var place = new SavedPlace(NewId(), kind, name, point.Latitude, point.Longitude);
+        var place = new SavedPlace(NewId(), kind, name, point.Latitude, point.Longitude, TrimAddress(address));
         if (kind != PlaceKind.Other)
         {
             _places.RemoveAll(p => p.Kind == kind);
@@ -68,6 +73,21 @@ public sealed class SavedPlaces(IPreferenceStore preferences)
         await WriteAsync();
         Changed?.Invoke();
         return place;
+    }
+
+    /// <summary>The address of a place saved without one, once the address search has it.</summary>
+    public async Task SetAddressAsync(string id, string address)
+    {
+        await LoadAsync();
+        var index = _places.FindIndex(p => p.Id == id);
+        if (index < 0 || TrimAddress(address) is not { } trimmed || _places[index].Address == trimmed)
+        {
+            return;
+        }
+
+        _places[index] = _places[index] with { Address = trimmed };
+        await WriteAsync();
+        Changed?.Invoke();
     }
 
     public async Task RemoveAsync(string id)
@@ -102,7 +122,7 @@ public sealed class SavedPlaces(IPreferenceStore preferences)
                     && Enum.IsDefined(place.Kind)
                     && !_places.Exists(p => p.Id == place.Id || (place.Kind != PlaceKind.Other && p.Kind == place.Kind)))
                 {
-                    _places.Add(place with { Name = place.Kind == PlaceKind.Other ? Trim(place.Name) : "" });
+                    _places.Add(place with { Name = place.Kind == PlaceKind.Other ? Trim(place.Name) : "", Address = TrimAddress(place.Address) });
                 }
             }
         }
@@ -120,6 +140,12 @@ public sealed class SavedPlaces(IPreferenceStore preferences)
     {
         var trimmed = name?.Trim() ?? "";
         return trimmed.Length > SavedPlace.MaxNameLength ? trimmed[..SavedPlace.MaxNameLength] : trimmed;
+    }
+
+    private static string? TrimAddress(string? address)
+    {
+        var trimmed = address?.Trim();
+        return string.IsNullOrEmpty(trimmed) ? null : trimmed.Length > SavedPlace.MaxAddressLength ? trimmed[..SavedPlace.MaxAddressLength] : trimmed;
     }
 
     private static string NewId() => Guid.NewGuid().ToString("N")[..12];

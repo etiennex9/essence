@@ -122,11 +122,16 @@
                    OnClose="() => View == TripView ? CloseTripAsync() : CloseListAsync()" OnOpenStation="OpenListedStation"
                    OnOpenCars="ShowCars" OnLocate="() => LocateAsync(moveMap: false, fallBackToMontreal: false)"
                    OnUseMapCenter="UseMapCenterAsync" OnStartTrip="StartTripAsync" OnEndTrip="EndTripAsync" OnRefreshTrip="RefreshTripAsync"
-                   OnDropPinAtCenter="DropPinAtCenterAsync" />
+                   OnDropPinAtCenter="DropPinAtCenterAsync" OnSearchPlaces="ShowPlaces" />
     }
     else if (View == CarsView)
     {
         <MyCarsPanel OnClose="CloseCarsAsync" />
+    }
+    else if (View == PlacesView)
+    {
+        <PlacesPanel Purpose="_placesPurpose" UserLocation="_userLocation" MapCenter="_viewport?.Center" OnClose="ClosePlacesAsync"
+                     OnStartTrip="StartTripAsync" OnSaved="_ => ClosePlacesAsync()" OnPickOnMap="PickOnMapAsync" />
     }
 
     @if (_pin is { } pin)
@@ -149,6 +154,9 @@
 
     /// <summary>Best on the way, usually pushed over Best near you. No coordinates in the URL: the trip is TripState's.</summary>
     private const string TripView = "trip";
+
+    /// <summary>The address search and the saved places, pushed over Best near you. Nothing typed goes in the URL.</summary>
+    private const string PlacesView = "places";
 
     /// <summary>Savings under this are "about the same" (Essence.Ranking's NearYou.SmallestSaving).</summary>
     private const decimal SmallestSaving = 0.25m;
@@ -220,6 +228,12 @@
     /// <summary>The same as <see cref="_carsPushed"/> for <c>?view=trip</c>, pushed over <c>?view=best</c>.</summary>
     private bool _tripPushed;
 
+    /// <summary>The same for <c>?view=places</c>, pushed over <c>?view=best</c>.</summary>
+    private bool _placesPushed;
+
+    /// <summary>What a place found in <c>?view=places</c> is for; a link opened cold searches for a trip.</summary>
+    private PlacePurpose _placesPurpose;
+
     /// <summary>The trip the tab had open is read (TripState.LoadAsync): a <c>?view=trip</c> without one falls back.</summary>
     private bool _tripLoaded;
 
@@ -248,20 +262,20 @@
     [SupplyParameterFromQuery(Name = "station")]
     public long? Station { get; set; }
 
-    /// <summary>The list open: <c>favorites</c>, <c>compare</c>, <c>best</c>, <c>trip</c> or <c>cars</c>.</summary>
+    /// <summary>The list open: <c>favorites</c>, <c>compare</c>, <c>best</c>, <c>trip</c>, <c>cars</c> or <c>places</c>.</summary>
     [SupplyParameterFromQuery(Name = "view")]
     public string? View { get; set; }
 
-    private bool ListOpen => View is FavoritesView or CompareView or BestView or TripView or CarsView;
+    private bool ListOpen => View is FavoritesView or CompareView or BestView or TripView or CarsView or PlacesView;
 
-    /// <summary>Best near you is open, maybe under My cars or a station's details.</summary>
-    private bool BestOpen => View is BestView || (View == CarsView && !_carsOverTrip);
+    /// <summary>Best near you is open, maybe under My cars, the address search or a station's details.</summary>
+    private bool BestOpen => View is BestView or PlacesView || (View == CarsView && !_carsOverTrip);
 
     /// <summary>A trip is open in Best on the way, maybe under My cars or a station's details: the map shows it.</summary>
     private bool TripMode => Trips.IsOpen && (View == TripView || (View == CarsView && _carsOverTrip));
 
-    /// <summary>The pump's pane is open: Best near you, Best on the way, or My cars over one of them.</summary>
-    private bool PumpActive => View is BestView or TripView or CarsView;
+    /// <summary>The pump's pane is open: Best near you, Best on the way, or My cars or the address search over one of them.</summary>
+    private bool PumpActive => View is BestView or TripView or CarsView or PlacesView;
 
     /// <summary>Trips can't be planned now: the routing server answered 503, or Best near you fell back to estimates.</summary>
     private bool TripsUnavailable => Trips.Unavailable || Best.Result is { ByRoad: false, Pick: not null };
@@ -349,6 +363,12 @@
             _tripPushed = false;
         }
 
+        if (View != PlacesView)
+        {
+            _placesPushed = false;
+            _placesPurpose = PlacePurpose.Destination;
+        }
+
         if (!BestOpen)
         {
             _fitted = null;
@@ -418,6 +438,7 @@
             _carsPushed = saved.CarsPushed && View == CarsView;
             _carsOverTrip = saved.CarsOverTrip && View == CarsView;
             _tripPushed = saved.TripPushed && (View == TripView || _carsOverTrip);
+            _placesPushed = saved.PlacesPushed && View == PlacesView;
             _keepView = BestOpen || View == TripView || _carsOverTrip;
         }
 
@@ -703,7 +724,8 @@
         if (_mapReady)
         {
             await _map!.ReloadAsync(
-                new ReloadState(_fuel, _stationPushed, _listPushed, _carsPushed, _tripPushed, _carsOverTrip), saveView: _placed, automatic);
+                new ReloadState(_fuel, _stationPushed, _listPushed, _carsPushed, _tripPushed, _carsOverTrip, _placesPushed), saveView: _placed,
+                automatic);
         }
     }
 
@@ -904,7 +926,7 @@
         PlaceKind.Home => L["Home"],
         PlaceKind.Work => L["Work"],
         PlaceKind.Other => destination.Name ?? "",
-        _ => L["DroppedPin"],
+        _ => destination.Address ?? L["DroppedPin"],
     };
 
     /// <summary>In Best on the way, fits the map to the route beside the pane: when a new plan comes in, not when it's the same.</summary>
@@ -1003,10 +1025,11 @@
             return;
         }
 
-        // Details or My cars pushed over Best near you: the trip takes their entry, over Best near you all the same.
-        if ((View == BestView && _stationPushed) || (View == CarsView && _carsPushed && !_carsOverTrip))
+        // Details, My cars or the address search pushed over Best near you: the trip takes their entry, over Best near you
+        // all the same.
+        if ((View == BestView && _stationPushed) || (View == CarsView && _carsPushed && !_carsOverTrip) || (View == PlacesView && _placesPushed))
         {
-            (_stationPushed, _carsPushed, _tripPushed) = (false, false, true);
+            (_stationPushed, _carsPushed, _placesPushed, _tripPushed) = (false, false, false, true);
             Navigation.NavigateTo(
                 Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = TripView, ["station"] = null }),
                 replace: true);
@@ -1075,11 +1098,15 @@
         Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", id));
     }
 
-    /// <summary>Closes what's on top: the dropped pin's card, the details, My cars, the trip (back to Best near you), else the list.</summary>
+    /// <summary>
+    /// Closes what's on top: the dropped pin's card, the details, My cars or the address search, the trip (back to Best near
+    /// you), else the list.
+    /// </summary>
     public Task OnDismissAsync() =>
         _pin is not null ? ClearPinAsync()
         : Station is not null ? CloseDetailsAsync()
         : View == CarsView ? CloseCarsAsync()
+        : View == PlacesView ? ClosePlacesAsync()
         : View == TripView ? CloseTripAsync()
         : CloseListAsync();
 
@@ -1134,7 +1161,7 @@
             return;
         }
 
-        if (View == TripView && Station is null)
+        if (View is TripView or PlacesView && Station is null)
         {
             await CloseAllAsync();
             return;
@@ -1161,11 +1188,14 @@
         }
     }
 
-    /// <summary>The pump with the trip open: the whole pane closes, both history entries the page pushed with it.</summary>
+    /// <summary>
+    /// The pump with the trip or the address search open: the whole pane closes, both history entries the page pushed with
+    /// it.
+    /// </summary>
     private async Task CloseAllAsync()
     {
-        var (tripPushed, listPushed) = (_tripPushed, _listPushed);
-        (_tripPushed, _listPushed) = (false, false);
+        var (tripPushed, listPushed) = (View == PlacesView ? _placesPushed : _tripPushed, _listPushed);
+        (_tripPushed, _placesPushed, _listPushed) = (false, false, false);
         if (tripPushed && listPushed)
         {
             await JS.InvokeVoidAsync("history.go", -2);
@@ -1176,7 +1206,7 @@
         }
         else
         {
-            // Best near you was opened cold (or the trip replaced another pane): the trip's entry becomes the map.
+            // Best near you was opened cold (or the trip replaced another pane): the top entry becomes the map.
             Navigation.NavigateTo(
                 Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = null, ["station"] = null }), replace: true);
         }
@@ -1189,6 +1219,41 @@
         _carsPushed = true;
         Navigation.NavigateTo(
             Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = CarsView, ["station"] = null }));
+    }
+
+    /// <summary>The address search opens over Best near you as a history entry of its own, so Back returns to the pane.</summary>
+    private void ShowPlaces(PlacePurpose purpose)
+    {
+        _placesPurpose = purpose;
+        _placesPushed = true;
+        Navigation.NavigateTo(
+            Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = PlacesView, ["station"] = null }));
+    }
+
+    private async Task ClosePlacesAsync()
+    {
+        if (View != PlacesView)
+        {
+            return;
+        }
+
+        if (_placesPushed)
+        {
+            _placesPushed = false;
+            await JS.InvokeVoidAsync("history.back");
+        }
+        else
+        {
+            // Opened cold: Best near you takes its place.
+            Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("view", BestView), replace: true);
+        }
+    }
+
+    /// <summary>"Pick it on the map": the panes close so the map is in reach, and the status says how.</summary>
+    private async Task PickOnMapAsync()
+    {
+        await CloseAllAsync();
+        ShowNotice(L["PickOnMapNotice"]);
     }
 
     private async Task CloseCarsAsync()

@@ -591,9 +591,6 @@
   <data name="UseMapCenterAsDestination" xml:space="preserve">
     <value>Utiliser le centre de la carte comme destination</value>
   </data>
-  <data name="PlaceHint" xml:space="preserve">
-    <value>Placez une épingle à cet endroit (maintenez le doigt sur la carte ou faites un clic droit), puis enregistrez-la comme {0}.</value>
-  </data>
   <data name="TripsUnavailableShort" xml:space="preserve">
     <value>Les trajets ne sont pas disponibles en ce moment.</value>
   </data>
@@ -638,5 +635,89 @@
   </data>
   <data name="DetourMinutesShort" xml:space="preserve">
     <value>+{0} min</value>
+  </data>
+  <data name="PlacesTitle" xml:space="preserve">
+    <value>Où allez-vous?</value>
+  </data>
+  <data name="SetHomeTitle" xml:space="preserve">
+    <value>Définir la maison</value>
+  </data>
+  <data name="SetWorkTitle" xml:space="preserve">
+    <value>Définir le travail</value>
+  </data>
+  <data name="AddPlaceTitle" xml:space="preserve">
+    <value>Ajouter un lieu</value>
+  </data>
+  <data name="AddPlaceHelp" xml:space="preserve">
+    <value>Chalet, école, gym…</value>
+  </data>
+  <data name="SearchPlaceLabel" xml:space="preserve">
+    <value>Chercher une adresse ou un lieu</value>
+  </data>
+  <data name="SearchPlacePlaceholder" xml:space="preserve">
+    <value>Adresse, rue, ville ou lieu</value>
+  </data>
+  <data name="ClearSearch" xml:space="preserve">
+    <value>Effacer</value>
+  </data>
+  <data name="Suggestions" xml:space="preserve">
+    <value>Suggestions</value>
+  </data>
+  <data name="PlacesFound" xml:space="preserve">
+    <value>Lieux trouvés : {0}</value>
+  </data>
+  <data name="SearchNothing" xml:space="preserve">
+    <value>Aucune adresse au Québec ne correspond à « {0} ».</value>
+  </data>
+  <data name="SearchUnavailable" xml:space="preserve">
+    <value>La recherche d’adresses n’est pas disponible en ce moment. Choisissez plutôt le lieu sur la carte : maintenez le doigt dessus ou faites un clic droit.</value>
+  </data>
+  <data name="SearchRateLimited" xml:space="preserve">
+    <value>Trop de recherches d’affilée. Attendez un instant, puis tapez de nouveau.</value>
+  </data>
+  <data name="SearchFailed" xml:space="preserve">
+    <value>La recherche n’a pas répondu. Tapez de nouveau pour réessayer.</value>
+  </data>
+  <data name="StreetIn" xml:space="preserve">
+    <value>Rue · {0}</value>
+  </data>
+  <data name="PickOnMap" xml:space="preserve">
+    <value>Choisir sur la carte</value>
+  </data>
+  <data name="PickOnMapTouch" xml:space="preserve">
+    <value>Ou maintenez le doigt n’importe où sur la carte, en tout temps.</value>
+  </data>
+  <data name="PickOnMapMouse" xml:space="preserve">
+    <value>Ou faites un clic droit n’importe où sur la carte, en tout temps.</value>
+  </data>
+  <data name="PickOnMapNotice" xml:space="preserve">
+    <value>Maintenez le doigt sur la carte à cet endroit, ou faites un clic droit.</value>
+  </data>
+  <data name="NotSet" xml:space="preserve">
+    <value>Non défini</value>
+  </data>
+  <data name="Choosing" xml:space="preserve">
+    <value>Choix en cours…</value>
+  </data>
+  <data name="SetPlace" xml:space="preserve">
+    <value>Définir</value>
+  </data>
+  <data name="SetPlaceLabel" xml:space="preserve">
+    <value>Définir l’adresse : {0}</value>
+  </data>
+  <data name="ForgetPlaceLabel" xml:space="preserve">
+    <value>Oublier {0}</value>
+  </data>
+  <data name="AddressAttribution" xml:space="preserve">
+    <value>Adresses au Québec, d’OpenStreetMap. Vos lieux sont enregistrés sur cet appareil seulement.</value>
+  </data>
+  <data name="FindingAddress" xml:space="preserve">
+    <value>Recherche de l’adresse…</value>
+  </data>
+  <data name="OutsideQuebec" xml:space="preserve">
+    <value>Hors du Québec</value>
+  </data>
+  <data name="OutsideQuebecWhy" xml:space="preserve">
+    <value>Les trajets et les lieux restent au Québec.</value>
   </data>
 </root>

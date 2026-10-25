@@ -4,15 +4,16 @@ using Essence.Contracts;
 
 namespace Essence.UI.Services;
 
-/// <summary>Where a trip goes: a saved place, or a pin dropped on the map.</summary>
-/// <param name="Kind">The saved place's kind; null for a dropped pin.</param>
+/// <summary>Where a trip goes: a saved place, a place found by the address search, or a pin dropped on the map.</summary>
+/// <param name="Kind">The saved place's kind; null for a place found or a dropped pin.</param>
 /// <param name="Name">An <see cref="PlaceKind.Other"/> place's name.</param>
-public sealed record TripDestination(double Latitude, double Longitude, PlaceKind? Kind = null, string? Name = null)
+/// <param name="Address">The place's address, short, when it's known: the trip is named after it when it has no name.</param>
+public sealed record TripDestination(double Latitude, double Longitude, PlaceKind? Kind = null, string? Name = null, string? Address = null)
 {
     [JsonIgnore]
     public GeoPoint Point => new(Latitude, Longitude);
 
-    public static TripDestination To(SavedPlace place) => new(place.Latitude, place.Longitude, place.Kind, place.Name);
+    public static TripDestination To(SavedPlace place) => new(place.Latitude, place.Longitude, place.Kind, place.Name, place.Address);
 }
 
 /// <summary>

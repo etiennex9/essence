@@ -97,4 +97,47 @@ public class SavedPlacesTests
 
         Assert.Equal("a", Assert.Single(places.Places).Id);
     }
+
+    [Fact]
+    public async Task A_place_keeps_its_address()
+    {
+        var places = new SavedPlaces(_preferences);
+        await places.SaveAsync(PlaceKind.Work, Office, address: "  1000 Rue De La Gauchetière Ouest, Montréal ");
+
+        var reloaded = new SavedPlaces(_preferences);
+        await reloaded.LoadAsync();
+
+        Assert.Equal("1000 Rue De La Gauchetière Ouest, Montréal", reloaded.Work!.Address);
+    }
+
+    [Fact]
+    public async Task A_place_saved_before_addresses_loads_without_one_and_gets_it_later()
+    {
+        await _preferences.SetAsync(SavedPlaces.StorageKey, """[{"id":"a","kind":"Home","name":"","latitude":45.5582,"longitude":-73.5512}]""");
+        var places = new SavedPlaces(_preferences);
+        await places.LoadAsync();
+        var changes = 0;
+        places.Changed += () => changes++;
+
+        await places.SetAddressAsync("a", "6200 Rue Saint-Hubert, Montréal");
+        await places.SetAddressAsync("a", "6200 Rue Saint-Hubert, Montréal");
+        await places.SetAddressAsync("missing", "Nowhere");
+
+        var reloaded = new SavedPlaces(_preferences);
+        await reloaded.LoadAsync();
+        Assert.Equal("6200 Rue Saint-Hubert, Montréal", reloaded.Home!.Address);
+        Assert.Equal(1, changes);
+    }
+
+    [Fact]
+    public async Task A_blank_address_is_none_and_a_long_one_is_cut()
+    {
+        var places = new SavedPlaces(_preferences);
+
+        var blank = await places.SaveAsync(PlaceKind.Other, House, "Gym", "   ");
+        var long_ = await places.SaveAsync(PlaceKind.Other, Office, "Office", new string('a', 200));
+
+        Assert.Null(blank.Address);
+        Assert.Equal(SavedPlace.MaxAddressLength, long_.Address!.Length);
+    }
 }

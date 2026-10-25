@@ -106,6 +106,7 @@ export function takeSavedView() {
         carsPushed: view.carsPushed === true,
         tripPushed: view.tripPushed === true,
         carsOverTrip: view.carsOverTrip === true,
+        placesPushed: view.placesPushed === true,
     };
 }
 

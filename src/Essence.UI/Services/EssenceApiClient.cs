@@ -70,6 +70,31 @@ public sealed class EssenceApiClient(HttpClient http)
             EssenceJsonContext.Default.TripPlan,
             cancellationToken);
 
+    /// <summary>
+    /// Places in Québec matching what was typed (<c>/places/search</c>), those near <paramref name="near"/> first. The
+    /// text goes in the query string, which Essence.Web's nginx doesn't log under <c>/api/places/</c>.
+    /// </summary>
+    /// <param name="language"><c>fr</c> or <c>en</c>.</param>
+    public Task<ApiResult<List<PlaceSuggestion>>> SearchPlacesAsync(
+        string text, GeoPoint? near, string language, CancellationToken cancellationToken)
+    {
+        var bias = near is { } point
+            ? string.Create(CultureInfo.InvariantCulture, $"&lat={point.Latitude:0.####}&lon={point.Longitude:0.####}")
+            : "";
+        return GetAsync(
+            $"places/search?q={Uri.EscapeDataString(text)}{bias}&lang={language}", EssenceJsonContext.Default.ListPlaceSuggestion, cancellationToken);
+    }
+
+    /// <summary>
+    /// What a point is called (<c>/places/reverse</c>): <see cref="ApiError.NoRoute"/> outside Québec,
+    /// <see cref="ApiError.NotFound"/> where nothing with an address is near.
+    /// </summary>
+    public Task<ApiResult<PlaceSuggestion>> GetPlaceAsync(GeoPoint point, string language, CancellationToken cancellationToken) =>
+        GetAsync(
+            string.Create(CultureInfo.InvariantCulture, $"places/reverse?lat={point.Latitude:0.######}&lon={point.Longitude:0.######}&lang={language}"),
+            EssenceJsonContext.Default.PlaceSuggestion,
+            cancellationToken);
+
     public Task<ApiResult<StationDetail>> GetStationAsync(long id, CancellationToken cancellationToken) =>
         GetAsync(string.Create(CultureInfo.InvariantCulture, $"stations/{id}"), EssenceJsonContext.Default.StationDetail, cancellationToken);
 
@@ -158,4 +183,5 @@ public sealed record TripQuery(
 [JsonSerializable(typeof(BestNearby))]
 [JsonSerializable(typeof(TripPlan))]
 [JsonSerializable(typeof(List<PriceHistoryDto>))]
+[JsonSerializable(typeof(List<PlaceSuggestion>))]
 public sealed partial class EssenceJsonContext : JsonSerializerContext;

@@ -281,11 +281,11 @@
                 var otherPlaces = Places.Places.Where(p => p.Kind == PlaceKind.Other).ToList();
                 <div class="where">
                     <div class="where-row" role="group" aria-label="@L["SavedPlacesLabel"]">
-                        <span class="wbox">
+                        <button type="button" class="wbox" @onclick="() => OnSearchPlaces.InvokeAsync(PlacePurpose.Destination)">
                             <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
                                  stroke-linecap="round"><path d="@Icons.Search" /></svg>
                             @L["GoingSomewhere"]
-                        </span>
+                        </button>
                         @PlaceButton(PlaceKind.Home, Places.Home, L["Home"], Icons.Home)
                         @PlaceButton(PlaceKind.Work, Places.Work, L["Work"], Icons.Work)
                         @foreach (var place in otherPlaces)
@@ -298,15 +298,8 @@
                         }
                     </div>
                     <p class="where-help">
-                        @if (_placeHint is { } kind)
-                        {
-                            @L["PlaceHint", kind == PlaceKind.Home ? L["Home"] : L["Work"]]
-                        }
-                        else
-                        {
-                            <span class="touch">@L["GoingSomewhereTouch"]</span>
-                            <span class="mouse">@L["GoingSomewhereMouse"]</span>
-                        }
+                        <span class="touch">@L["GoingSomewhereTouch"]</span>
+                        <span class="mouse">@L["GoingSomewhereMouse"]</span>
                         @(" ")
                         <button type="button" class="link" @onclick="OnDropPinAtCenter">@L["UseMapCenterAsDestination"]</button>
                     </p>
@@ -516,9 +509,6 @@
     private const double NoDetourKm = 1.0;
     private const double NoDetourMinutes = 2.0;
 
-    /// <summary>Home or Work was tapped before it was saved: how to save it shows.</summary>
-    private PlaceKind? _placeHint;
-
     /// <summary>The range is being typed, after a tap on its chip.</summary>
     private bool _editingRange;
 
@@ -568,6 +558,10 @@
     [Parameter]
     public EventCallback OnRefreshTrip { get; set; }
 
+    /// <summary>The address search: for a trip ("Going somewhere?"), or to set Home or Work (tapped before they're saved).</summary>
+    [Parameter]
+    public EventCallback<PlacePurpose> OnSearchPlaces { get; set; }
+
     /// <summary>Drops a pin at the map's centre: the keyboard's way to pick a destination.</summary>
     [Parameter]
     public EventCallback OnDropPinAtCenter { get; set; }
@@ -603,20 +597,16 @@
         }
     }
 
-    /// <summary>Home or Work: a trip there once it's saved, until then how to save it.</summary>
+    /// <summary>Home or Work: a trip there once it's saved, until then the address search to set it.</summary>
     private RenderFragment PlaceButton(PlaceKind kind, SavedPlace? place, string label, string icon) =>
-        @<button type="button" class="place @(place is null ? "is-unset" : null)" aria-expanded="@(place is null ? (_placeHint == kind ? "true" : "false") : null)"
-                 @onclick="() => place is null ? ToggleHint(kind) : OnStartTrip.InvokeAsync(TripDestination.To(place))">
+        @<button type="button" class="place @(place is null ? "is-unset" : null)" aria-label="@(place is null ? (string)L["SetPlaceLabel", label] : null)"
+                 @onclick="() => place is null
+                     ? OnSearchPlaces.InvokeAsync(kind == PlaceKind.Home ? PlacePurpose.Home : PlacePurpose.Work)
+                     : OnStartTrip.InvokeAsync(TripDestination.To(place))">
             <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
                  stroke-linecap="round" stroke-linejoin="round"><path d="@icon" /></svg>
             @label
         </button>;
-
-    private Task ToggleHint(PlaceKind kind)
-    {
-        _placeHint = _placeHint == kind ? null : kind;
-        return Task.CompletedTask;
-    }
 
     /// <summary>Why the reference stays the pick: a station that saves more is past the longest detour, it's the only one, or none saves enough.</summary>
     private string PickIsReferenceWhy(TripPlan plan, TripQuery query)
@@ -687,7 +677,7 @@
         PlaceKind.Home => L["TripToHome"],
         PlaceKind.Work => L["TripToWork"],
         PlaceKind.Other => L["TripToPlace", destination.Name ?? ""],
-        _ => L["TripToPin"],
+        _ => destination.Address is { } address ? L["TripToPlace", address] : L["TripToPin"],
     };
 
     private static string DestinationIcon(TripDestination destination) => destination.Kind switch

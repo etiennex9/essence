@@ -32,7 +32,9 @@ public sealed record MarkerModel(
 /// <param name="CarsPushed">The same for <c>?view=cars</c>, pushed over Best near you or a trip.</param>
 /// <param name="TripPushed">The same for <c>?view=trip</c>, pushed over Best near you.</param>
 /// <param name="CarsOverTrip">My cars is open over a trip, which the map keeps showing.</param>
-public sealed record ReloadState(string Fuel, bool StationPushed, bool ListPushed, bool CarsPushed, bool TripPushed, bool CarsOverTrip);
+/// <param name="PlacesPushed">The same as <paramref name="CarsPushed"/> for <c>?view=places</c>, pushed over Best near you.</param>
+public sealed record ReloadState(
+    string Fuel, bool StationPushed, bool ListPushed, bool CarsPushed, bool TripPushed, bool CarsOverTrip, bool PlacesPushed);
 
 /// <summary>The view and state a reload for a new release left for the page it reloaded into.</summary>
 /// <param name="UserLat">Where the user's dot was, if it was shown.</param>
@@ -47,7 +49,8 @@ public sealed record SavedView(
     bool ListPushed,
     bool CarsPushed,
     bool TripPushed,
-    bool CarsOverTrip);
+    bool CarsOverTrip,
+    bool PlacesPushed);
 
 /// <summary>What the map reports back.</summary>
 public interface IMapListener

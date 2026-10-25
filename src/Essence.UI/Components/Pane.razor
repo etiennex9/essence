@@ -5,7 +5,7 @@
 @* The pane the station details and the lists open in: a side panel on wide screens, a bottom sheet on narrow ones
    (see the CSS), whose header drags to resize or close it (essencePane.js). data-ess-pane lets the map pan a station
    out from under it. *@
-<aside class="pane" @ref="_element" data-ess-pane role="dialog" aria-labelledby="@TitleId">
+<aside class="pane @(Expanded ? "is-expanded" : null)" @ref="_element" data-ess-pane role="dialog" aria-labelledby="@TitleId">
     <div class="handle" aria-hidden="true"></div>
 
     <header>
@@ -45,6 +45,10 @@
 
     [Parameter]
     public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>On phones, the sheet opens at its full height (it can still be dragged down): for a search typed on the keyboard.</summary>
+    [Parameter]
+    public bool Expanded { get; set; }
 
     /// <summary>The Close button, or the sheet dragged away.</summary>
     [Parameter]

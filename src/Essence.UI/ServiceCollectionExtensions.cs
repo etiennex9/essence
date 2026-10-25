@@ -28,6 +28,8 @@ public static class ServiceCollectionExtensions
         services.AddScoped<BestNearYou>();
         services.AddScoped<SavedPlaces>();
         services.AddScoped<TripState>();
+        services.AddScoped<PlaceSearch>();
+        services.AddScoped<PlaceAddresses>();
         services.TryAddScoped<BrowserDevice>();
         services.TryAddScoped<IDeviceLocation>(sp => sp.GetRequiredService<BrowserDevice>());
         services.TryAddScoped<IPreferenceStore>(sp => sp.GetRequiredService<BrowserDevice>());

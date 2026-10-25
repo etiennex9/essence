@@ -15,6 +15,53 @@ public class EssenceApiClientTests
         """;
 
     [Fact]
+    public async Task A_place_search_sends_what_was_typed_near_the_user_in_the_language()
+    {
+        var (client, requests) = Client(_ => Json(
+            """[{"label":"1000 Rue De La Gauchetière Ouest","detail":"Montréal, QC H3A 4W5","latitude":45.49876,"longitude":-73.56657,"kind":"address"}]"""));
+
+        var result = await client.SearchPlacesAsync("1000 de la gauch & co", new GeoPoint(45.50171, -73.56732), "fr", TestContext.Current.CancellationToken);
+
+        Assert.Equal("1000 Rue De La Gauchetière Ouest", Assert.Single(result.Value!).Label);
+        Assert.Equal("/places/search?q=1000%20de%20la%20gauch%20%26%20co&lat=45.5017&lon=-73.5673&lang=fr", Assert.Single(requests).RequestUri!.PathAndQuery);
+    }
+
+    [Fact]
+    public async Task A_place_search_s_numbers_are_invariant_in_French()
+    {
+        var previous = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-CA");
+        try
+        {
+            var (client, requests) = Client(_ => Json("[]"));
+
+            await client.SearchPlacesAsync("rue gaucher", new GeoPoint(45.5248, -73.58), "fr", TestContext.Current.CancellationToken);
+            await client.GetPlaceAsync(new GeoPoint(45.5248, -73.58), "fr", TestContext.Current.CancellationToken);
+
+            Assert.Equal("?q=rue%20gaucher&lat=45.5248&lon=-73.58&lang=fr", requests[0].RequestUri!.Query);
+            Assert.Equal("?lat=45.5248&lon=-73.58&lang=fr", requests[1].RequestUri!.Query);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.UnprocessableEntity, ApiError.NoRoute)]
+    [InlineData(HttpStatusCode.NotFound, ApiError.NotFound)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, ApiError.Unavailable)]
+    public async Task A_point_outside_Québec_or_without_an_address_is_told_apart(HttpStatusCode status, ApiError error)
+    {
+        var (client, requests) = Client(_ => new HttpResponseMessage(status));
+
+        var result = await client.GetPlaceAsync(new GeoPoint(45.426, -75.695), "en", TestContext.Current.CancellationToken);
+
+        Assert.Equal(error, result.Error);
+        Assert.Equal("/places/reverse?lat=45.426&lon=-75.695&lang=en", Assert.Single(requests).RequestUri!.PathAndQuery);
+    }
+
+    [Fact]
     public async Task Nearby_deserializes_the_api_shape()
     {
         var (client, _) = Client(_ => Json(NearbyJson));
