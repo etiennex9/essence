@@ -10,6 +10,8 @@ namespace Essence.UI.Services;
 /// <param name="CostcoMember">Costco sells to members only: without, it's left out.</param>
 /// <param name="SpareKm">On trips, the range never counted on.</param>
 /// <param name="MaxDetourMinutes">The longest detour: how much longer than the closest's a station's drive may take to be picked.</param>
+/// <param name="RangeKm">On trips, the range the dashboard showed when the driver last typed it; null until then.</param>
+/// <param name="RangeAt">When <paramref name="RangeKm"/> was typed. It isn't asked again as it ages.</param>
 public sealed record CarProfile(
     string Id,
     string Name,
@@ -18,7 +20,9 @@ public sealed record CarProfile(
     decimal LitresPer100Km,
     bool CostcoMember,
     int SpareKm,
-    int MaxDetourMinutes)
+    int MaxDetourMinutes,
+    int? RangeKm = null,
+    DateTimeOffset? RangeAt = null)
 {
     public const decimal MinFillLitres = 1;
     public const decimal MaxFillLitres = 200;
@@ -26,6 +30,7 @@ public sealed record CarProfile(
     public const decimal MaxLitresPer100Km = 40;
     public const int MaxSpareKm = 200;
     public const int MaxDetourLimit = 120;
+    public const int MaxRangeKm = 2000;
 
     /// <summary>A typical car: 40 L at 8.5 L/100 km, not a Costco member, 30 km spare, 10 min longest detour.</summary>
     public static CarProfile Typical(string id, string name, string fuel) => new(id, name, Fuels.Normalize(fuel), 40, 8.5m, false, 30, 10);
@@ -39,6 +44,8 @@ public sealed record CarProfile(
         LitresPer100Km = Math.Clamp(LitresPer100Km, MinLitresPer100Km, MaxLitresPer100Km),
         SpareKm = Math.Clamp(SpareKm, 0, MaxSpareKm),
         MaxDetourMinutes = Math.Clamp(MaxDetourMinutes, 0, MaxDetourLimit),
+        RangeKm = RangeKm is { } range ? Math.Clamp(range, 0, MaxRangeKm) : null,
+        RangeAt = RangeKm is null ? null : RangeAt,
     };
 }
 
@@ -89,6 +96,13 @@ public sealed class CarProfiles(IPreferenceStore preferences)
             _fuel = fuel;
             Changed?.Invoke();
         }
+    }
+
+    /// <summary>The range the dashboard of the car being driven shows, typed <paramref name="at"/>.</summary>
+    public async Task SetRangeAsync(int rangeKm, DateTimeOffset at)
+    {
+        await LoadAsync();
+        await SaveAsync(Active with { RangeKm = rangeKm, RangeAt = at });
     }
 
     /// <summary>Switches to another car set up.</summary>

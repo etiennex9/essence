@@ -15,6 +15,25 @@ public class FormattingTests
     public void Price_always_shows_one_decimal() =>
         Assert.Equal("165.0", Formatting.Price(165m, CultureInfo.InvariantCulture));
 
+    [Theory]
+    [InlineData(22.4, "22 min")]
+    [InlineData(155, "2 h 35 min")]
+    [InlineData(185, "3 h 5 min")]
+    [InlineData(179.6, "3 h")]
+    [InlineData(-1, "0 min")]
+    public void Durations_are_to_the_minute(double minutes, string expected) =>
+        Assert.Equal(expected, Formatting.Duration(minutes, CultureInfo.GetCultureInfo("fr-CA")));
+
+    [Fact]
+    public void The_time_of_day_is_the_devices_in_the_cultures_style()
+    {
+        var at = new DateTimeOffset(2026, 10, 24, 12, 10, 0, TimeSpan.Zero);
+        var montreal = TimeZoneInfo.FindSystemTimeZoneById("America/Toronto");
+
+        Assert.Equal("08 h 10", Formatting.TimeOfDay(at, montreal, CultureInfo.GetCultureInfo("fr-CA")));
+        Assert.Matches("^8:10", Formatting.TimeOfDay(at, montreal, CultureInfo.GetCultureInfo("en-CA")));
+    }
+
     [Fact]
     public void Missing_price_is_a_dash() =>
         Assert.Equal("—", Formatting.Price(null, CultureInfo.InvariantCulture));

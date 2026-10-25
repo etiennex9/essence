@@ -16,6 +16,13 @@ public class GoogleMapsTests
         Assert.EndsWith("&travelmode=driving&dir_action=navigate", GoogleMaps.Directions(45.5, -73.6, navigate: true));
 
     [Fact]
+    public void Going_via_a_station_makes_it_a_stop_on_the_way() =>
+        Assert.Equal(
+            "https://www.google.com/maps/dir/?api=1&destination=46.8139,-71.208&waypoints=45.883,-72.4842&travelmode=driving"
+            + "&dir_action=navigate",
+            GoogleMaps.DirectionsVia(46.8139, -71.208, 45.883, -72.4842, navigate: true));
+
+    [Fact]
     public void Coordinates_are_invariant_and_rounded_to_six_decimals()
     {
         var previous = CultureInfo.CurrentCulture;

@@ -58,6 +58,18 @@ public sealed class EssenceApiClient(HttpClient http)
             EssenceJsonContext.Default.BestNearby,
             cancellationToken);
 
+    /// <summary>Where to fill up on the way to a destination, for a car (<c>/trips/best</c>).</summary>
+    public Task<ApiResult<TripPlan>> GetTripAsync(TripQuery query, CancellationToken cancellationToken) =>
+        GetAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"trips/best?fromLat={query.FromLatitude:0.######}&fromLon={query.FromLongitude:0.######}"
+                + $"&toLat={query.ToLatitude:0.######}&toLon={query.ToLongitude:0.######}&fuel={Uri.EscapeDataString(query.Fuel)}"
+                + $"&fillL={query.FillLitres:0.##}&per100Km={query.LitresPer100Km:0.##}&costco={(query.CostcoMember ? "true" : "false")}"
+                + $"&maxDetourMin={query.MaxDetourMinutes}{(query.RangeKm is { } range ? $"&rangeKm={range}" : "")}&spareKm={query.SpareKm}"),
+            EssenceJsonContext.Default.TripPlan,
+            cancellationToken);
+
     public Task<ApiResult<StationDetail>> GetStationAsync(long id, CancellationToken cancellationToken) =>
         GetAsync(string.Create(CultureInfo.InvariantCulture, $"stations/{id}"), EssenceJsonContext.Default.StationDetail, cancellationToken);
 
@@ -124,10 +136,26 @@ public sealed record BestQuery(
     bool CostcoMember,
     int MaxDetourMinutes);
 
+/// <summary>What <see cref="EssenceApiClient.GetTripAsync"/> asks for: from where, to where, which fuel, and the car.</summary>
+/// <param name="RangeKm">What the dashboard said was left; null when the driver didn't say.</param>
+public sealed record TripQuery(
+    double FromLatitude,
+    double FromLongitude,
+    double ToLatitude,
+    double ToLongitude,
+    string Fuel,
+    decimal FillLitres,
+    decimal LitresPer100Km,
+    bool CostcoMember,
+    int MaxDetourMinutes,
+    int? RangeKm,
+    int SpareKm);
+
 /// <summary>Source-generated (trim-safe) serialization of the API's responses, with the API's web defaults (camelCase).</summary>
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web)]
 [JsonSerializable(typeof(List<NearbyStation>))]
 [JsonSerializable(typeof(StationDetail))]
 [JsonSerializable(typeof(BestNearby))]
+[JsonSerializable(typeof(TripPlan))]
 [JsonSerializable(typeof(List<PriceHistoryDto>))]
 public sealed partial class EssenceJsonContext : JsonSerializerContext;

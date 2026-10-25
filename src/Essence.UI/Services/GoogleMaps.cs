@@ -16,4 +16,17 @@ public static class GoogleMaps
             $"https://www.google.com/maps/dir/?api=1&destination={latitude:0.######},{longitude:0.######}&travelmode=driving");
         return navigate ? url + "&dir_action=navigate" : url;
     }
+
+    /// <summary>
+    /// Driving directions from where the user is to a destination, by way of a stop (a station on the way). With
+    /// <paramref name="navigate"/>, the Google Maps app starts the navigation at once.
+    /// </summary>
+    public static string DirectionsVia(double latitude, double longitude, double viaLatitude, double viaLongitude, bool navigate = false)
+    {
+        var url = string.Create(
+            CultureInfo.InvariantCulture,
+            $"https://www.google.com/maps/dir/?api=1&destination={latitude:0.######},{longitude:0.######}"
+            + $"&waypoints={viaLatitude:0.######},{viaLongitude:0.######}&travelmode=driving");
+        return navigate ? url + "&dir_action=navigate" : url;
+    }
 }

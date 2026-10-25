@@ -149,4 +149,33 @@ public class CarProfilesTests
 
         Assert.Equal(2, changes);
     }
+
+    [Fact]
+    public async Task Each_car_keeps_the_range_last_typed_and_when()
+    {
+        var cars = new CarProfiles(_preferences);
+        var corolla = await cars.AddAsync("Corolla", "Mazda3");
+        var at = new DateTimeOffset(2026, 10, 24, 12, 10, 0, TimeSpan.Zero);
+
+        await cars.SetRangeAsync(180, at);
+        await cars.SelectAsync(cars.Cars[0].Id);
+
+        var reloaded = new CarProfiles(_preferences);
+        await reloaded.LoadAsync();
+        Assert.Null(reloaded.Active.RangeKm);
+        var saved = reloaded.Cars.Single(c => c.Id == corolla.Id);
+        Assert.Equal((180, at), (saved.RangeKm, saved.RangeAt));
+    }
+
+    [Fact]
+    public async Task A_range_is_kept_in_range_and_its_time_only_with_it()
+    {
+        var cars = new CarProfiles(_preferences);
+
+        await cars.SetRangeAsync(99_999, DateTimeOffset.UnixEpoch);
+        Assert.Equal(CarProfile.MaxRangeKm, cars.Active.RangeKm);
+
+        await cars.SaveAsync(cars.Active with { RangeKm = null });
+        Assert.Null(cars.Active.RangeAt);
+    }
 }
