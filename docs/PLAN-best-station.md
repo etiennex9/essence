@@ -1,8 +1,8 @@
 # Plan: Best near you and Best on the way
 
 > **Status (2026-10-25):** designed with the owner through mockups and Q&A; every decision below was confirmed by the
-> owner. Phases 1 and 2 are built (see "Phase 1 as built" and "Phase 2 as built" for where they differ from the steps);
-> phases 3 and 4 aren't. Work in phase order: each phase ships on its own and is usable without the next.
+> owner. Phases 1 to 3 are built (see "Phase 1 as built", "Phase 2 as built" and "Phase 3 as built" for where they
+> differ from the steps); phase 4 isn't. Work in phase order: each phase ships on its own and is usable without the next.
 > To resume: tell Claude *"Implement docs/PLAN-best-station.md, phase N"*.
 
 ## Context
@@ -372,6 +372,66 @@ message instead of breaking; a trip survives leaving for Google Maps and coming 
 
 **Done when:** typing "1000 de la gauch" suggests the Montréal address within about half a second; a search for an
 address in Ontario returns nothing; with Photon stopped, search shows a message and pins still work.
+
+**Phase 3 as built** (where it differs from the steps above, or settles what they left open):
+- **A Québec-only index, built on the NAS** (the owner's choice once trimming turned out possible), instead of
+  `rtuszik/photon-docker` with `REGION=canada`. That image only downloads whole countries: 7.5 GB of index (about 20 GB
+  during an update) and a 4 GB memory limit. `src/Essence.Geocoding` is an image like routing's: Photon 1.3.0's jar
+  (checksum-pinned) on `eclipse-temurin:21.0.12.1_1-jre-noble` (digest-pinned), runs as 1654, `serve` / `build` /
+  `health`. `build` downloads Photon's JSONL dump of Canada from the mirror photon-docker uses (1.6 GB, MD5-checked),
+  keeps the dump's header lines and the places whose address has `"state":"Québec"` or `"CA-QC"` (1.92 M of 10.2 M
+  lines), imports them with `-languages fr,en` into `next/` and swaps it in, recording Photon's version (serve refuses an
+  index from another) and the dump's date. Measured here: 8 min of import on 24 cores, a 3.2 GB RAM peak, 2.0 GB of
+  index, healthy 9 s after a start, about 400 MB idle and 1.3 GB after 2,000 searches (median 22 ms, p95 52 ms at 16 at
+  a time): `mem_limit: 2g`, a 1 GB heap. No `UPDATE_*`, `PUID`/`PGID` or `JAVA_PARAMS`: the image runs as 1654 and the
+  monthly refresh is a cron job, as for routing. `deploy/truenas-routing-refresh.sh` became
+  `deploy/truenas-data-refresh.sh <routing|geocoding> <folder>`, one cron job per service (geocoding an hour after
+  routing). The first index is built by hand before the service is added, so the autodeploy's 10-minute wait isn't at
+  risk; the healthcheck stays.
+- **Names follow routing's:** the service, dataset and image are `geocoding` (`/mnt/POOL/apps/essence/data/geocoding`,
+  `essence-geocoding`), and `Geocoding:BaseUrl` defaults to `http://geocoding:2322/`.
+- **Photon's logs:** checked in Photon 1.3.0's source: Javalin's request logger is off and nothing logs a query
+  (log4j: `de.komoot.photon` at INFO, the rest at WARN); there's no setting to turn down. `/api/places/` was already in
+  nginx's no-log rule. The api logs one line per Photon failure under `Essence.Api.Geocoding`, without the request; a
+  test captures every log line and checks that neither the typed text nor the coordinates appear.
+- **The border, by Québec's boundary** rather than by reverse geocoding. With a Québec-only index the nearest place to a
+  pin in Ottawa is in Gatineau; and even with Canada's, the index has no US places, so pins in Derby Line, Vermont came
+  back as Stanstead. `QuebecArea.Contains` tests OpenStreetMap's boundary (relation 61549, simplified to 20 m south of
+  49.5° N and 300 m north: 11,300 points, 56 KB, `src/Essence.Ranking/QuebecBoundary.txt`, made by
+  `tools/quebec-boundary/make-boundary.py`; ODbL, credited in the file). `/trips/best` refuses a destination outside it
+  with the same 422 as the other out-of-area cases (title "Outside Québec", `point: to`), with or without Photon:
+  downtown Ottawa, Derby Line, Champlain NY, Edmundston and Labrador City are refused; Gatineau, Stanstead, Fermont and
+  Blanc-Sablon aren't. The start is still checked against the box only (a driver just across the border gets the
+  stations on the way in). `/places/reverse` answers the same 422 without asking Photon, and the pin's card says
+  "Outside Québec" and offers neither a trip nor saving.
+- **The endpoints:** `/places/search` asks Photon for 20 (5 are kept) with the Québec box, the bias, the layers worth
+  driving to and `osm_tag` exclusions (waterways, natural features, land use, boundaries); results whose `state` isn't
+  Québec are still dropped. Each place comes once: the same name and town (a long street's stretches), or the same name
+  within 150 m (an address entered twice). A named place found only by its address (a business at "1000 de la
+  Gauchetière") is put after the places whose own name matches. `PlaceSuggestion.Kind` is `address`, `street`, `town` or
+  `named`; `Detail` is "Montréal, QC H3A 4W5" for an address. `/places/reverse` takes `lang` too, answers the nearest
+  address within 100 m, else the nearest street or named place within 1 km (404 when none), and only Québec's places.
+  Both take `lang` (`fr` by default, or `en`: Photon's `name:en`, "La Gauchetière Street West"). `RateLimiting:Search`
+  is 60 a minute per IP, shared by search and reverse.
+- **Tests:** `tests/Essence.Api.Tests` is new (WebApplicationFactory, no database): the endpoints' rules against a stub
+  Photon, their own rate limit, and the logs. The trip's boundary check is covered by the boundary's tests and was checked
+  against the running API.
+- **The UI:** "Going somewhere?" is a button that opens `PlacesPanel` at `?view=places`, pushed over Best near you
+  (`PlacesPushed` in the reload state), as a sheet opened at full height on phones so the box and the first suggestions
+  stay above the keyboard. One panel serves the mockup's "Set Work" sheet too: its title follows what a place found is
+  for (a trip, Home, Work, another place, which is named once found), and "Your places" has Set / Change / Cancel and
+  Forget. The dashed Home and Work chips open it to set them (they used to show a hint). "Pick it on the map" closes the
+  panes and the status chip says how. What a place found is for isn't kept across a reload (it reopens for a trip).
+  `PlaceSearch` keeps answers per text, language and 10 km area (50 at most); while a longer text is on its way, the
+  answers of the longest cached text it starts with show, cut to those it still matches, faded. Suggestions show the
+  straight-line distance when the location is known, and the typed words in bold.
+- **Addresses kept:** `SavedPlace.Address` and `TripDestination.Address` (short: "1000 Rue De La Gauchetière Ouest,
+  Montréal"). A place found or a pin with an address names the trip ("To 1000 Rue…") and the map's destination; places
+  saved before phase 3 get theirs when the panel shows them. Reverse lookups are kept for the session per point,
+  failures aren't.
+- **Not checked:** the keyboard over the sheet on a real phone (Android's keyboard overlays the page; the sheet opens
+  tall for that), and the refresh script on TrueNAS. House numbers are OpenStreetMap's: some are missing (6200 Rue
+  Saint-Hubert isn't there, 6235 is).
 
 ## Phase 4 (optional): fuel level from the car (OBD2)
 **Before starting:** the owner tests both cars with an OBDLink CX in a terminal app:
