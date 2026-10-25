@@ -3,4 +3,9 @@
   <!-- Which station to fill up at: the costs, the ranking and their rules, as pure functions. No dependencies, so it's
        tested on its own; only Essence.Api references it. -->
 
+  <ItemGroup>
+    <!-- Québec's boundary, for QuebecArea.Contains (tools/quebec-boundary makes it). -->
+    <EmbeddedResource Include="QuebecBoundary.txt" LogicalName="Essence.Ranking.QuebecBoundary.txt" />
+  </ItemGroup>
+
 </Project>
