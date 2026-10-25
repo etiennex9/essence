@@ -20,6 +20,27 @@ public class FormattingTests
         Assert.Equal("—", Formatting.Price(null, CultureInfo.InvariantCulture));
 
     [Theory]
+    [InlineData("en-CA", "$64.75")]
+    [InlineData("en-US", "$64.75")]
+    [InlineData("en-GB", "$64.75")]
+    [InlineData("fr-CA", "64,75 $")]
+    [InlineData("fr-FR", "64,75 $")]
+    public void Money_is_in_dollars_whatever_the_culture(string culture, string expected) =>
+        // French puts a no-break space before the symbol, narrow or not depending on the ICU version.
+        Assert.Equal(expected, string.Concat(Formatting.Money(64.75m, CultureInfo.GetCultureInfo(culture))
+            .Select(c => char.GetUnicodeCategory(c) == UnicodeCategory.SpaceSeparator ? ' ' : c)));
+
+    [Fact]
+    public void Money_always_shows_cents() =>
+        Assert.Equal("$2.20", Formatting.Money(2.2m, CultureInfo.GetCultureInfo("en-CA")));
+
+    [Theory]
+    [InlineData("en-CA", "9.0")]
+    [InlineData("fr-CA", "9,0")]
+    public void Km_has_one_decimal(string culture, string expected) =>
+        Assert.Equal(expected, Formatting.Km(9.04, CultureInfo.GetCultureInfo(culture)));
+
+    [Theory]
     [InlineData(30, AgoUnit.JustNow, 0)]
     [InlineData(90, AgoUnit.Minutes, 1)]
     [InlineData(59 * 60, AgoUnit.Minutes, 59)]

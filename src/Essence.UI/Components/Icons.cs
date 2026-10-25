@@ -11,4 +11,7 @@ internal static class Icons
     public const string Check = "M5 12.5l4.5 4.5L19 7.5";
 
     public const string Close = "M6 6l12 12M18 6L6 18";
+
+    /// <summary>A paper plane: directions in Google Maps.</summary>
+    public const string Directions = "M3 11l19-9-9 19-2-8-8-2z";
 }

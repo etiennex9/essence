@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace Essence.UI.Services;
 
 public enum AgoUnit
@@ -12,6 +14,20 @@ public static class Formatting
 {
     /// <summary>Cents per litre with one decimal in the culture's style ("164.9", "164,9"), or a dash when there's no price.</summary>
     public static string Price(decimal? cents, IFormatProvider culture) => cents is { } c ? c.ToString("0.0", culture) : "—";
+
+    /// <summary>
+    /// Dollars to the cent in the culture's style, with the dollar sign where the culture puts its currency symbol: "$64.75",
+    /// "64,75 $". Plain "C" would show £ or € to a browser set to British English or France's French.
+    /// </summary>
+    public static string Money(decimal dollars, IFormatProvider culture)
+    {
+        var format = (NumberFormatInfo)NumberFormatInfo.GetInstance(culture).Clone();
+        format.CurrencySymbol = "$";
+        return dollars.ToString("C2", format);
+    }
+
+    /// <summary>Kilometres with one decimal in the culture's style ("9.0", "9,0").</summary>
+    public static string Km(double km, IFormatProvider culture) => km.ToString("0.0", culture);
 
     /// <summary>The unit and count for "… ago": minutes under an hour, hours under two days, then days.</summary>
     public static (AgoUnit Unit, int Value) Ago(TimeSpan elapsed) => elapsed switch
