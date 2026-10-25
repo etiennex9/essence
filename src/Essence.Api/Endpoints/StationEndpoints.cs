@@ -17,9 +17,9 @@ public static class StationEndpoints
     private const int MaxNearbyLimit = 100;
     private const int DefaultHistoryDays = 30;
     private const int MaxHistoryDays = 366;
-    private const double MaxFillLitres = 200;
-    private const double MaxLitresPer100Km = 40;
-    private const double MaxDetourMinutes = 120;
+    internal const double MaxFillLitres = 200;
+    internal const double MaxLitresPer100Km = 40;
+    internal const double MaxDetourMinutes = 120;
 
     private static readonly Expression<Func<Station, StationSummary>> ToSummary = s => new StationSummary(
         s.Id, s.Name, s.Brand, s.Status, s.Address, s.PostalCode, s.Region, s.Latitude, s.Longitude, s.IsActive);
@@ -38,10 +38,12 @@ public static class StationEndpoints
             .WithDescription(
                 "Ranks the operating stations with an available price by what the fill-up costs once the gas burned getting there "
                 + "and back is counted. The closest is the reference the savings are counted against. A farther station is picked "
-                + "only if it saves at least $0.25, its round trip takes at most `maxDetourMin` longer than the closest's, and it "
-                + "still saves with roads twice the straight line; the others stay listed, with the reason. Distances are "
-                + "estimated: straight line × 1.3, driven at 40 km/h. Looks within `radiusKm`, widened to 25 km with fewer than 5 "
-                + "stations, else returns the closest at any distance.")
+                + "only if it saves at least $0.25 and its round trip takes at most `maxDetourMin` longer than the closest's; the "
+                + "others stay listed, with the reason. Distances are by road (the 10 nearest and every station cheaper than the "
+                + "nearest, at most 200). When the routing server is down, or the point is more than 1 km from a road, they're "
+                + "estimated instead (`byRoad` false): straight line × 1.3, driven at 40 km/h, and a farther station must also "
+                + "save with roads twice the straight line. Looks within `radiusKm`, widened to 25 km with fewer than 5 stations, "
+                + "else returns the closest at any distance.")
             .WithDataVersion();
         group.MapGet("/{id:long}", GetStation)
             .WithSummary("A station with its current prices")
@@ -202,6 +204,8 @@ public static class StationEndpoints
     private static async Task<Results<Ok<BestNearby>, ValidationProblem>> Best(
         EssenceDbContext db,
         StationSnapshot snapshot,
+        OsrmClient osrm,
+        ILoggerFactory loggers,
         [Description("Latitude of the driver, in degrees.")] double lat,
         [Description("Longitude of the driver, in degrees.")] double lon,
         CancellationToken cancellationToken,
@@ -239,8 +243,11 @@ public static class StationEndpoints
             .ToList();
         var (area, areaRadiusKm) = SearchArea.Select(stations, s => s.Km, radiusKm);
 
-        var candidates = area.Select(s => NearYou.Estimate(s.Station.Id, s.PriceCents, s.Km)).ToList();
-        var ranking = NearYou.Rank(candidates, new Car((decimal)fillL, (decimal)per100Km), maxDetourMin, byRoad: false);
+        // By road when the routing server answers; road and estimated figures are never mixed in one ranking.
+        var car = new Car((decimal)fillL, (decimal)per100Km);
+        var byRoad = await RankByRoadAsync(osrm, loggers, new LatLon(lat, lon), area, car, maxDetourMin, cancellationToken);
+        var ranking = byRoad
+            ?? NearYou.Rank(area.Select(s => NearYou.Estimate(s.Station.Id, s.PriceCents, s.Km)).ToList(), car, maxDetourMin, byRoad: false);
         if (ranking is null)
         {
             return TypedResults.Ok(new BestNearby(null, null, null, null, [], areaRadiusKm, ByRoad: false));
@@ -252,13 +259,57 @@ public static class StationEndpoints
             var station = byId[ranked.Id];
             return new RankedStation(
                 station.Id, station.Name, station.Brand, station.Address, station.Latitude, station.Longitude,
-                ranked.Candidate.PriceCents, Math.Round(ranked.Candidate.DistanceKm, 2), null, ranked.Cost, ranked.Saves,
+                ranked.Candidate.PriceCents, Math.Round(ranked.Candidate.DistanceKm, 2),
+                ranked.Candidate.DurationMinutes is { } minutes ? Math.Round(minutes, 1) : null, ranked.Cost, ranked.Saves,
                 station.MembersOnly, ranked.OverDetourLimit, ranked.SavingUncertain);
         }
 
         return TypedResults.Ok(new BestNearby(
             ToRanked(ranking.Pick), ranking.Reference.Id, ranking.Reference.Id, ranking.Cheapest.Id,
-            ranking.Listed.Select(ToRanked).ToList(), areaRadiusKm, ByRoad: false));
+            ranking.Listed.Select(ToRanked).ToList(), areaRadiusKm, ByRoad: byRoad is not null));
+    }
+
+    /// <summary>
+    /// Best near you by road: the driver snapped to any road (an autoroute included), then one table from the driver to the
+    /// stations and one back. Null, for the estimate instead, when the routing server fails, the driver is more than
+    /// <see cref="NearYou.MaxDriverSnapMeters"/> from a road, or no station has a road there and back.
+    /// </summary>
+    private static async Task<NearbyRanking?> RankByRoadAsync(
+        OsrmClient osrm,
+        ILoggerFactory loggers,
+        LatLon driver,
+        IReadOnlyCollection<(SnapshotStation Station, decimal PriceCents, double Km)> area,
+        Car car,
+        double maxDetourMin,
+        CancellationToken cancellationToken)
+    {
+        var measured = NearYou.SelectByRoad(area, s => s.Km, s => s.PriceCents);
+        if (measured.Count == 0)
+        {
+            return null;
+        }
+
+        try
+        {
+            var snapped = await osrm.NearestAsync(driver, cancellationToken);
+            if (snapped.SnapMeters > NearYou.MaxDriverSnapMeters)
+            {
+                return null;
+            }
+
+            List<LatLon> points = [driver, .. measured.Select(s => new LatLon(s.Station.Latitude, s.Station.Longitude))];
+            List<string?> hints = [snapped.Hint, .. measured.Select(_ => (string?)null)];
+            var stations = Enumerable.Range(1, measured.Count).ToList();
+            var outbound = await osrm.TableAsync(points, hints, [0], stations, cancellationToken);
+            var back = await osrm.TableAsync(points, hints, stations, [0], cancellationToken);
+            var candidates = NearYou.ByRoad([.. measured.Select(s => (s.Station.Id, s.PriceCents))], outbound, back);
+            return NearYou.Rank(candidates, car, maxDetourMin, byRoad: true);
+        }
+        catch (OsrmException ex)
+        {
+            loggers.CreateLogger(RoutingLog.Category).LogOsrmFailure(ex);
+            return null;
+        }
     }
 
     private static async Task<Results<Ok<List<PriceHistoryDto>>, NotFound, ValidationProblem>> GetPriceHistory(

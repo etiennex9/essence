@@ -4,6 +4,7 @@ using Essence.Data;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,9 +19,12 @@ if (string.IsNullOrWhiteSpace(connectionString))
 builder.Services.AddEssenceDbContext(connectionString, o => o.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<StationSnapshot>();
+builder.Services.AddOsrmRouting(builder.Configuration);
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
-builder.Services.AddHealthChecks().AddCheck<IngestHealthCheck>("ingest");
+builder.Services.AddHealthChecks()
+    .AddCheck<IngestHealthCheck>("ingest")
+    .AddCheck<RoutingHealthCheck>("routing", HealthStatus.Degraded);
 builder.Services.AddPerIpRateLimiting(builder.Configuration);
 
 // Essence.Web's nginx forwards /api/ here with the client's address (for the rate limit) and the public scheme, host and
@@ -65,6 +69,7 @@ app.MapHealthChecks("/health", IngestHealthCheck.EndpointOptions);
 app.MapHealthChecks("/alive", new HealthCheckOptions { Predicate = _ => false });
 
 app.MapStationEndpoints();
+app.MapTripEndpoints();
 app.MapPriceEndpoints();
 app.MapImportEndpoints();
 
