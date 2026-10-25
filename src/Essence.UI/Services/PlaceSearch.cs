@@ -187,21 +187,24 @@ public sealed class PlaceSearch(EssenceApiClient api, TimeProvider time) : IDisp
     private static string Fold(string text) => FoldKeepingLength(text);
 
     /// <summary>
-    /// Lower case without accents, one character for one, so positions in it are positions in the text. Half of a
-    /// surrogate pair (an emoji) is kept as is: it can't be normalized alone.
+    /// Lower case without accents, one character for one, so positions in it are positions in the text. What can't be
+    /// normalized alone (half of an emoji's surrogate pair, a noncharacter such as U+FFFE) is kept as it is.
     /// </summary>
     private static string FoldKeepingLength(string text)
     {
         var builder = new StringBuilder(text.Length);
         foreach (var c in text)
         {
-            if (char.IsSurrogate(c))
+            string decomposed;
+            try
             {
-                builder.Append(c);
-                continue;
+                decomposed = char.IsSurrogate(c) ? c.ToString() : c.ToString().Normalize(NormalizationForm.FormD);
+            }
+            catch (ArgumentException)
+            {
+                decomposed = c.ToString();
             }
 
-            var decomposed = c.ToString().Normalize(NormalizationForm.FormD);
             builder.Append(char.ToLowerInvariant(decomposed.Length > 0 ? decomposed[0] : c));
         }
 

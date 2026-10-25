@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Logging;
 
 namespace Essence.Api.Tests;
@@ -166,6 +167,28 @@ public sealed class PlaceEndpointsTests : IDisposable
 
         Assert.Equal(HttpStatusCode.ServiceUnavailable, search.StatusCode);
         Assert.Equal(HttpStatusCode.ServiceUnavailable, reverse.StatusCode);
+
+        // Once each: no retry.
+        Assert.Equal(2, _requests.Count);
+    }
+
+    [Fact]
+    public async Task Photon_down_makes_the_health_check_degraded()
+    {
+        var registration = new HealthCheckRegistration("geocoding", _ => null!, HealthStatus.Degraded, null);
+        var photon = _factory.Services.CreateScope().ServiceProvider.GetRequiredService<PhotonClient>();
+        var check = new GeocodingHealthCheck(photon);
+
+        _respond = _ => new HttpResponseMessage(HttpStatusCode.OK)
+        {
+            Content = new StringContent("""{"status":"Ok"}""", Encoding.UTF8, "application/json"),
+        };
+        var up = await check.CheckHealthAsync(new HealthCheckContext { Registration = registration }, TestContext.Current.CancellationToken);
+        _respond = _ => throw new HttpRequestException("Connection refused");
+        var down = await check.CheckHealthAsync(new HealthCheckContext { Registration = registration }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HealthStatus.Healthy, up.Status);
+        Assert.Equal(HealthStatus.Degraded, down.Status);
     }
 
     [Fact]

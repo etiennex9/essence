@@ -205,15 +205,31 @@ public static class Places
         return Labelled(street ?? place.Name, town, PlaceKinds.Address);
     }
 
-    /// <summary>Lower case, without accents or extra spaces: "Québec" and "QUEBEC" are the same.</summary>
+    /// <summary>
+    /// Lower case, without accents or extra spaces: "Québec" and "QUEBEC" are the same. What can't be normalized (a
+    /// noncharacter such as U+FFFE, typed or pasted) is kept as it is.
+    /// </summary>
     public static string Fold(string text)
     {
         var builder = new StringBuilder(text.Length);
-        foreach (var c in text.Normalize(NormalizationForm.FormD))
+        foreach (var rune in text.EnumerateRunes())
         {
-            if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+            string decomposed;
+            try
             {
-                builder.Append(char.IsWhiteSpace(c) ? ' ' : char.ToLowerInvariant(c));
+                decomposed = rune.ToString().Normalize(NormalizationForm.FormD);
+            }
+            catch (ArgumentException)
+            {
+                decomposed = rune.ToString();
+            }
+
+            foreach (var c in decomposed)
+            {
+                if (CharUnicodeInfo.GetUnicodeCategory(c) != UnicodeCategory.NonSpacingMark)
+                {
+                    builder.Append(char.IsWhiteSpace(c) ? ' ' : char.ToLowerInvariant(c));
+                }
             }
         }
 
@@ -222,16 +238,34 @@ public static class Places
 
     private static string? Town(PhotonPlace place) => place.City ?? place.Locality ?? place.District ?? place.County;
 
-    /// <summary>A named place at the house number typed, whose name doesn't hold that number: found by its address.</summary>
-    private static bool FoundByItsAddress(PhotonPlace place, PlaceLabel label, string[] typed) =>
-        label.Kind == PlaceKinds.Named
-        && place.HouseNumber is { } number
-        && typed.Contains(Fold(number))
-        && !Words(label.Label).Contains(Fold(number));
+    /// <summary>
+    /// A named place found by its address: at a house number typed (one of a range like "1000-1010" counts), whose name
+    /// holds neither that number nor a word typed besides the address's ("Deloitte" for "1000 de la gauch", but not "Tim
+    /// Hortons" for "tim hortons 1000 de la gauchetière").
+    /// </summary>
+    private static bool FoundByItsAddress(PhotonPlace place, PlaceLabel label, string[] typed)
+    {
+        if (label.Kind != PlaceKinds.Named || place.HouseNumber is not { } number)
+        {
+            return false;
+        }
+
+        var numbers = Words(number);
+        var name = Words(label.Label);
+        if (!numbers.Any(typed.Contains) || numbers.Any(name.Contains))
+        {
+            return false;
+        }
+
+        var street = place.Street is { } s ? Words(s) : [];
+        return !typed
+            .Where(t => !numbers.Contains(t) && !street.Any(w => w.StartsWith(t, StringComparison.Ordinal)))
+            .Any(t => name.Any(w => w.StartsWith(t, StringComparison.Ordinal)));
+    }
 
     private static string[] Words(string text) => Fold(text).Split(WordSeparators, StringSplitOptions.RemoveEmptyEntries);
 
-    private static readonly char[] WordSeparators = [' ', ',', '-', '\'', '’', '.', '(', ')'];
+    private static readonly char[] WordSeparators = [' ', ',', ';', '-', '\'', '’', '.', '(', ')'];
 
     private static PlaceLabel? Labelled(string? label, string? detail, string kind) =>
         string.IsNullOrWhiteSpace(label) ? null : new PlaceLabel(label, detail ?? "", kind);

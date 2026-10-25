@@ -247,11 +247,15 @@
     cursor: pointer;
 }
 
-/* A 44 px target, without making the row taller. */
+/* A 44 px target, without making the row taller: sized on its own, since the border isn't in the box it's placed in. */
 .edit::after {
     content: "";
     position: absolute;
-    inset: -4px 0;
+    left: -1px;
+    right: -1px;
+    top: 50%;
+    height: 44px;
+    translate: 0 -50%;
 }
 
 .edit:hover {

@@ -213,6 +213,18 @@ public class PlaceSearchTests
     }
 
     [Fact]
+    public void A_noncharacter_pasted_is_kept_as_it_is()
+    {
+        var search = NewSearch();
+
+        search.Type("gauch￾", Montreal, "fr");
+
+        Assert.True(search.Loading);
+        Assert.Empty(PlaceSearch.Highlights("Rue Gaucher", "gauch￾"));
+        Assert.Equal([(4, 5)], PlaceSearch.Highlights("Rue Gaucher", "gauch ￾"));
+    }
+
+    [Fact]
     public void Accents_are_matched_without_moving_the_highlights() =>
         Assert.Equal([(4, 5)], PlaceSearch.Highlights("Rue Évangéline", "evang"));
 

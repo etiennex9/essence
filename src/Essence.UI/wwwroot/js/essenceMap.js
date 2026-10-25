@@ -451,7 +451,8 @@ export function createMap(container, options, dotnet) {
     container.addEventListener("touchmove", onTouchMove, { passive: true });
     container.addEventListener("touchend", onTouchEnd);
     container.addEventListener("touchcancel", onTouchEnd);
-    document.addEventListener("keydown", onKeyDown);
+    // Captured, so it sees the search box's text before Blazor's own handler (which may be registered first) clears it.
+    document.addEventListener("keydown", onKeyDown, true);
     darkScheme.addEventListener("change", onSchemeChange);
     document.addEventListener("visibilitychange", onVisibilityChange);
     updateCompact();
@@ -647,7 +648,7 @@ export function createMap(container, options, dotnet) {
             container.removeEventListener("touchmove", onTouchMove);
             container.removeEventListener("touchend", onTouchEnd);
             container.removeEventListener("touchcancel", onTouchEnd);
-            document.removeEventListener("keydown", onKeyDown);
+            document.removeEventListener("keydown", onKeyDown, true);
             darkScheme.removeEventListener("change", onSchemeChange);
             document.removeEventListener("visibilitychange", onVisibilityChange);
             map.remove();

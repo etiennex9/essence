@@ -91,7 +91,7 @@ services:
 
   # Address search for Best on the way (Photon), in the "trip" profile too. The api runs without it (no suggestions, no
   # addresses for pins). Its index of Québec's places is built once first, into the geocoding volume: a 1.6 GB download,
-  # then about 15 minutes.
+  # then about 10 minutes and 3 GB of RAM.
   #   docker compose run --rm geocoding build
   geocoding:
     profiles: [trip]

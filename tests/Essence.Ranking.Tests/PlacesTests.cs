@@ -153,6 +153,39 @@ public class PlacesTests
     }
 
     [Fact]
+    public void A_business_typed_by_its_name_and_address_keeps_its_place()
+    {
+        var suggestions = Places.Suggestions(
+        [
+            House("1000", "Rue De La Gauchetière Ouest", name: "Tim Hortons", osmKey: "amenity"),
+            House("1190", "Rue De La Gauchetière Ouest", name: "Tim Hortons", osmKey: "amenity", at: new LatLon(45.4995, -73.5680)),
+            House("1000", "Rue De La Gauchetière Ouest", at: new LatLon(45.4988, -73.5666)),
+        ], "tim hortons 1000 de la gauchetière");
+
+        Assert.Equal("1000 Rue De La Gauchetière Ouest, Montréal", suggestions[0].Label.Detail);
+        Assert.Equal("Tim Hortons", suggestions[0].Label.Label);
+    }
+
+    [Fact]
+    public void Businesses_at_a_range_of_numbers_are_found_by_their_address_too()
+    {
+        var suggestions = Places.Suggestions(
+        [
+            House("1000-1010", "Rue De La Gauchetière Ouest", name: "Morgan Stanley", osmKey: "office"),
+            House("1000", "Rue De La Gauchetière Ouest", at: new LatLon(45.4988, -73.5666)),
+        ], "1000 de la gauch");
+
+        Assert.Equal(["1000 Rue De La Gauchetière Ouest", "Morgan Stanley"], suggestions.Select(s => s.Label.Label));
+    }
+
+    [Fact]
+    public void A_noncharacter_typed_doesn_t_break_folding()
+    {
+        Assert.Equal("gauch￾", Places.Fold("Gauch￾"));
+        Assert.Single(Places.Suggestions([House("1000", "Rue Gaucher")], "gauch￾ 1000"));
+    }
+
+    [Fact]
     public void A_pin_far_from_any_address_is_named_by_the_road_it_s_on()
     {
         var pin = new LatLon(46.3000, -72.9000);

@@ -40,10 +40,10 @@ fi
 
 # The lock and the build's log stay out of the dataset, which the service's container can write: root would follow a link
 # planted there. The log goes beside this script, in the scripts dataset only root can write.
-log=$(cd "$(dirname "$0")" && pwd)/.essence-$service-refresh.log
+log=$(cd "$(dirname "$0")" && pwd)/.$app-$service-refresh.log
 
-# One refresh at a time: a second would build into the same next folder.
-exec 9>"/run/essence-$service-refresh.lock"
+# One refresh at a time per app and service: a second would build into the same next folder.
+exec 9>"/run/$app-$service-refresh.lock"
 if ! flock -n 9; then
     echo "a refresh is already running for $data." >&2
     exit 1
