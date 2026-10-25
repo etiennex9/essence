@@ -89,6 +89,27 @@ services:
       start_interval: 5s
     restart: unless-stopped
 
+  # Address search for Best on the way (Photon), in the "trip" profile too. The api runs without it (no suggestions, no
+  # addresses for pins). Its index of Québec's places is built once first, into the geocoding volume: a 1.6 GB download,
+  # then about 15 minutes.
+  #   docker compose run --rm geocoding build
+  geocoding:
+    profiles: [trip]
+    build:
+      context: .
+      dockerfile: src/Essence.Geocoding/Dockerfile
+    volumes:
+      - geocoding:/data
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "essence-geocoding", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+      start_interval: 5s
+    restart: unless-stopped
+
   # Static Blazor WebAssembly app. Its nginx also forwards /api/ to the api service, which the app calls (same origin, no CORS).
   web:
     build:
@@ -110,3 +131,4 @@ volumes:
   pgdata:
   data:
   routing:
+  geocoding:

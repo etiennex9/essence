@@ -2,13 +2,15 @@
 #
 # Before pasting, replace:
 #   - every CHANGE_ME_..._PASSWORD (each appears twice). Use letters and digits only: they go into connection strings.
-#   - POOL in the three host paths, and create them first:
+#   - POOL in the host paths, and create them first:
 #     - postgres: its own dataset with the Generic preset (POSIX permissions), owned by 999:999, mode 700. Postgres won't
 #       start in a folder that inherits NFSv4 ACLs (the Apps preset).
 #     - data: owned by 1654:1654 (ingest), which creates the archive subfolder in it. NFSv4 ACLs are fine here.
 #     - data/routing: a dataset of its own, owned by 1654:1654 (apps/essence/routing if data is a plain folder; the
 #       routing service's source then says so). Build the routing data in it by hand first (README → Deploy → Routing):
 #       the routing service doesn't start without it.
+#     - data/geocoding: the same for the address search (README → Deploy → Address search): its own dataset, owned by
+#       1654:1654, its index built by hand first.
 #   - 30180, if that port is taken. Point the reverse proxy for <your domain> at http://<NAS address>:30180:
 #     it serves the map and, under /api/, the API.
 #
@@ -98,6 +100,29 @@ services:
     mem_limit: 2g
     healthcheck:
       test: ["CMD", "essence-routing", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 120s
+      start_interval: 5s
+    restart: unless-stopped
+
+  # Address search for Best on the way: Photon, with Québec's places from OpenStreetMap. No published port: only the api
+  # calls it, and the api runs without it (no suggestions, no addresses for pins). Its index isn't in the image: it's
+  # built into the dataset, once by hand and then by a monthly cron job (README → Deploy → Address search), while the
+  # server keeps answering from the previous index until it's restarted. Photon logs no requests.
+  geocoding:
+    image: ghcr.io/etiennex9/essence-geocoding:latest
+    volumes:
+      - type: bind
+        source: /mnt/POOL/apps/essence/data/geocoding
+        target: /data
+        bind:
+          create_host_path: false
+    # A 1 GB Java heap, the search engine's own memory and some of the index's 2 GB in the page cache: about 400 MB idle.
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "essence-geocoding", "health"]
       interval: 30s
       timeout: 10s
       retries: 3
