@@ -91,13 +91,51 @@ public class EssenceApiClientTests
 
     [Theory]
     [InlineData(HttpStatusCode.NotFound, ApiError.NotFound)]
+    [InlineData(HttpStatusCode.BadRequest, ApiError.Invalid)]
+    [InlineData(HttpStatusCode.UnprocessableEntity, ApiError.NoRoute)]
+    [InlineData(HttpStatusCode.ServiceUnavailable, ApiError.Unavailable)]
     [InlineData(HttpStatusCode.InternalServerError, ApiError.Failed)]
-    [InlineData(HttpStatusCode.BadRequest, ApiError.Failed)]
+    [InlineData(HttpStatusCode.BadGateway, ApiError.Failed)]
     public async Task Error_statuses_map_to_errors(HttpStatusCode status, ApiError expected)
     {
         var (client, _) = Client(_ => new HttpResponseMessage(status));
         var result = await client.GetStationAsync(1, TestContext.Current.CancellationToken);
         Assert.Equal(expected, result.Error);
+    }
+
+    [Fact]
+    public async Task Best_sends_the_car_and_reads_the_ranking()
+    {
+        const string json = """
+            {"pick":{"id":2,"name":"Costco Langelier","brand":"Costco","address":"7373 boul. Langelier","latitude":45.58,"longitude":-73.56,
+              "priceCents":155.9,"distanceKm":9.0,"durationMin":null,"costDollars":64.75,"savesDollars":2.24,"membersOnly":true,
+              "overDetourLimit":false,"savingUncertain":false},
+             "referenceId":1,"closestId":1,"cheapestId":2,"stations":[],"radiusKm":null,"byRoad":false}
+            """;
+        var previous = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo("fr-CA");
+        try
+        {
+            var (client, requests) = Client(_ => Json(json));
+
+            var result = await client.GetBestAsync(
+                new BestQuery(45.5017, -73.5673, "Régulier", 40, 8.5m, true, 10), TestContext.Current.CancellationToken);
+
+            var uri = Assert.Single(requests).RequestUri!;
+            Assert.Equal("/stations/best", uri.AbsolutePath);
+            Assert.Equal(
+                "?lat=45.5017&lon=-73.5673&fuel=R%C3%A9gulier&fillL=40&per100Km=8.5&costco=true&maxDetourMin=10", uri.Query);
+            var best = result.Value!;
+            Assert.Equal(2.24m, best.Pick!.SavesDollars);
+            Assert.True(best.Pick.MembersOnly);
+            Assert.Null(best.Pick.DurationMin);
+            Assert.Null(best.RadiusKm);
+            Assert.Equal(1, best.ReferenceId);
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = previous;
+        }
     }
 
     [Fact]

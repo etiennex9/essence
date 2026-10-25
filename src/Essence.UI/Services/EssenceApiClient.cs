@@ -13,6 +13,16 @@ public enum ApiError
     None,
     NotFound,
     RateLimited,
+
+    /// <summary>The API refused the request as it was asked (400): a value out of range, say.</summary>
+    Invalid,
+
+    /// <summary>No road or route to answer with (422), outside Québec included.</summary>
+    NoRoute,
+
+    /// <summary>A service the API relies on is down (503): it may answer again shortly.</summary>
+    Unavailable,
+
     Failed,
 }
 
@@ -35,6 +45,17 @@ public sealed class EssenceApiClient(HttpClient http)
                 CultureInfo.InvariantCulture,
                 $"stations/nearby?lat={latitude:0.######}&lon={longitude:0.######}&radiusKm={radiusKm:0.###}&fuel={Uri.EscapeDataString(fuel)}&limit={limit}"),
             EssenceJsonContext.Default.ListNearbyStation,
+            cancellationToken);
+
+    /// <summary>Where to fill up around a point, for a car (<c>/stations/best</c>).</summary>
+    public Task<ApiResult<BestNearby>> GetBestAsync(BestQuery query, CancellationToken cancellationToken) =>
+        GetAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"stations/best?lat={query.Latitude:0.######}&lon={query.Longitude:0.######}&fuel={Uri.EscapeDataString(query.Fuel)}"
+                + $"&fillL={query.FillLitres:0.##}&per100Km={query.LitresPer100Km:0.##}&costco={(query.CostcoMember ? "true" : "false")}"
+                + $"&maxDetourMin={query.MaxDetourMinutes}"),
+            EssenceJsonContext.Default.BestNearby,
             cancellationToken);
 
     public Task<ApiResult<StationDetail>> GetStationAsync(long id, CancellationToken cancellationToken) =>
@@ -70,7 +91,13 @@ public sealed class EssenceApiClient(HttpClient http)
 
             if (!response.IsSuccessStatusCode)
             {
-                return new ApiResult<T>(default, ApiError.Failed);
+                return new ApiResult<T>(default, response.StatusCode switch
+                {
+                    HttpStatusCode.BadRequest => ApiError.Invalid,
+                    HttpStatusCode.UnprocessableEntity => ApiError.NoRoute,
+                    HttpStatusCode.ServiceUnavailable => ApiError.Unavailable,
+                    _ => ApiError.Failed,
+                });
             }
 
             var value = await response.Content.ReadFromJsonAsync(typeInfo, cancellationToken);
@@ -87,9 +114,20 @@ public sealed class EssenceApiClient(HttpClient http)
     }
 }
 
+/// <summary>What <see cref="EssenceApiClient.GetBestAsync"/> asks for: where, which fuel, and the car.</summary>
+public sealed record BestQuery(
+    double Latitude,
+    double Longitude,
+    string Fuel,
+    decimal FillLitres,
+    decimal LitresPer100Km,
+    bool CostcoMember,
+    int MaxDetourMinutes);
+
 /// <summary>Source-generated (trim-safe) serialization of the API's responses, with the API's web defaults (camelCase).</summary>
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web)]
 [JsonSerializable(typeof(List<NearbyStation>))]
 [JsonSerializable(typeof(StationDetail))]
+[JsonSerializable(typeof(BestNearby))]
 [JsonSerializable(typeof(List<PriceHistoryDto>))]
 public sealed partial class EssenceJsonContext : JsonSerializerContext;
