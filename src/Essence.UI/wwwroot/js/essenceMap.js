@@ -1,6 +1,6 @@
-// The MapLibre map behind MapInterop.cs. C# decides what to show (markers arrive preformatted); this module draws it
-// and reports what the user does: map moves, marker clicks, and dismissals (a click on the map, or Escape), and when the
-// page is hidden or shown again. It also reloads the page for a new release, keeping the view (UpdateCheck.cs): here
+// The MapLibre map behind MapInterop.cs. C# decides what to show (markers and a trip's route arrive preformatted); this
+// module draws it and reports what the user does: map moves, marker clicks, a press and hold on the map, and dismissals
+// (a click on the map, or Escape), and when the page is hidden or shown again. It also reloads the page for a new release, keeping the view (UpdateCheck.cs): here
 // rather than in a module of its own, which a tab would import from the new release only when it's time to reload.
 import { Map as MapLibreMap, Marker, NavigationControl } from "../lib/maplibre-gl/maplibre-gl.mjs";
 
@@ -12,6 +12,28 @@ const VISIBLE_MARGIN_PX = 48;
 const FIT_PADDING_PX = 56;
 const FIT_TOP_PX = 130; // under the toolbar, with room for a flag
 const FIT_MAX_ZOOM = 15;
+
+// Press and hold (a right-click on desktops, a long press on Android, a touch timer on iOS, which has neither) picks a
+// destination. A finger that moves farther than this, or a second finger, is panning or zooming instead.
+const HOLD_MS = 550;
+const HOLD_SLOP_PX = 10;
+
+// Android fires contextmenu around when the touch timer does: a second hold this soon after is the same one. The click
+// that ends a hold mustn't count as a click on the map, which would close the pane.
+const HOLD_REPEAT_MS = 800;
+const HOLD_CLICK_MS = 700;
+
+// A trip's route (setRoute): GeoJSON sources and layers drawn under the style's labels.
+const ROUTE_SOURCE = "ess-route";
+const BEYOND_SOURCE = "ess-route-beyond";
+const ROUTE_LAYERS = ["ess-route-corridor", "ess-route-casing", "ess-route-line", "ess-route-beyond-casing", "ess-route-beyond"];
+
+// Metres per pixel at zoom 0 at the equator, with MapLibre's 512 px tiles.
+const METERS_PER_PIXEL_Z0 = 78271.517;
+
+// The corridor shows on a trip seen whole, and fades out as the map zooms in on a stretch of it.
+const CORRIDOR_FADE_FROM_ZOOM = 10;
+const CORRIDOR_GONE_AT_ZOOM = 13;
 
 // The view a reload for a new release saves, for the page it reloads into: the version before writes it and the version
 // after reads it, so it's read leniently.
@@ -78,7 +100,27 @@ export function takeSavedView() {
         stationPushed: view.stationPushed === true,
         listPushed: view.listPushed === true,
         carsPushed: view.carsPushed === true,
+        tripPushed: view.tripPushed === true,
     };
+}
+
+function lineString(coordinates) {
+    return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coordinates ?? [] } };
+}
+
+function cssColor(name, fallback) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+// A marker with a text label over a stem: the destination, or where the range runs out.
+function labelElement(className, text) {
+    const element = document.createElement("div");
+    element.className = className;
+    element.setAttribute("aria-hidden", "true");
+    const label = document.createElement("b");
+    label.textContent = text;
+    element.append(label, document.createElement("i"));
+    return element;
 }
 
 export function createMap(container, options, dotnet) {
@@ -102,6 +144,19 @@ export function createMap(container, options, dotnet) {
     const markers = new Map(); // id → { marker, element, key }
     let selectedId = null;
     let userMarker = null;
+
+    // The trip on the map: its route (null: none), destination, where the range runs out, and a dropped pin.
+    let route = null;
+    let styleReady = false;
+    let destinationMarker = null;
+    let rangeEndMarker = null;
+    let pinMarker = null;
+
+    // Press and hold.
+    let holdTimer = 0;
+    let holdStart = null;
+    let lastHoldAt = 0;
+    let swallowClickUntil = 0;
 
     // Best near you's pick and closest, with their flags' text, and the stations listed with them (null: none fade).
     let emphasis = { pickId: null, closestId: null, listed: null, bestFlag: "", closestFlag: "" };
@@ -134,9 +189,144 @@ export function createMap(container, options, dotnet) {
     }
 
     function onMapClick(e) {
+        if (Date.now() < swallowClickUntil) {
+            swallowClickUntil = 0;
+            return;
+        }
+
         if (!e.originalEvent.target.closest?.(".ess-marker")) {
             call("OnDismiss");
         }
+    }
+
+    // A press and hold at a point of the container (pixels): C# drops a pin there.
+    function held(point) {
+        const now = Date.now();
+        if (now - lastHoldAt < HOLD_REPEAT_MS) {
+            return;
+        }
+
+        lastHoldAt = now;
+        swallowClickUntil = now + HOLD_CLICK_MS;
+        const { lng, lat } = map.unproject(point);
+        call("OnMapHeld", lat, lng);
+    }
+
+    function onContextMenu(e) {
+        if (e.originalEvent.target.closest?.(".ess-marker")) {
+            return;
+        }
+
+        e.originalEvent.preventDefault();
+        held(e.point);
+    }
+
+    function cancelHold() {
+        clearTimeout(holdTimer);
+        holdTimer = 0;
+    }
+
+    function onTouchStart(e) {
+        cancelHold();
+        if (e.touches.length !== 1 || e.target.closest?.(".ess-marker")) {
+            return;
+        }
+
+        const touch = e.touches[0];
+        const rect = container.getBoundingClientRect();
+        holdStart = { x: touch.clientX, y: touch.clientY, point: [touch.clientX - rect.left, touch.clientY - rect.top] };
+        holdTimer = setTimeout(() => {
+            holdTimer = 0;
+            held(holdStart.point);
+        }, HOLD_MS);
+    }
+
+    function onTouchMove(e) {
+        if (!holdTimer) {
+            return;
+        }
+
+        const touch = e.touches[0];
+        if (e.touches.length !== 1 || Math.hypot(touch.clientX - holdStart.x, touch.clientY - holdStart.y) > HOLD_SLOP_PX) {
+            cancelHold();
+        }
+    }
+
+    // A line as wide as the corridor stations were looked for in, 2 x halfWidthMeters at every zoom: MapLibre's widths are
+    // in pixels, and a pixel covers half as many metres with each zoom level.
+    function corridorWidth(halfWidthMeters, latitude) {
+        const atZoom0 = 2 * halfWidthMeters / (METERS_PER_PIXEL_Z0 * Math.cos(latitude * Math.PI / 180));
+        return ["interpolate", ["exponential", 2], ["zoom"], 0, atZoom0, 22, atZoom0 * 2 ** 22];
+    }
+
+    function removeRouteLayers() {
+        for (const id of ROUTE_LAYERS) {
+            if (map.getLayer(id)) {
+                map.removeLayer(id);
+            }
+        }
+
+        for (const id of [ROUTE_SOURCE, BEYOND_SOURCE]) {
+            if (map.getSource(id)) {
+                map.removeSource(id);
+            }
+        }
+    }
+
+    // The route under the style's first labels, in the theme's accent; past the range, dashed grey. A new style (the dark
+    // mode switching) drops custom layers, so they're added again on each style.load.
+    function addRouteLayers() {
+        if (!styleReady) {
+            return;
+        }
+
+        removeRouteLayers();
+        if (!route) {
+            return;
+        }
+
+        const before = map.getStyle().layers.find(l => l.type === "symbol")?.id;
+        const accent = cssColor("--ess-accent", "#185fa5");
+        const casing = cssColor("--ess-surface", "#ffffff");
+        const round = { "line-cap": "round", "line-join": "round" };
+        const middle = route.path[Math.floor(route.path.length / 2)] ?? [0, 45];
+        map.addSource(ROUTE_SOURCE, { type: "geojson", data: lineString(route.path) });
+        map.addSource(BEYOND_SOURCE, { type: "geojson", data: lineString(route.beyond) });
+        map.addLayer({
+            id: "ess-route-corridor", type: "line", source: ROUTE_SOURCE, layout: round,
+            paint: {
+                "line-color": accent,
+                // Zoomed in on a short trip, the corridor would tint the whole map: it fades out by then.
+                "line-opacity": ["interpolate", ["linear"], ["zoom"], CORRIDOR_FADE_FROM_ZOOM, 0.12, CORRIDOR_GONE_AT_ZOOM, 0],
+                "line-width": corridorWidth(route.halfWidthMeters, middle[1]),
+            },
+        }, before);
+        map.addLayer({ id: "ess-route-casing", type: "line", source: ROUTE_SOURCE, layout: round, paint: { "line-color": casing, "line-width": 8 } }, before);
+        map.addLayer({ id: "ess-route-line", type: "line", source: ROUTE_SOURCE, layout: round, paint: { "line-color": accent, "line-width": 5 } }, before);
+        map.addLayer({
+            id: "ess-route-beyond-casing", type: "line", source: BEYOND_SOURCE, layout: round,
+            paint: { "line-color": casing, "line-width": 8 },
+        }, before);
+        map.addLayer({
+            id: "ess-route-beyond", type: "line", source: BEYOND_SOURCE, layout: { "line-join": "round" },
+            paint: { "line-color": "#9a978e", "line-width": 5, "line-dasharray": [1.4, 1] },
+        }, before);
+    }
+
+    function onStyleLoad() {
+        styleReady = true;
+        addRouteLayers();
+    }
+
+    // Shows, moves or (lat null) removes one of the trip's markers.
+    function placeMarker(existing, lat, lon, create) {
+        if (lat === null || lat === undefined) {
+            existing?.remove();
+            return null;
+        }
+
+        const marker = existing ?? create();
+        return marker.setLngLat([lon, lat]).addTo(map);
     }
 
     function onKeyDown(e) {
@@ -147,6 +337,7 @@ export function createMap(container, options, dotnet) {
     }
 
     function onSchemeChange(e) {
+        styleReady = false;
         map.setStyle(e.matches ? options.darkStyleUrl : options.styleUrl);
     }
 
@@ -235,6 +426,13 @@ export function createMap(container, options, dotnet) {
     map.on("moveend", reportViewport);
     map.on("zoom", updateCompact);
     map.on("click", onMapClick);
+    map.on("contextmenu", onContextMenu);
+    map.on("movestart", cancelHold);
+    map.on("style.load", onStyleLoad);
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: true });
+    container.addEventListener("touchend", cancelHold);
+    container.addEventListener("touchcancel", cancelHold);
     document.addEventListener("keydown", onKeyDown);
     darkScheme.addEventListener("change", onSchemeChange);
     document.addEventListener("visibilitychange", onVisibilityChange);
@@ -296,6 +494,42 @@ export function createMap(container, options, dotnet) {
             for (const [id, entry] of markers) {
                 applyEmphasis(entry.element, id);
             }
+        },
+
+        // A trip's route, [lon, lat] pairs: the part the car reaches, and the part past its range (dashed; null when none),
+        // with the corridor stations were looked for in, halfWidthMeters either side.
+        setRoute(path, beyond, halfWidthMeters) {
+            route = { path, beyond, halfWidthMeters };
+            addRouteLayers();
+        },
+
+        clearRoute() {
+            route = null;
+            addRouteLayers();
+        },
+
+        // The trip's destination, labelled; a null lat removes it.
+        setDestination(lat, lon, label) {
+            destinationMarker?.remove();
+            destinationMarker = placeMarker(null, lat, lon,
+                () => new Marker({ element: labelElement("ess-dest", label), anchor: "bottom" }));
+        },
+
+        // Where the range runs out along the route, labelled; a null lat removes it.
+        setRangeEnd(lat, lon, label) {
+            rangeEndMarker?.remove();
+            rangeEndMarker = placeMarker(null, lat, lon,
+                () => new Marker({ element: labelElement("ess-range-end", label), anchor: "bottom" }));
+        },
+
+        // The pin a press and hold dropped; a null lat removes it.
+        setPin(lat, lon) {
+            pinMarker = placeMarker(pinMarker, lat, lon, () => {
+                const element = document.createElement("div");
+                element.className = "ess-pin";
+                element.setAttribute("aria-hidden", "true");
+                return new Marker({ element, anchor: "bottom" });
+            });
         },
 
         showUserLocation(lat, lon) {
@@ -390,6 +624,11 @@ export function createMap(container, options, dotnet) {
 
         dispose() {
             clearTimeout(viewportTimer);
+            cancelHold();
+            container.removeEventListener("touchstart", onTouchStart);
+            container.removeEventListener("touchmove", onTouchMove);
+            container.removeEventListener("touchend", cancelHold);
+            container.removeEventListener("touchcancel", cancelHold);
             document.removeEventListener("keydown", onKeyDown);
             darkScheme.removeEventListener("change", onSchemeChange);
             document.removeEventListener("visibilitychange", onVisibilityChange);

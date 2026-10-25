@@ -29,8 +29,9 @@ public sealed record MarkerModel(
 /// <summary>What the page keeps across a reload for a new release, besides the map's view.</summary>
 /// <param name="StationPushed">The page pushed the <c>?station=</c> history entry (MapPage), so closing still goes back.</param>
 /// <param name="ListPushed">The same for <c>?view=</c>.</param>
-/// <param name="CarsPushed">The same for <c>?view=cars</c>, pushed over Best near you.</param>
-public sealed record ReloadState(string Fuel, bool StationPushed, bool ListPushed, bool CarsPushed);
+/// <param name="CarsPushed">The same for <c>?view=cars</c>, pushed over Best near you or a trip.</param>
+/// <param name="TripPushed">The same for <c>?view=trip</c>, pushed over what was open.</param>
+public sealed record ReloadState(string Fuel, bool StationPushed, bool ListPushed, bool CarsPushed, bool TripPushed);
 
 /// <summary>The view and state a reload for a new release left for the page it reloaded into.</summary>
 /// <param name="UserLat">Where the user's dot was, if it was shown.</param>
@@ -43,7 +44,8 @@ public sealed record SavedView(
     string? Fuel,
     bool StationPushed,
     bool ListPushed,
-    bool CarsPushed);
+    bool CarsPushed,
+    bool TripPushed);
 
 /// <summary>What the map reports back.</summary>
 public interface IMapListener
@@ -57,6 +59,9 @@ public interface IMapListener
 
     /// <summary>The page was hidden (another tab, the app in the background) or shown again.</summary>
     Task OnVisibilityChangedAsync(bool visible);
+
+    /// <summary>A press and hold on the map, not on a marker (a right-click on desktops).</summary>
+    Task OnMapHeldAsync(double latitude, double longitude);
 }
 
 /// <summary>The MapLibre map behind <c>essenceMap.js</c>: the JS side owns the map and the marker DOM, C# everything else.</summary>
@@ -100,6 +105,26 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 
     public ValueTask ShowUserLocationAsync(GeoPoint point) => InvokeAsync("showUserLocation", point.Latitude, point.Longitude);
 
+    /// <summary>
+    /// A trip's route, [longitude, latitude] pairs: the part the car reaches, then the part past its range, dashed
+    /// (<paramref name="beyond"/>, null when it reaches the end), with the corridor stations were looked for in.
+    /// </summary>
+    public ValueTask SetRouteAsync(double[][] path, double[][]? beyond, double halfWidthMeters) =>
+        InvokeAsync("setRoute", path, beyond, halfWidthMeters);
+
+    public ValueTask ClearRouteAsync() => InvokeAsync("clearRoute");
+
+    /// <summary>The trip's destination, labelled; null removes it.</summary>
+    public ValueTask SetDestinationAsync(GeoPoint? point, string label) =>
+        InvokeAsync("setDestination", point?.Latitude, point?.Longitude, label);
+
+    /// <summary>Where the range runs out along the route, labelled; null removes it.</summary>
+    public ValueTask SetRangeEndAsync(GeoPoint? point, string label) =>
+        InvokeAsync("setRangeEnd", point?.Latitude, point?.Longitude, label);
+
+    /// <summary>The pin a press and hold dropped; null removes it.</summary>
+    public ValueTask SetPinAsync(GeoPoint? point) => InvokeAsync("setPin", point?.Latitude, point?.Longitude);
+
     /// <param name="besidePane">Ends with the point in the middle of the area the details pane leaves uncovered.</param>
     public ValueTask FlyToAsync(GeoPoint point, double zoom, bool besidePane = false) =>
         InvokeAsync("flyTo", point.Latitude, point.Longitude, zoom, besidePane);
@@ -122,6 +147,9 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 
     [JSInvokable]
     public Task OnVisibilityChanged(bool visible) => _listener?.OnVisibilityChangedAsync(visible) ?? Task.CompletedTask;
+
+    [JSInvokable]
+    public Task OnMapHeld(double latitude, double longitude) => _listener?.OnMapHeldAsync(latitude, longitude) ?? Task.CompletedTask;
 
     public async ValueTask DisposeAsync()
     {
