@@ -32,7 +32,7 @@ separate from the favorites and the comparison, and it's meant for anyone using 
 | Gas left | Typed from the dashboard (km of range), with the time it was typed; 30 km kept spare. Trips under 100 km don't ask. It isn't asked again as it ages. OBD2 reading is optional and comes last (phase 4) |
 | Long trips | The first stop only. Prices that change during a long trip are ignored for now |
 | Distances | By road, from a self-hosted **OSRM** next to the API (phase 2). Phase 1 estimates them (straight line × 1.3, shown as "≈") |
-| Routing data | Built **on the NAS** by the routing image itself: once at install, then by a monthly cron job, while the server keeps answering from the previous data |
+| Routing data | Built **on the NAS** by the routing container itself: on its first start, then monthly, while the server keeps answering from the previous data (first by hand and a cron job; see "Self-contained data services" under phase 3) |
 | Places | Self-hosted **Photon** address search with autocomplete (phase 3), plus press and hold on the map (phase 2). Saved places (Home, Work, others) on the device |
 | Area | Québec only. Routes and searches outside it are refused; nothing past the border |
 | Navigation | Hand-off to Google Maps, the station as a waypoint |
@@ -383,15 +383,10 @@ address in Ontario returns nothing; with Photon stopped, search shows a message 
   lines), imports them with `-languages fr,en` into `next/` and swaps it in, recording Photon's version (serve refuses an
   index from another) and the dump's date. Measured here: 8 min of import on 24 cores, a 3.2 GB RAM peak, 2.0 GB of
   index, healthy 9 s after a start, about 400 MB idle and 1.3 GB after 2,000 searches (median 22 ms, p95 52 ms at 16 at
-  a time): `mem_limit: 2g`, a 1 GB heap. No `UPDATE_*`, `PUID`/`PGID` or `JAVA_PARAMS`: the image runs as 1654 and the
-  monthly refresh is a cron job, as for routing. `deploy/truenas-routing-refresh.sh` became
-  `deploy/truenas-data-refresh.sh <routing|geocoding> <folder>`, one cron job per service (geocoding an hour after
-  routing); it keeps its lock in `/run` and its build log beside itself (per app and service), out of the dataset the
-  container can write.
-  Compose's geocoding service has no memory limit, so `docker compose run geocoding build` isn't held to the server's. The first index is built by hand before the service is added, so the autodeploy's 10-minute wait isn't at
-  risk; the healthcheck stays.
-- **Names follow routing's:** the service, dataset and image are `geocoding` (`/mnt/POOL/apps/essence/data/geocoding`,
-  `essence-geocoding`), and `Geocoding:BaseUrl` defaults to `http://geocoding:2322/`.
+  a time), a 1 GB heap. No `UPDATE_*`, `PUID`/`PGID` or `JAVA_PARAMS`: the image runs as 1654 and refreshes itself (see
+  "Self-contained data services" below, which replaced the cron jobs and the first builds by hand).
+- **Names follow routing's:** the service, volume and image are `geocoding` (`essence-geocoding`), and
+  `Geocoding:BaseUrl` defaults to `http://geocoding:2322/`.
 - **Photon's logs:** checked in Photon 1.3.0's source: Javalin's request logger is off and nothing logs a query
   (log4j: `de.komoot.photon` at INFO, the rest at WARN); there's no setting to turn down. `/api/places/` was already in
   nginx's no-log rule. The api logs one line per Photon failure under `Essence.Api.Geocoding`, without the request; a
@@ -436,8 +431,52 @@ address in Ontario returns nothing; with Photon stopped, search shows a message 
   saved before phase 3 get theirs when the panel shows them. Reverse lookups are kept for the session per point,
   failures aren't.
 - **Not checked:** the keyboard over the sheet on a real phone (Android's keyboard overlays the page; the sheet opens
-  tall for that), and the refresh script on TrueNAS. House numbers are OpenStreetMap's: some are missing (6200 Rue
-  Saint-Hubert isn't there, 6235 is).
+  tall for that). House numbers are OpenStreetMap's: some are missing (6200 Rue Saint-Hubert isn't there, 6235 is).
+
+**Self-contained data services** (asked by the owner after phase 3: no cron job, no first build by hand, everything from
+the YAML; it replaces phase 2's and phase 3's build-on-the-host steps and `deploy/truenas-data-refresh.sh`):
+- **A supervisor in both images** (`src/Essence.Supervisor/supervisor.sh`, bash under tini, with per-image hooks in each
+  `entrypoint.sh`): it never exits for want of data. It builds the data on first start, after a version change (OSRM or
+  Photon: that data isn't served) or a rules change (the car profile, the index's filter: that data is served while the
+  new one builds), and every `REFRESH_DAYS` days (30) when the source changed (Geofabrik's Last-Modified, the dump's
+  MD5; checked again the next day when unchanged, or in an hour when unreachable). It builds into `next/` while the
+  server answers from `current/`, swaps them, restarts the server (a 5–6 s gap measured), keeps `previous/` until the
+  server answers from the new data and goes back to it if it doesn't within 10 minutes. A restart throws a partial
+  build away and finishes or undoes a swap it interrupted; downloads resume (`curl -C -` in `downloads/`); a failed
+  build is retried after 1 minute, doubling up to 6 hours. `<image> refresh` (a file in the volume) asks for a rebuild
+  now. Signals reach the server and the build (its own process group).
+- **Status:** `GET :9090/status` (socat and a bash handler; busybox httpd can't serve a bare `/status` with a JSON
+  type) with `state` (`building`, `refreshing`, `starting`, `serving`, `waiting`), `serving`, `stage`, `percent` (bytes
+  while downloading; osrm-extract's log milestones; pv's count of the dump read by Photon's import; fixed shares per
+  stage), `startedAt`, `dataDate` (the extract's own timestamp, the dump's), `lastError`, `nextAttemptAt`,
+  `nextRefreshAt` and a `heartbeat` written every 5 s. The healthcheck is the heartbeat (under 2 minutes old), so the
+  container is healthy while it builds, serves or waits: TrueNAS 25.10 counts an app RUNNING once its running containers
+  are healthy (`plugins/apps/ix_apps/query.py`), so a first build can't hold the autodeploy's 10-minute wait.
+- **Routing builds on a cut-down extract:** `osmium tags-filter` keeps roads, ferries, movable bridges, turn restrictions
+  and maneuvers with their nodes (87 MB of the 1.16 GB); osrm-extract then takes 3.2 GB instead of 6.6 GB (its own
+  report; fewer threads didn't lower it: 6.7 and 6.6 GB at 24 and 4) and 26 s instead of 68 s, and 7 test routes
+  (Montréal–Québec, Ottawa, Stanstead, the Îles-de-la-Madeleine ferry…) come out identical. Measured with the supervisor,
+  building while serving: routing peaks at 4.3 GB (page cache included), geocoding at 2.7 GB of anonymous memory with its
+  server: `mem_limit: 5g` each. A first start from empty volumes: routing serving in 1.5 minutes (here, from a local
+  mirror), geocoding in 9.
+- **Storage:** named volumes `routing` and `geocoding` in `deploy/truenas.yaml`, created by Docker with the image's
+  `/data` ownership (1654). TrueNAS keeps them in `ix-apps/docker`, deletes them with the app and leaves them out of its
+  app backups (`plugins/apps/crud.py`, `plugins/docker/backup.py`): fine for caches that rebuild themselves.
+- **The API reads the status** (`DataServiceMonitor`, each status at most 5 s old, ignored when its heartbeat is
+  stale, `Routing:StatusUrl` / `Geocoding:StatusUrl`): while a service isn't serving it isn't called, so the routing
+  client's circuit breaker isn't tripped by a build and doesn't delay the switch back. `/stations/best` estimates (not
+  cached), `/trips/best` and `/places/*` answer 503 with `service`, `state`, `stage` and `percent`, `/health` is Degraded
+  with them, and `GET /services` gives both readinesses to the UI. A status that can't be had leaves things as before.
+- **The UI** (`ServicesStatus`) asks `/services` every 10 s while a pane that offers trips or the search is open and one
+  of them is being prepared (and at once after a 503): "Trips will be ready soon: preparing Québec's road map (45 %)",
+  and "Address search will be ready soon: preparing Québec's addresses (45 %)" with the pick-on-the-map hint, in English
+  and French. When routing is ready, trips are offered again and Best near you is asked again, by road; when the index
+  is ready, what was typed is searched again.
+- **GHCR:** a package a workflow creates with `GITHUB_TOKEN` should take the public repository's visibility (GitHub's
+  docs disagree with each other; no API changes visibility). The promote job now warns when a package can't be read
+  anonymously; making it public by hand, once, is then the only step outside the YAML.
+- **Not checked:** on TrueNAS itself (the volumes, the app's state during a first build), and a refresh from the real
+  Geofabrik and mirror (the tests here used a local copy of both, throttled to 25 MB/s).
 
 ## Phase 4 (optional): fuel level from the car (OBD2)
 **Before starting:** the owner tests both cars with an OBDLink CX in a terminal app:
