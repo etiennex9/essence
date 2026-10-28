@@ -147,7 +147,7 @@ In the Development environment, logs are plain text and the ingest archive goes 
 | `GET /trips/best?fromLat&fromLon&toLat&toLon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&rangeKm&spareKm=30` | Where to fill up on the way to a destination: the route, where to stop, and the stations along it ranked by detour (see below). |
 | `GET /places/search?q&lat&lon&lang=fr` | Places in Québec matching what was typed, at most 5, those near `lat`,`lon` first (see below). |
 | `GET /places/reverse?lat&lon&lang=fr` | What a point in Québec is called: the nearest address, street or named place. |
-| `GET /services` | Whether trips and the address search are ready, or how far their data is (`state`, `stage`, `percent`). |
+| `GET /services` | Whether trips and the address search are ready, how far their data is (`state`, `stage`, `percent`), or when a failed build tries again (`lastError`, `nextAttemptAt`). 60 a minute per client IP, apart from the rest. |
 | `GET /stations/{id}/prices?fuel&from&to` | Price history overlapping a range (default: the last 30 days). |
 | `GET /prices/current?fuel&region&brand&sort=price&includeUnavailable&limit=50` | Current prices, cheapest first. |
 | `GET /imports?limit=20` | Recent imports with their statistics and `source` (`feed` or `xlsx`). |
@@ -188,9 +188,9 @@ answers 422 for a point outside Québec's boundary (known without Photon), 404 w
 they wait 1.5 s for it, without retrying.
 
 While the routing data or the address index is built (or loaded, after a refresh), the API reads the containers'
-progress (`:9090/status`, every 5 seconds at most) instead of calling them: `/stations/best` estimates, and
-`/trips/best` and `/places/*` answer 503 with `service`, `state`, `stage` and `percent` in the problem, as `/services`
-says them. A container whose status can't be had is called as before.
+progress (`:9090/status`, asked every 5 seconds in the background) instead of calling them: `/stations/best`
+estimates, and `/trips/best` and `/places/*` answer 503 with `service`, `state`, `stage`, `percent`, `lastError` and
+`nextAttemptAt` in the problem, as `/services` says them. A container whose status can't be had is called as before.
 
 `/stations/{id}`, `/stations/nearby`, `/stations/best` and `/trips/best` send `Last-Modified`: when the latest import was fetched. The map refreshes its prices
 about 5 min 20 s after that time, which is when the next import should be in, and more often while that import is late. A request
@@ -308,11 +308,14 @@ pasting it is all they need. Each runs a supervisor ([src/Essence.Supervisor](sr
   far they are (*Trips will be ready soon: preparing Québec's road map (45 %)*), and switches them on when they are.
 - refreshes it every `REFRESH_DAYS` days (30; 0 never), when the source changed (Geofabrik's extract daily, the dump
   weekly): it builds the new data beside the current one while the server keeps answering, then restarts the server on
-  it, which takes the server off for a few seconds, and keeps the previous data until the new one loads.
+  it, which takes the server off for a few seconds, and keeps the previous data until the server answers from the new
+  one (going back to it if it doesn't within 10 minutes, a restart in between included).
 - rebuilds the data after an image bumps OSRM's or Photon's version (data built by another version may not load), or
   changes the car profile.
-- retries a failed download or build after 1 minute, then twice as long each time, up to 6 hours; a restart throws a
-  build in progress away, and a download resumes where it stopped.
+- retries a failed download or build, or new data the server doesn't start on, after 1 minute, then twice as long
+  each time, up to 6 hours, and says when (the map: *couldn't be prepared. Trying again at 2:15 p.m.*); a restart
+  throws a build in progress away, and a download resumes where it stopped. A server that keeps stopping is started
+  again, and after 5 times in a row its data is rebuilt.
 - reports what it's doing at `:9090/status`, which the api reads (`/health`, `/services`).
 
 **Storage: Docker volumes, not datasets.** The data is a cache that rebuilds itself, so it lives in the named volumes
@@ -450,4 +453,4 @@ Every setting can be overridden with environment variables (`Section__Key`).
 
 The routing and geocoding containers take environment variables: `REFRESH_DAYS` (30; 0 never refreshes), and
 `ROUTING_PBF_URL` (Geofabrik's `quebec-latest.osm.pbf`) or `GEOCODING_DUMP_URL` (Photon's dump of Canada), each with an
-`.md5` beside it.
+`.md5` beside it; a copy of the extract must also send its `Last-Modified`, which tells whether it changed.

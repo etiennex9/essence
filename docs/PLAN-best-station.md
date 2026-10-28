@@ -440,13 +440,26 @@ the YAML; it replaces phase 2's and phase 3's build-on-the-host steps and `deplo
   Photon: that data isn't served) or a rules change (the car profile, the index's filter: that data is served while the
   new one builds), and every `REFRESH_DAYS` days (30) when the source changed (Geofabrik's Last-Modified, the dump's
   MD5; checked again the next day when unchanged, or in an hour when unreachable). It builds into `next/` while the
-  server answers from `current/`, swaps them, restarts the server (a 5–6 s gap measured), keeps `previous/` until the
-  server answers from the new data and goes back to it if it doesn't within 10 minutes. A restart throws a partial
-  build away and finishes or undoes a swap it interrupted; downloads resume (`curl -C -` in `downloads/`); a failed
-  build is retried after 1 minute, doubling up to 6 hours. `<image> refresh` (a file in the volume) asks for a rebuild
-  now. Signals reach the server and the build (its own process group).
+  server answers from `current/`, says `starting` for 7 s (so the API stops calling the server before it stops), swaps
+  them, restarts the server (a 5–6 s gap measured), keeps `previous/` until the server answers from the new data and
+  goes back to it if it doesn't within 10 minutes or after 3 crashes. A `swap-pending` file in the volume carries that
+  check across a restart, and a rollback moves the failed data to `failed/` before restoring, so a crash can't leave
+  half of it. A restart throws a partial build away and finishes or undoes a swap it interrupted; downloads resume
+  (`curl -C -` in `downloads/`, after a failure too, unless the server can't resume (exit 33) or the file's size or
+  Last-Modified changed); a failed build or swap is retried after 1 minute, doubling up to 6 hours. `<image> refresh`
+  (a file in the volume, removed once the new data serves) asks for a rebuild now. A server that stops is started again
+  after 10 s, doubling up to 5 minutes, and after 5 times in a row its data is rebuilt; one that runs without answering
+  for 10 minutes is restarted. Signals reach the server and the build (its own process group).
+- **Geofabrik's `quebec-latest.osm.pbf` redirects** (307) to the day's file, and only that one has a Last-Modified: the
+  source id follows the redirect (`curl -L`). A first build from the real Geofabrik: serving in 8.5 minutes here, 7.7 of
+  them downloading; the real Photon mirror's checksum and headers answer as the build expects.
+- **An index with next to no places isn't served:** the dump's header lines always pass the filter, so a dump whose
+  format the filter no longer matches would import nothing. Photon's "Finished import of N photon documents" is
+  compared with the current index's count (2,429,977 from the 2026-10-17 dump): under half of it, or under 100,000, fails
+  the build (an index under 200 MB if Photon stops saying it).
 - **Status:** `GET :9090/status` (socat and a bash handler; busybox httpd can't serve a bare `/status` with a JSON
-  type) with `state` (`building`, `refreshing`, `starting`, `serving`, `waiting`), `serving`, `stage`, `percent` (bytes
+  type) with `state` (`building`, `refreshing`, `starting`, `serving`, `waiting` for the next try of a build or of the
+  server's start), `serving`, `stage`, `percent` (bytes
   while downloading; osrm-extract's log milestones; pv's count of the dump read by Photon's import; fixed shares per
   stage), `startedAt`, `dataDate` (the extract's own timestamp, the dump's), `lastError`, `nextAttemptAt`,
   `nextRefreshAt` and a `heartbeat` written every 5 s. The healthcheck is the heartbeat (under 2 minutes old), so the
@@ -462,21 +475,33 @@ the YAML; it replaces phase 2's and phase 3's build-on-the-host steps and `deplo
 - **Storage:** named volumes `routing` and `geocoding` in `deploy/truenas.yaml`, created by Docker with the image's
   `/data` ownership (1654). TrueNAS keeps them in `ix-apps/docker`, deletes them with the app and leaves them out of its
   app backups (`plugins/apps/crud.py`, `plugins/docker/backup.py`): fine for caches that rebuild themselves.
-- **The API reads the status** (`DataServiceMonitor`, each status at most 5 s old, ignored when its heartbeat is
-  stale, `Routing:StatusUrl` / `Geocoding:StatusUrl`): while a service isn't serving it isn't called, so the routing
-  client's circuit breaker isn't tripped by a build and doesn't delay the switch back. `/stations/best` estimates (not
-  cached), `/trips/best` and `/places/*` answer 503 with `service`, `state`, `stage` and `percent`, `/health` is Degraded
-  with them, and `GET /services` gives both readinesses to the UI. A status that can't be had leaves things as before.
-- **The UI** (`ServicesStatus`) asks `/services` every 10 s while a pane that offers trips or the search is open and one
-  of them is being prepared (and at once after a 503): "Trips will be ready soon: preparing Québec's road map (45 %)",
-  and "Address search will be ready soon: preparing Québec's addresses (45 %)" with the pick-on-the-map hint, in English
-  and French. When routing is ready, trips are offered again and Best near you is asked again, by road; when the index
-  is ready, what was typed is searched again.
+- **The API reads the status** (`DataServiceMonitor`, a hosted service that asks both every 5 s, so requests only read
+  it: a status host slow to resolve costs nothing on the request path; ignored when its heartbeat is stale;
+  `Routing:StatusUrl` / `Geocoding:StatusUrl`): while a service isn't serving it isn't called, so the routing client's
+  circuit breaker isn't tripped by a build and doesn't delay the switch back. A call the server refuses has its status
+  asked again behind it (its 503 carries the last one, without waiting). `/stations/best` estimates (not cached), `/trips/best` and `/places/*` answer 503 with `service`,
+  `state`, `stage`, `percent`, `lastError` and `nextAttemptAt` (a build that failed says when it tries again, not that
+  it's ready in a few minutes), `/health` is Degraded with them, and `GET /services` gives both readinesses to the UI,
+  under a rate limit of its own (60 a minute per IP). A status that can't be had leaves things as before.
+- **The UI** (`ServicesStatus`) is followed by the map page while it's open (not by each pane, which left the chip's
+  "To work" and the pin's card stale): `/services` once at load, every 10 s while one of them is being prepared or
+  waits to try again, and at once after a 503 or an estimate where a road distance was expected. "Trips will be ready
+  soon: preparing Québec's road map (45 %)", "Address search will be ready soon: preparing Québec's addresses (45 %)"
+  with the pick-on-the-map hint, or "couldn't be prepared. Trying again at 2:15 p.m.", in English and French. When
+  routing is ready, trips are offered again, a trip it refused is planned, and Best near you is asked again by road;
+  when the index goes from prepared to ready, what was typed is searched again (`SearchRecovery`; a search refused while
+  the index reads ready asks the status once per answer, which the review found looping on every status answer).
 - **GHCR:** a package a workflow creates with `GITHUB_TOKEN` should take the public repository's visibility (GitHub's
   docs disagree with each other; no API changes visibility). The promote job now warns when a package can't be read
   anonymously; making it public by hand, once, is then the only step outside the YAML.
-- **Not checked:** on TrueNAS itself (the volumes, the app's state during a first build), and a refresh from the real
-  Geofabrik and mirror (the tests here used a local copy of both, throttled to 25 MB/s).
+- **Checked with a stub service** (the real supervisor, hooks that build in seconds and a server that starts, exits or
+  hangs on command): a restart during the check after a swap, a rollback a restart interrupted, a server that keeps
+  stopping, a failed build, and the 7 s of `starting` before a swap stops the server. With compose: a forced refresh
+  while Best near you and a trip are asked every 2 s (estimates and 503 for the 16 s of `starting`, by road again on the
+  next poll, the breaker never opened), a download cut halfway (the mirror stopped: 472 MB kept, the retry resumed
+  them), a build that can't download (503 and the pin's card say it failed and when it tries again), and the search
+  with geocoding stopped (one search, one /services) or going from building to ready (searched again once).
+- **Not checked:** on TrueNAS itself (the volumes, the app's state during a first build).
 
 ## Phase 4 (optional): fuel level from the car (OBD2)
 **Before starting:** the owner tests both cars with an OBDLink CX in a terminal app:
