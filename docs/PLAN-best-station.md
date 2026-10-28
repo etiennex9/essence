@@ -349,8 +349,9 @@ message instead of breaking; a trip survives leaving for Google Maps and coming 
   (`TripCorridor`, with Clipper2: the reached path offset by the half-width with round joins and ends, overlaps merged,
   holes kept, on a plane at the route's middle latitude) and the map fills once. It was first a line as wide as the
   corridor, which MapLibre tinted twice where the route came back near itself and broke into spikes at sharp turns
-  (segments shorter than the line's width). The route is simplified to a 25th of the half-width and the arcs kept within
-  a 100th of it: 121 points became 176 for Montréal–Shawinigan, in 23 ms in a Debug build in the browser. The corridor
+  (segments shorter than the line's width). The route is simplified to a 25th of the half-width (Douglas–Peucker to the
+  segment, as the API does: Clipper's SimplifyPath measures to the line, and dropped the far end of a start on the wrong
+  carriageway, driven to the next interchange and back) and the arcs kept within a 100th of it: 121 points became 176 for Montréal–Shawinigan, in 23 ms in a Debug build in the browser. The corridor
   fades out between zooms 10 and 13, or a short trip would tint the whole map. All the trip's stations are
   markers; those neither reachable nor saving at least $0.25 fade (the pick, the reference and the biggest saving never
   do), and the reference takes the closest's ring and the flag "No detour" or "Smallest detour".

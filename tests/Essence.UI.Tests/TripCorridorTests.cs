@@ -41,6 +41,21 @@ public class TripCorridorTests
         Assert.False(Inside(corridor, 10, 3.1));
     }
 
+    [Theory]
+    [InlineData(2000)]
+    [InlineData(5000)]
+    [InlineData(8000)]
+    public void A_start_on_the_wrong_carriageway_keeps_the_corridor_round_its_detour(double halfWidthMeters)
+    {
+        // Snapped to the far carriageway of an autoroute: 8 km the wrong way, round the interchange, then back past the
+        // start and on, 34 m from the way out.
+        var corridor = TripCorridor.Polygons(
+            Route((0, 0.017), (-7.6, 0.017), (-8, 0.1), (-8, -0.1), (-7.6, -0.017), (60, -0.017)), halfWidthMeters);
+
+        Assert.True(Inside(corridor, -8, 0));
+        Assert.True(Inside(corridor, -8 - 0.9 * halfWidthMeters / 1000, 0));
+    }
+
     [Fact]
     public void A_route_that_loops_round_leaves_a_hole_inside_the_loop()
     {

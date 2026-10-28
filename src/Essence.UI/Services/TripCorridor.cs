@@ -37,7 +37,7 @@ public static class TripCorridor
             line.Add(plane.ToPoint(point));
         }
 
-        line = Clipper.SimplifyPath(line, halfWidthMeters / 25, isClosedPath: false);
+        line = Simplify(line, halfWidthMeters / 25);
         var offset = new ClipperOffset(arcTolerance: halfWidthMeters / 100);
         offset.AddPath(line, JoinType.Round, EndType.Round);
         var tree = new PolyTree64();
@@ -46,6 +46,60 @@ public static class TripCorridor
         var polygons = new List<double[][][]>();
         AddPolygons(tree, plane, polygons);
         return [.. polygons];
+    }
+
+    /// <summary>
+    /// Douglas–Peucker to within <paramref name="tolerance"/> metres, each point measured to the segment between its
+    /// stretch's ends, as the API simplifies the route (Polyline.Simplify). Clipper.SimplifyPath measures to the line
+    /// through them instead, which drops the far end of an out-and-back detour: a start on the wrong carriageway of an
+    /// autoroute, driven to the next interchange and back.
+    /// </summary>
+    private static Path64 Simplify(Path64 line, double tolerance)
+    {
+        if (line.Count <= 2)
+        {
+            return line;
+        }
+
+        var keep = new bool[line.Count];
+        keep[0] = keep[^1] = true;
+        var stretches = new Stack<(int First, int Last)>();
+        stretches.Push((0, line.Count - 1));
+        while (stretches.Count > 0)
+        {
+            var (first, last) = stretches.Pop();
+            var (a, b) = (line[first], line[last]);
+            double dx = b.X - a.X, dy = b.Y - a.Y, lengthSquared = dx * dx + dy * dy;
+            var (farthest, farthestSquared) = (-1, tolerance * tolerance);
+            for (var i = first + 1; i < last; i++)
+            {
+                double px = line[i].X - a.X, py = line[i].Y - a.Y;
+                var t = lengthSquared == 0 ? 0 : Math.Clamp((px * dx + py * dy) / lengthSquared, 0, 1);
+                double ex = px - t * dx, ey = py - t * dy, squared = ex * ex + ey * ey;
+                if (squared > farthestSquared)
+                {
+                    (farthest, farthestSquared) = (i, squared);
+                }
+            }
+
+            if (farthest >= 0)
+            {
+                keep[farthest] = true;
+                stretches.Push((first, farthest));
+                stretches.Push((farthest, last));
+            }
+        }
+
+        var kept = new Path64();
+        for (var i = 0; i < line.Count; i++)
+        {
+            if (keep[i])
+            {
+                kept.Add(line[i]);
+            }
+        }
+
+        return kept;
     }
 
     /// <summary>The outlines under <paramref name="parent"/>, each with its holes, and the outlines inside those holes.</summary>
