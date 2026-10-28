@@ -95,6 +95,10 @@ public sealed class EssenceApiClient(HttpClient http)
             EssenceJsonContext.Default.PlaceSuggestion,
             cancellationToken);
 
+    /// <summary>Whether trips and the address search are ready, or how far their data is (<c>/services</c>).</summary>
+    public Task<ApiResult<DataServicesStatus>> GetServicesAsync(CancellationToken cancellationToken) =>
+        GetAsync("services", EssenceJsonContext.Default.DataServicesStatus, cancellationToken);
+
     public Task<ApiResult<StationDetail>> GetStationAsync(long id, CancellationToken cancellationToken) =>
         GetAsync(string.Create(CultureInfo.InvariantCulture, $"stations/{id}"), EssenceJsonContext.Default.StationDetail, cancellationToken);
 
@@ -184,4 +188,5 @@ public sealed record TripQuery(
 [JsonSerializable(typeof(TripPlan))]
 [JsonSerializable(typeof(List<PriceHistoryDto>))]
 [JsonSerializable(typeof(List<PlaceSuggestion>))]
+[JsonSerializable(typeof(DataServicesStatus))]
 public sealed partial class EssenceJsonContext : JsonSerializerContext;

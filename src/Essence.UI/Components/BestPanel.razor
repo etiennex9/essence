@@ -3,6 +3,7 @@
 @inject CarProfiles Cars
 @inject TripState Trips
 @inject SavedPlaces Places
+@inject ServicesStatus Services
 @inject TimeProvider Time
 @inject IStringLocalizer<Strings> L
 
@@ -274,7 +275,7 @@
             @* ---- Going somewhere? ---- *@
             @if (TripsUnavailable)
             {
-                <p class="where-off">@L["TripsUnavailableShort"]</p>
+                <p class="where-off" role="status">@TripsUnavailableText</p>
             }
             else
             {
@@ -568,16 +569,28 @@
 
     private string CarName => Cars.IsTypical || string.IsNullOrWhiteSpace(Cars.Active.Name) ? L["MyCar"] : Cars.Active.Name;
 
-    /// <summary>Trips can't be planned now: the routing server answered 503, or Best near you fell back to estimates.</summary>
-    private bool TripsUnavailable => Trips.Unavailable || Best.Result is { ByRoad: false, Pick: not null };
+    /// <summary>
+    /// Trips can't be planned now: the routing data is being prepared, the routing server answered 503, or Best near you
+    /// fell back to estimates.
+    /// </summary>
+    private bool TripsUnavailable => Services.RoutingPreparing || Trips.Unavailable || Best.Result is { ByRoad: false, Pick: not null };
+
+    /// <summary>"Trips will be ready soon: preparing Québec's road map (45 %)", or that they aren't available.</summary>
+    private string TripsUnavailableText => Services.Routing is { Ready: false } routing
+        ? routing.Percent is { } percent ? L["TripsPreparing", percent] : L["TripsPreparingSoon"]
+        : L["TripsUnavailableShort"];
 
     private string TripError => Trips.Error switch
     {
+        ApiError.Unavailable when Services.RoutingPreparing => TripsUnavailableText,
         ApiError.Unavailable => L["TripUnavailable"],
         ApiError.NoRoute => L["TripNoRoad"],
         ApiError.RateLimited => L["TripRateLimited"],
         _ => L["TripFailed"],
     };
+
+    /// <summary>While the pane is open, the routing data's progress is followed.</summary>
+    private IDisposable? _watching;
 
     protected override async Task OnInitializedAsync()
     {
@@ -585,6 +598,8 @@
         Cars.Changed += OnChanged;
         Trips.Changed += OnChanged;
         Places.Changed += OnChanged;
+        Services.Changed += OnChanged;
+        _watching = Services.Watch();
         await Cars.LoadAsync();
         await Places.LoadAsync();
     }
@@ -789,5 +804,7 @@
         Cars.Changed -= OnChanged;
         Trips.Changed -= OnChanged;
         Places.Changed -= OnChanged;
+        Services.Changed -= OnChanged;
+        _watching?.Dispose();
     }
 }

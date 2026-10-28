@@ -82,6 +82,16 @@ public sealed class TripState : IDisposable
     /// <summary>The routing server answered 503 a moment ago: trips aren't offered until it's been a while.</summary>
     public bool Unavailable => _unavailableAt is { } at && _time.GetUtcNow() - at < UnavailableFor;
 
+    /// <summary>The routing data is ready again (<see cref="ServicesStatus.RoutingReady"/>): trips are offered at once.</summary>
+    public void ClearUnavailable()
+    {
+        if (_unavailableAt is not null)
+        {
+            _unavailableAt = null;
+            Changed?.Invoke();
+        }
+    }
+
     /// <summary>Reads the trip the tab had open, once; later calls return the same task.</summary>
     public Task LoadAsync() => _loading ??= LoadCoreAsync();
 

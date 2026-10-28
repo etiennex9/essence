@@ -2,6 +2,7 @@
 @inject PlaceSearch Search
 @inject PlaceAddresses Addresses
 @inject SavedPlaces Places
+@inject ServicesStatus Services
 @inject IStringLocalizer<Strings> L
 
 @* Where to: the address search, picking the place on the map instead, and the places saved on this device. Opened over Best
@@ -196,6 +197,8 @@
                 ApiError.None when Search.Answered && Search.Suggestions.Count == 0 => L["SearchNothing", Search.Text.Trim()],
                 ApiError.None when Search.Answered => L["PlacesFound", Search.Suggestions.Count],
                 ApiError.None => "",
+                ApiError.Unavailable when Services.Geocoding is { Ready: false, Percent: { } percent } => L["SearchPreparing", percent],
+                ApiError.Unavailable when Services.GeocodingPreparing => L["SearchPreparingSoon"],
                 ApiError.Unavailable => L["SearchUnavailable"],
                 ApiError.RateLimited => L["SearchRateLimited"],
                 _ => L["SearchFailed"],
@@ -203,10 +206,14 @@
         }
     }
 
+    private IDisposable? _watching;
+
     protected override async Task OnInitializedAsync()
     {
-        Search.Changed += OnChanged;
+        Search.Changed += OnSearchChanged;
         Places.Changed += OnChanged;
+        Services.Changed += OnServicesChanged;
+        _watching = Services.Watch();
         await Places.LoadAsync();
 
         // Once they're in: opened first (a reload on ?view=places), the panel renders before they are.
@@ -380,10 +387,34 @@
 
     private void OnChanged() => InvokeAsync(StateHasChanged);
 
+    /// <summary>The index was being prepared and is ready: what was typed is searched again, without a keystroke.</summary>
+    private void OnServicesChanged()
+    {
+        if (Search.Error == ApiError.Unavailable && Services.Geocoding is { Ready: true } && Search.Searching)
+        {
+            Search.Type(Search.Text, UserLocation ?? MapCenter, Language);
+        }
+
+        OnChanged();
+    }
+
+    /// <summary>A search that found the address search down asks how far its index is.</summary>
+    private void OnSearchChanged()
+    {
+        if (Search.Error == ApiError.Unavailable)
+        {
+            _ = Services.RefreshAsync();
+        }
+
+        OnChanged();
+    }
+
     public void Dispose()
     {
-        Search.Changed -= OnChanged;
+        Search.Changed -= OnSearchChanged;
         Places.Changed -= OnChanged;
+        Services.Changed -= OnServicesChanged;
+        _watching?.Dispose();
         _cts.Cancel();
     }
 }

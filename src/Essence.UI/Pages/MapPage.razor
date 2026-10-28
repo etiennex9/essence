@@ -8,6 +8,7 @@
 @inject CarProfiles Cars
 @inject TripState Trips
 @inject SavedPlaces Places
+@inject ServicesStatus Services
 @inject IDeviceLocation DeviceLocation
 @inject IPreferenceStore Preferences
 @inject ReleaseNotes Notes
@@ -277,8 +278,11 @@
     /// <summary>The pump's pane is open: Best near you, Best on the way, or My cars or the address search over one of them.</summary>
     private bool PumpActive => View is BestView or TripView or CarsView or PlacesView;
 
-    /// <summary>Trips can't be planned now: the routing server answered 503, or Best near you fell back to estimates.</summary>
-    private bool TripsUnavailable => Trips.Unavailable || Best.Result is { ByRoad: false, Pick: not null };
+    /// <summary>
+    /// Trips can't be planned now: the routing data is being prepared, the routing server answered 503, or Best near you
+    /// fell back to estimates.
+    /// </summary>
+    private bool TripsUnavailable => Services.RoutingPreparing || Trips.Unavailable || Best.Result is { ByRoad: false, Pick: not null };
 
     /// <summary>The Best near you the map shows while its pane is open; none while the one in is for another fuel.</summary>
     private BestNearby? MapBest => BestOpen && Best.ResultQuery?.Fuel == _fuel ? Best.Result : null;
@@ -337,6 +341,7 @@
         Cars.Changed += OnCarsChanged;
         Trips.Changed += OnTripChanged;
         Places.Changed += OnPlacesChanged;
+        Services.RoutingReady += OnRoutingReady;
     }
 
     protected override async Task OnParametersSetAsync()
@@ -1362,9 +1367,29 @@
     /// <summary>Another release while the page is away or just back: it reloads by itself.</summary>
     private void OnReloadDue() => InvokeAsync(() => ReloadAsync(automatic: true));
 
-    /// <summary>A new plan, or the trip opened or ended: the map follows.</summary>
+    /// <summary>
+    /// The routing data is ready after being prepared: trips are offered again, and Best near you is asked again, by road
+    /// this time.
+    /// </summary>
+    private void OnRoutingReady() => InvokeAsync(async () =>
+    {
+        Trips.ClearUnavailable();
+        if (Best.Result is { ByRoad: false })
+        {
+            await Best.RetryAsync();
+        }
+
+        StateHasChanged();
+    });
+
+    /// <summary>A new plan, or the trip opened or ended: the map follows. A 503 asks how far the routing data is.</summary>
     private void OnTripChanged() => InvokeAsync(async () =>
     {
+        if (Trips.Error == ApiError.Unavailable && !Trips.Loading)
+        {
+            _ = Services.RefreshAsync();
+        }
+
         await RenderMarkersAsync();
         await RenderTripAsync();
         await FitToTripAsync();
@@ -1403,6 +1428,7 @@
         Cars.Changed -= OnCarsChanged;
         Trips.Changed -= OnTripChanged;
         Places.Changed -= OnPlacesChanged;
+        Services.RoutingReady -= OnRoutingReady;
         Updates.Stop();
         _loadCts?.Cancel();
         _retryCts?.Cancel();

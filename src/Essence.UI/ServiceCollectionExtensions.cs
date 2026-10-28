@@ -30,6 +30,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<TripState>();
         services.AddScoped<PlaceSearch>();
         services.AddScoped<PlaceAddresses>();
+        services.AddScoped<ServicesStatus>();
         services.TryAddScoped<BrowserDevice>();
         services.TryAddScoped<IDeviceLocation>(sp => sp.GetRequiredService<BrowserDevice>());
         services.TryAddScoped<IPreferenceStore>(sp => sp.GetRequiredService<BrowserDevice>());

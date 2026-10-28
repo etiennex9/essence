@@ -726,4 +726,16 @@
   <data name="CancelChoosingLabel" xml:space="preserve">
     <value>Cancel choosing {0}’s address</value>
   </data>
+  <data name="TripsPreparing" xml:space="preserve">
+    <value>Trips will be ready soon: preparing Québec’s road map ({0} %).</value>
+  </data>
+  <data name="TripsPreparingSoon" xml:space="preserve">
+    <value>Trips will be ready soon: preparing Québec’s road map.</value>
+  </data>
+  <data name="SearchPreparing" xml:space="preserve">
+    <value>Address search will be ready soon: preparing Québec’s addresses ({0} %). Meanwhile, pick the place on the map: press and hold it, or right-click it.</value>
+  </data>
+  <data name="SearchPreparingSoon" xml:space="preserve">
+    <value>Address search will be ready soon: preparing Québec’s addresses. Meanwhile, pick the place on the map: press and hold it, or right-click it.</value>
+  </data>
 </root>

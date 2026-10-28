@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject SavedPlaces Places
 @inject PlaceAddresses Addresses
+@inject ServicesStatus Services
 @inject IStringLocalizer<Strings> L
 
 @* The card for a pin dropped by a press and hold on the map (or at its centre, from the keyboard): its address, Best on the
@@ -28,7 +29,10 @@
     {
         @if (TripsUnavailable)
         {
-            <p class="note">@L["TripsUnavailableShort"]</p>
+            <p class="note" role="status">
+                @(Services.Routing is { Ready: false, Percent: { } percent } ? L["TripsPreparing", percent]
+                    : Services.RoutingPreparing ? L["TripsPreparingSoon"] : L["TripsUnavailableShort"])
+            </p>
         }
         else
         {
@@ -86,6 +90,8 @@
     private bool _focusCard;
     private string _name = "";
 
+    private IDisposable? _watching;
+
     /// <summary>What the address search says of the pin; null while it's asked.</summary>
     private PlaceLookup? _lookup;
     private CancellationTokenSource? _lookupCts;
@@ -140,6 +146,14 @@
     private string? Address => _lookup?.Place is { } place ? PlaceAddresses.ShortName(place) : null;
 
     private static string Language => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr" ? "fr" : "en";
+
+    protected override void OnInitialized()
+    {
+        Services.Changed += OnServicesChanged;
+        _watching = Services.Watch();
+    }
+
+    private void OnServicesChanged() => InvokeAsync(StateHasChanged);
 
     protected override void OnParametersSet()
     {
@@ -224,5 +238,10 @@
         _ => place.Name,
     };
 
-    public void Dispose() => _lookupCts?.Cancel();
+    public void Dispose()
+    {
+        _lookupCts?.Cancel();
+        Services.Changed -= OnServicesChanged;
+        _watching?.Dispose();
+    }
 }

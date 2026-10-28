@@ -726,4 +726,16 @@
   <data name="CancelChoosingLabel" xml:space="preserve">
     <value>Annuler le choix de l’adresse : {0}</value>
   </data>
+  <data name="TripsPreparing" xml:space="preserve">
+    <value>Les trajets seront prêts bientôt : préparation de la carte routière du Québec ({0} %).</value>
+  </data>
+  <data name="TripsPreparingSoon" xml:space="preserve">
+    <value>Les trajets seront prêts bientôt : préparation de la carte routière du Québec.</value>
+  </data>
+  <data name="SearchPreparing" xml:space="preserve">
+    <value>La recherche d’adresses sera prête bientôt : préparation des adresses du Québec ({0} %). D’ici là, choisissez le lieu sur la carte : maintenez le doigt dessus ou faites un clic droit.</value>
+  </data>
+  <data name="SearchPreparingSoon" xml:space="preserve">
+    <value>La recherche d’adresses sera prête bientôt : préparation des adresses du Québec. D’ici là, choisissez le lieu sur la carte : maintenez le doigt dessus ou faites un clic droit.</value>
+  </data>
 </root>
