@@ -65,6 +65,22 @@ build_next() {
         return 1
     fi
 
+    # A dump the filter no longer finds Québec's places in (its format changed) makes an index with next to nothing in
+    # it: under half the places of the current index, or under 100,000, it isn't served. Photon says how many it has; if
+    # it doesn't any more, the index's size tells.
+    local documents least
+    documents=$(sed -n 's/.*Finished import of \([0-9]*\) photon documents.*/\1/p' "$RUN/build.log" | tail -n 1)
+    least=$(($(grep -sxE '[0-9]+' "$DATA/current/documents" || echo 0) / 2))
+    [ "$least" -lt 100000 ] && least=100000
+    if [ -n "$documents" ] && [ "$documents" -lt "$least" ]; then
+        echo "Photon's import found only $documents places in Québec" >"$RUN/error"
+        return 1
+    elif [ -z "$documents" ] && [ "$(du -sm "$next/photon_data" | cut -f 1)" -lt 200 ]; then
+        echo "Photon's import made an index of under 200 MB" >"$RUN/error"
+        return 1
+    fi
+
+    [ -n "$documents" ] && echo "$documents" >"$next/documents"
     cut -d ' ' -f 1 "$dump.md5" >"$next/source-id"
     rm -f "$dump" "$dump.md5"
     data_version >"$next/version"
