@@ -13,8 +13,9 @@ and shows them on a map of nearby stations.
 | `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
 | `src/Essence.Contracts` | The API's response records and the release notes', shared by the API, the UI and the release tool. |
 | `src/Essence.Ranking` | Which station to fill up at: costs, savings, the pick and its rules, the search area; for trips, the route's corridor, km along it, detours and the range; the OSRM and Photon clients, the address search's labels, and Québec's boundary. No dependencies; used by the API. |
-| `src/Essence.Routing` | The routing image: OSRM with Essence's car profile. Its data is built on the host by the image itself (see [Routing](#routing-best-on-the-way)). |
-| `src/Essence.Geocoding` | The address search image: Photon, with an index of Québec's places built on the host by the image itself (see [Address search](#address-search-best-on-the-way)). |
+| `src/Essence.Routing` | The routing image: OSRM with Essence's car profile, which builds and refreshes Québec's road data itself (see [Routing and address search](#routing-and-address-search)). |
+| `src/Essence.Geocoding` | The address search image: Photon, which builds and refreshes its index of Québec's places itself. |
+| `src/Essence.Supervisor` | The supervisor both of those images run: it builds their data, serves it, refreshes it, retries, and reports its progress at `:9090/status`. |
 | `src/Essence.UI` | Razor class library: the map page, the station details pane and everything behind them. Shared with a future MAUI app. |
 | `src/Essence.Web` | Blazor WebAssembly host for `Essence.UI`, served as static files by nginx. See [its README](src/Essence.Web/README.md). |
 | `tools/Essence.Release` | Run by the publish workflow: dates each release by the day it landed on `main` and writes the web app's changelog (see [Versions](#versions)). |
@@ -39,32 +40,18 @@ Compose starts `postgres`, then `migrate` (exits 0 once the schema and roles are
 The map is at <http://localhost:8081>. The API listens on <http://localhost:8080>; the interactive docs are at <http://localhost:8080/scalar>.
 The web container also forwards `/api/` to the API (<http://localhost:8081/api/health>): that's the address the map uses.
 
-Road distances and Best on the way need the routing service, in the `trip` profile. Build its data once (a 1.2 GB download
-from Geofabrik, then a few minutes and about 7 GB of RAM to process; it goes into the `routing` volume), then start it:
+Road distances, Best on the way and the address search need the routing and geocoding services, in the `trip` profile:
 
 ```bash
-docker compose run --rm routing build
+docker compose --profile trip up -d
 ```
 
-```bash
-docker compose --profile trip up -d routing
-```
-
-Without it, Best near you estimates distances and trips answer 503.
-
-The address search (typing where you're going, and the addresses of pins and saved places) needs the geocoding service,
-in the same profile. Build its index of Québec's places once (a 1.6 GB download of Photon's dump of Canada, then about
-10 minutes and 3 GB of RAM to import Québec's part; about 2 GB in the `geocoding` volume), then start it:
-
-```bash
-docker compose run --rm geocoding build
-```
-
-```bash
-docker compose --profile trip up -d geocoding
-```
-
-Without it, the search says it's unavailable, and pins and saved places still work, without addresses.
+On their first start they build their data into the `routing` and `geocoding` volumes: Québec's roads (a 1.2 GB download
+from Geofabrik, then a couple of minutes and 3.2 GB of RAM) and the index of Québec's places (a 1.6 GB download of
+Photon's dump of Canada, then about 10 minutes and 3 GB of RAM). Meanwhile Best near you estimates distances, and the
+map says trips and the search will be ready soon, with how far they are; <http://localhost:8080/services> says it too.
+They refresh their data every `REFRESH_DAYS` days (30). `ROUTING_PBF_URL` and `GEOCODING_DUMP_URL` in `.env` point them
+at other copies of the downloads.
 
 ```bash
 curl localhost:8080/health
@@ -73,6 +60,7 @@ curl "localhost:8080/stations/best?lat=45.5017&lon=-73.5673&fuel=Regulier"
 curl "localhost:8080/trips/best?fromLat=45.5017&fromLon=-73.5673&toLat=46.8139&toLon=-71.208&fuel=Regulier&rangeKm=180"
 curl "localhost:8080/places/search?q=1000%20de%20la%20gauch&lat=45.5017&lon=-73.5673&lang=fr"
 curl "localhost:8080/places/reverse?lat=45.4988&lon=-73.5666"
+curl localhost:8080/services
 curl "localhost:8080/prices/current?fuel=Régulier&limit=5"
 curl localhost:8080/imports
 ```
@@ -159,10 +147,11 @@ In the Development environment, logs are plain text and the ingest archive goes 
 | `GET /trips/best?fromLat&fromLon&toLat&toLon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&rangeKm&spareKm=30` | Where to fill up on the way to a destination: the route, where to stop, and the stations along it ranked by detour (see below). |
 | `GET /places/search?q&lat&lon&lang=fr` | Places in Québec matching what was typed, at most 5, those near `lat`,`lon` first (see below). |
 | `GET /places/reverse?lat&lon&lang=fr` | What a point in Québec is called: the nearest address, street or named place. |
+| `GET /services` | Whether trips and the address search are ready, or how far their data is (`state`, `stage`, `percent`). |
 | `GET /stations/{id}/prices?fuel&from&to` | Price history overlapping a range (default: the last 30 days). |
 | `GET /prices/current?fuel&region&brand&sort=price&includeUnavailable&limit=50` | Current prices, cheapest first. |
 | `GET /imports?limit=20` | Recent imports with their statistics and `source` (`feed` or `xlsx`). |
-| `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. A routing or geocoding server that doesn't answer makes it `Degraded`, still 200. |
+| `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. A routing or geocoding server that doesn't answer, or whose data is being built, makes it `Degraded`, still 200, with the build's stage and percent. |
 
 `/stations/best` ranks the operating stations with an available price for the fuel (Costco only with `costco=true`: it
 sells to members only) by what the fill-up costs once the drive there and back is counted: price ÷ 100 × (fill + km there
@@ -197,6 +186,11 @@ only by its address comes after the address. `q` takes 3 to 100 characters; `lan
 answers 422 for a point outside Québec's boundary (known without Photon), 404 when nothing with an address is within
 1 km, else the nearest address within 100 m, or the nearest street or named place. Both answer 503 when Photon is down;
 they wait 1.5 s for it, without retrying.
+
+While the routing data or the address index is built (or loaded, after a refresh), the API reads the containers'
+progress (`:9090/status`, every 5 seconds at most) instead of calling them: `/stations/best` estimates, and
+`/trips/best` and `/places/*` answer 503 with `service`, `state`, `stage` and `percent` in the problem, as `/services`
+says them. A container whose status can't be had is called as before.
 
 `/stations/{id}`, `/stations/nearby`, `/stations/best` and `/trips/best` send `Last-Modified`: when the latest import was fetched. The map refreshes its prices
 about 5 min 20 s after that time, which is when the next import should be in, and more often while that import is late. A request
@@ -301,90 +295,44 @@ gets an `@autodeploy-<time>` snapshot first (the last 10 are kept).
 - **To update the script**, look at what changed in `deploy/truenas-autodeploy.py`, since root runs it, then run the
   `curl` command again.
 
-### Routing (Best on the way)
+### Routing and address search
 
-Road distances in Best near you and Best on the way come from the `routing` container: OSRM with Québec's roads from
-OpenStreetMap ([src/Essence.Routing](src/Essence.Routing)). The image holds the programs; the map data is built on the
-NAS, by the same image, into a dataset of its own. The api runs without it: Best near you then estimates distances, and
-trips answer 503. What it takes, measured on Québec's October 2026 extract: a 1.16 GB download, about 7 GB of RAM for a
-minute or two while it's processed (on 24 cores; longer on fewer), 0.9 GB of data, and about 0.7 GB of RAM to serve it.
-During a refresh the NAS needs both: the server's memory plus the build's, and on disk about 4 GB at the peak (the
-previous and current data, the download and the new data), 1.8 GB the rest of the time. Replace `POOL` as above.
+Road distances, Best on the way and the address search come from the `routing` container (OSRM, Québec's roads from
+Geofabrik, [src/Essence.Routing](src/Essence.Routing)) and the `geocoding` container (Photon, Québec's places from Photon's
+dump of Canada, [src/Essence.Geocoding](src/Essence.Geocoding)). Both are in [deploy/truenas.yaml](deploy/truenas.yaml):
+pasting it is all they need. Each runs a supervisor ([src/Essence.Supervisor](src/Essence.Supervisor)) that:
 
-1. **The package.** The first Publish run on `main` that builds `essence-routing` creates its package on GHCR, private.
-   Make it public, like the others (the repository's **Packages** → `essence-routing` → **Package settings** →
-   **Change visibility**): the autodeploy reads digests anonymously and stops every rollout on a 401, 403 or 404.
-2. **The dataset.** If `POOL/apps/essence/data` is a dataset (**Datasets** lists it), **Add Dataset** under it: name
-   `routing`, preset **Generic**. If `data` is a plain folder, don't create a `data` dataset over it (it would hide the
-   archive): add `routing` under `POOL/apps/essence` instead, and use `/mnt/POOL/apps/essence/routing` wherever these
-   steps and the routing service say `/mnt/POOL/apps/essence/data/routing`. Then in **System → Shell** as root:
-   `chown 1654:1654` on its folder. It can be rebuilt at any time, so leave it out of snapshots: in any periodic
-   snapshot task that covers its parent recursively, add it to **Exclude**.
-3. **The first build**, by hand, before the service exists (an app that isn't running 10 minutes after a rollout fails
-   the autodeploy, and the server won't start without data). As root:
-   ```sh
-   docker run --rm -v /mnt/POOL/apps/essence/data/routing:/data ghcr.io/etiennex9/essence-routing:latest build
-   ```
-   It prints its progress and ends with the size of what it built, in `current/`.
-4. **The service.** **Apps → essence → Edit**: add the `routing` service from [deploy/truenas.yaml](deploy/truenas.yaml)
-   (no published port, its dataset, `mem_limit`, its healthcheck), keeping your passwords and paths, then **Save**.
-   `mem_limit` is the size of `current/` (`du -sh /mnt/POOL/apps/essence/data/routing/current`) plus 1 GB: 2 GB for
-   today's data. The api finds it at `http://routing:5000/` (`Routing:BaseUrl`).
-5. **The monthly refresh.** OpenStreetMap changes; rebuild the data once a month with
-   [truenas-data-refresh.sh](deploy/truenas-data-refresh.sh): it builds new data next to the current, from the image
-   the routing container runs, while the server keeps answering, then restarts the container on it and waits for it to be
-   healthy; `previous/` keeps the data before. Copy it next to the autodeploy script:
-   ```sh
-   curl -fsSL -o /mnt/POOL/scripts/truenas-data-refresh.sh https://raw.githubusercontent.com/etiennex9/essence/main/deploy/truenas-data-refresh.sh
-   ```
-   Then **System → Advanced Settings → Cron Jobs → Add**: **Description** `Refresh essence routing`, **Command**
-   `sh /mnt/POOL/scripts/truenas-data-refresh.sh routing /mnt/POOL/apps/essence/data/routing`, **Run As User** `root`,
-   **Schedule** **Custom** with **Minutes** `30`, **Hours** `3`, **Days of Month** `1` (a night hour, once a month),
-   **Hide Standard Output** checked, **Hide Standard Error** cleared, **Enabled** checked. A failed build leaves the
-   server on the data it had, and is mailed with the end of its log.
-6. **Bumping OSRM** (the version pinned in [src/Essence.Routing/Dockerfile](src/Essence.Routing/Dockerfile)) is
-   deliberate: the new server refuses data built by another version and keeps restarting, so the autodeploy reports
-   that rollout as failed (and TrueNAS may stop the app). Run the refresh script by hand right after it rolls out: it
-   builds with the new image even with the app stopped. Then **Start** the app if it's stopped. A change to
-   `essence-car.lua` needs a rebuild too, though the server keeps running on the old data meanwhile (its log warns).
+- builds its data on its first start, into its volume, and serves it once it's built. The app reports running at once:
+  the healthcheck only asks whether the supervisor is alive, so a first build doesn't hold the autodeploy's 10-minute
+  wait. Meanwhile Best near you estimates distances, and the map says trips and the search will be ready soon, with how
+  far they are (*Trips will be ready soon: preparing Québec's road map (45 %)*), and switches them on when they are.
+- refreshes it every `REFRESH_DAYS` days (30; 0 never), when the source changed (Geofabrik's extract daily, the dump
+  weekly): it builds the new data beside the current one while the server keeps answering, then restarts the server on
+  it, which takes the server off for a few seconds, and keeps the previous data until the new one loads.
+- rebuilds the data after an image bumps OSRM's or Photon's version (data built by another version may not load), or
+  changes the car profile.
+- retries a failed download or build after 1 minute, then twice as long each time, up to 6 hours; a restart throws a
+  build in progress away, and a download resumes where it stopped.
+- reports what it's doing at `:9090/status`, which the api reads (`/health`, `/services`).
 
-### Address search (Best on the way)
+**Storage: Docker volumes, not datasets.** The data is a cache that rebuilds itself, so it lives in the named volumes
+`routing` and `geocoding` that the YAML declares: Docker creates them in the apps pool (`ix-apps`), owned by the
+containers' user, with nothing to create or `chown` by hand. TrueNAS deletes them with the app, and leaves them out of
+its app backups; either way the containers rebuild them. The routing volume holds about 0.9 GB, 3 GB while it builds;
+the geocoding volume about 2 GB, 6 GB while it builds.
 
-Typing where you're going, and the addresses of dropped pins and saved places, come from the `geocoding` container:
-[Photon](https://github.com/komoot/photon) with an index of Québec's places from OpenStreetMap
-([src/Essence.Geocoding](src/Essence.Geocoding)). As with routing, the image holds the programs, and the index is built
-on the NAS, by the same image, into a dataset of its own: it downloads Photon's dump of Canada (from the mirror
-[photon-docker](https://github.com/rtuszik/photon-docker) uses, updated about weekly, checked against its MD5), keeps the
-places whose address is in Québec (about a fifth of Canada's) and imports them. The api runs without it: the search
-then says it's unavailable, and pins and saved places work without addresses. What it takes, measured on the October 2026
-dump: a 1.6 GB download, about 3 GB of RAM and 8 minutes of import on 24 cores (longer on fewer), 2 GB of index, and
-about 400 MB of RAM to serve it (1.3 GB after a burst of 2,000 searches; 22 ms each, half of them). During a refresh the
-disk holds about 8 GB at the peak (the previous and current indexes, the download and the new index), 4 GB the rest of
-the time. Replace `POOL` as above.
+**Memory:** `mem_limit: 5g` each, measured while building and serving at once: osrm-extract takes 3.2 GB (the extract is
+cut down to roads first with osmium, which gives the same routes; the whole extract took 6.6 GB) and the server 0.7 GB;
+Photon's import about 2.7 GB with its server. Serving alone takes about 0.7 GB and 0.4–1.3 GB.
 
-1. **The package.** Make `essence-geocoding` public after the first Publish run on `main` that builds it, as for
-   routing (step 1 above).
-2. **The dataset.** As for routing (step 2 above), with the name `geocoding`: `POOL/apps/essence/data/geocoding`, or
-   `POOL/apps/essence/geocoding` if `data` is a plain folder (then use `/mnt/POOL/apps/essence/geocoding` wherever these
-   steps and the geocoding service say `/mnt/POOL/apps/essence/data/geocoding`). Owned by 1654:1654, out of snapshots.
-3. **The first build**, by hand, before the service exists (the server won't start without an index, and an app that
-   isn't running 10 minutes after a rollout fails the autodeploy). As root:
-   ```sh
-   docker run --rm -v /mnt/POOL/apps/essence/data/geocoding:/data ghcr.io/etiennex9/essence-geocoding:latest build
-   ```
-   It ends with the size of what it built, in `current/`.
-4. **The service.** **Apps → essence → Edit**: add the `geocoding` service from [deploy/truenas.yaml](deploy/truenas.yaml)
-   (no published port, its dataset, `mem_limit: 2g`, its healthcheck), keeping your passwords and paths, then **Save**.
-   The api finds it at `http://geocoding:2322/` (`Geocoding:BaseUrl`).
-5. **The monthly refresh**, with the same script as routing ([truenas-data-refresh.sh](deploy/truenas-data-refresh.sh),
-   copied in step 5 above): **System → Advanced Settings → Cron Jobs → Add**, **Description** `Refresh essence address
-   search`, **Command** `sh /mnt/POOL/scripts/truenas-data-refresh.sh geocoding /mnt/POOL/apps/essence/data/geocoding`,
-   **Run As User** `root`, **Schedule** **Custom** with **Minutes** `30`, **Hours** `4`, **Days of Month** `1` (an hour
-   after the routing refresh, so they don't need RAM at the same time), **Hide Standard Output** checked, **Hide Standard
-   Error** cleared, **Enabled** checked.
-6. **Bumping Photon** (the version in [src/Essence.Geocoding/Dockerfile](src/Essence.Geocoding/Dockerfile), with its
-   jar's checksum) is deliberate, as for OSRM: the new server refuses an index built by another version, so run the
-   refresh by hand right after it rolls out, then **Start** the app if it's stopped.
+**By hand, if ever:** `docker exec ix-essence-routing-1 essence-routing refresh` (or `ix-essence-geocoding-1
+essence-geocoding refresh`) rebuilds now without waiting for the source to change; `docker exec ix-essence-routing-1
+curl -s localhost:9090/status` shows the status. Their logs say what they did.
+
+**The packages.** The publish workflow creates `essence-routing` and `essence-geocoding` on GHCR the first time it
+builds them. A package a workflow creates in a public repository should be public too; if one isn't, the Publish run's
+summary warns about it, and its owner makes it public once (the repository's **Packages** → the package → **Package
+settings** → **Change visibility**): the autodeploy reads digests anonymously.
 
 ## Versions
 
@@ -494,6 +442,12 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Archive:Path` / `RetentionDays` | `/data/archive` / 30 | |
 | `Health:MaxImportAgeMinutes` | 15 | API `/health` threshold. |
 | `Routing:BaseUrl` | `http://routing:5000/` | The routing server (OSRM), ending with `/`. 3 s per attempt and one retry. |
+| `Routing:StatusUrl` | `http://routing:9090/` | The routing container's status server, ending with `/`. |
 | `Geocoding:BaseUrl` | `http://geocoding:2322/` | The address search (Photon), ending with `/`. 1.5 s, no retry. |
+| `Geocoding:StatusUrl` | `http://geocoding:9090/` | The geocoding container's status server, ending with `/`. |
 | `RateLimiting:PermitLimit` / `WindowSeconds` | 120 / 60 | Requests per client IP and window, the address search's aside. |
 | `RateLimiting:Search:PermitLimit` / `WindowSeconds` | 60 / 60 | `/places/` requests per client IP and window. |
+
+The routing and geocoding containers take environment variables: `REFRESH_DAYS` (30; 0 never refreshes), and
+`ROUTING_PBF_URL` (Geofabrik's `quebec-latest.osm.pbf`) or `GEOCODING_DUMP_URL` (Photon's dump of Canada), each with an
+`.md5` beside it.

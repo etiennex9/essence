@@ -176,3 +176,18 @@ jobs:
               sleep 15
             done
           done
+      # The autodeploy reads digests anonymously, and stops every rollout on a package it can't read. A package this
+      # workflow creates should take the public repository's visibility; if one comes out private, say so here, where
+      # it's found first: only its owner can change it (Package settings → Change visibility), once.
+      - env:
+          IMAGES: ${{ needs.changes.outputs.images }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          for app in $(jq -r '.[].app' <<<"$IMAGES"); do
+            repository="${OWNER,,}/essence-$app"
+            token=$(curl -sS "https://ghcr.io/token?scope=repository:$repository:pull" | jq -r ".token // empty" || true)
+            status=$(curl -s -o /dev/null -w '%{http_code}' -I -H "Authorization: Bearer $token"               -H "Accept: application/vnd.oci.image.index.v1+json" "https://ghcr.io/v2/$repository/manifests/latest")
+            if [ "$status" != 200 ]; then
+              echo "::warning::ghcr.io/$repository isn't public (HTTP $status anonymously): make it public in its Package settings, or the autodeploy stops."
+            fi
+          done

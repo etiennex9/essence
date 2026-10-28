@@ -1,105 +1,99 @@
 #!/usr/bin/env bash
-# The geocoding image's commands. The image holds Photon; its index lives in /data, which `build` fills:
+# The geocoding image's commands. The image holds Photon; its index of Québec's places lives in /data, which it builds
+# itself:
 #
-#   serve   (the default) answers address searches and reverse lookups on port 2322 from /data/current.
-#   build   downloads Photon's dump of Canada, keeps Québec's places, imports them into /data/next, then swaps it in:
-#           /data/current becomes /data/previous, and /data/next becomes /data/current. A server already running keeps
-#           answering from the index it loaded until it's restarted.
-#   health  exits 0 when the server answers (the containers' healthcheck).
+#   run     (the default) the supervisor (supervisor.sh): builds the index when there's none, or when it was built by
+#           another Photon version, serves it on port 2322, refreshes it every REFRESH_DAYS days (30) when the dump
+#           changed, and reports what it's doing at GET :9090/status.
+#   health  exits 0 while the supervisor runs (the containers' healthcheck), whether it builds, serves or waits.
+#   refresh rebuilds the index now, while the server keeps answering from the current one.
 #
-# An index built by one Photon version may not load in another, so /data/current records the version that built it, and
-# serve refuses an index from another one: after bumping the image's Photon, run build again. Photon logs no requests:
-# what users type and where they are stay out of its log.
-set -euo pipefail
+# Photon logs no requests: what users type and where they are stay out of its log.
+set -uo pipefail
 
-data=/data
+SERVICE=geocoding
+ENTRYPOINT=$(readlink -f "$0")
+# shellcheck source=../Essence.Supervisor/supervisor.sh
+source /usr/local/lib/essence/supervisor.sh
+
 # Photon's dump of Canada (OpenStreetMap's places with their addresses, from Nominatim), from the mirror photon-docker
 # uses; updated about weekly, with an .md5 beside it.
 dump_url=${GEOCODING_DUMP_URL:-https://r2.koalasec.org/public/north-america/canada/photon-dump-canada-master-latest.jsonl.zst}
 jar=/opt/photon/photon.jar
-version_file=photon-version
-date_file=data-date
 
 # The JVM's heap: serving Québec's index takes well under 1 GB; the import, a little more.
 serve_heap=${GEOCODING_HEAP:-1g}
 build_heap=${GEOCODING_BUILD_HEAP:-2g}
 java_options=(--add-modules jdk.incubator.vector --enable-native-access=ALL-UNNAMED -Dlog4j2.disable.jmx=true)
 
-log() {
-    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) essence-geocoding: $*" >&2
+data_version() { echo "Photon $PHOTON_VERSION"; }
+
+# What the index keeps besides Photon's version: the languages and the filter below.
+data_rules() { echo "fr,en; state Québec or CA-QC"; }
+
+# The dump's checksum, which changes with the dump.
+source_id() {
+    curl -fsSL --max-time 30 "$dump_url.md5" | cut -d ' ' -f 1 | grep -E '^[0-9a-f]{32}$'
 }
 
-serve() {
-    local current=$data/current
-    if [ ! -d "$current/photon_data" ] || [ ! -f "$current/$version_file" ]; then
-        log "no address index in $current: build it first (docker run --rm -v <data folder>:/data <this image> build)."
-        exit 1
+# The dump and its checksum, then Québec's places alone into Photon's import: the dump's header lines, and each place
+# whose address is in Québec (its province's name, or its ISO code among the address's other names).
+build_next() {
+    local next=$DATA/next dump=$DATA/next/canada.jsonl.zst dated
+    stage downloading 0 40
+    curl -fsSL --retry 3 --max-time 60 -o "$dump.md5" "$dump_url.md5" || { echo "the checksum's download failed" >"$RUN/error"; return 1; }
+    download "$dump_url" "$dump" || return 1
+
+    stage verifying 40 43
+    # The mirror replacing the dump between the two downloads makes them disagree: the next try gets a matching pair.
+    if ! echo "$(cut -d ' ' -f 1 "$dump.md5")  $dump" | md5sum --check --status; then
+        echo "the download doesn't match its checksum" >"$RUN/error"
+        return 1
     fi
 
-    local built_by
-    built_by=$(<"$current/$version_file")
-    if [ "$built_by" != "$PHOTON_VERSION" ]; then
-        log "the address index in $current was built by Photon $built_by, and this image runs $PHOTON_VERSION: build it again."
-        exit 1
-    fi
-
-    log "serving the index of $(cat "$current/$date_file" 2>/dev/null || echo "an unknown date")'s places with Photon $PHOTON_VERSION."
-    exec java -Xmx"$serve_heap" "${java_options[@]}" -jar "$jar" serve -data-dir "$current" -listen-ip 0.0.0.0 -listen-port 2322 \
-        -query-timeout 2
-}
-
-# The dump and its checksum, then Québec's places alone into Photon's import: the dump's header lines, and each place whose
-# address is in Québec (its province's name, or its ISO code among the address's other names).
-build() {
-    local next=$data/next dump=$data/next/canada.jsonl.zst
-    rm -rf "$next"
-    mkdir -p "$next"
-
-    # The mirror replaces the dump about once a week: an update between the checksum and the file makes them disagree, and
-    # a second try gets the new pair.
-    local attempt
-    for attempt in 1 2; do
-        log "downloading $dump_url (try $attempt)."
-        curl -fsSL --retry 3 -o "$dump.md5" "$dump_url.md5"
-        curl -fsSL --retry 3 -o "$dump" "$dump_url"
-        if echo "$(cut -d ' ' -f 1 "$dump.md5")  $dump" | md5sum --check --status; then
-            break
-        fi
-
-        if [ "$attempt" = 2 ]; then
-            log "the download doesn't match its checksum: nothing changed."
-            exit 1
-        fi
-    done
-
-    local dated
-    dated=$(zstd -dc "$dump" | head -n 1 | grep -o '"data_timestamp":"[0-9-]*' | cut -d '"' -f 4 || true)
-    log "importing Québec's places from $(du -h "$dump" | cut -f 1) of Canada's, as of ${dated:-an unknown date}."
-    zstd -dc "$dump" \
+    dated=$(zstd -dc "$dump" 2>/dev/null | head -n 1 | grep -o '"data_timestamp":"[0-9-]*' | cut -d '"' -f 4)
+    stage importing 43 99
+    # pv reports how much of the dump has been read, which is how far the import is.
+    pv -n -s "$(stat -c %s "$dump")" "$dump" 2>"$RUN/build.pv" \
+        | zstd -dc \
         | LC_ALL=C grep -F -e '"type":"NominatimDumpFile"' -e '"type":"CountryInfo"' -e '"state":"Québec"' -e '"CA-QC"' \
-        | java -Xmx"$build_heap" "${java_options[@]}" -jar "$jar" import -import-file - -data-dir "$next" -languages fr,en
-    echo "$PHOTON_VERSION" >"$next/$version_file"
-    echo "${dated:-unknown}" >"$next/$date_file"
-    rm "$dump" "$dump.md5"
-
-    rm -rf "$data/previous"
-    if [ -d "$data/current" ]; then
-        mv "$data/current" "$data/previous"
+        | java -Xmx"$build_heap" "${java_options[@]}" -jar "$jar" import -import-file - -data-dir "$next" -languages fr,en \
+            2>&1 | tee -a "$RUN/build.log" >&2
+    local codes=("${PIPESTATUS[@]}")
+    if [ "${codes[3]}" -ne 0 ] || [ "${codes[1]}" -ne 0 ]; then
+        echo "Photon's import failed (exit code ${codes[3]})" >"$RUN/error"
+        return 1
     fi
-    mv "$next" "$data/current"
-    log "built $(du -sh "$data/current" | cut -f 1) of address index with Photon $PHOTON_VERSION; restart the server to use it."
+
+    cut -d ' ' -f 1 "$dump.md5" >"$next/source-id"
+    rm -f "$dump" "$dump.md5"
+    data_version >"$next/version"
+    data_rules >"$next/rules"
+    echo "${dated:-unknown}" >"$next/data-date"
+    date +%s >"$next/built-at"
+    touch "$next/complete"
 }
 
-health() {
-    curl -fsS -o /dev/null --max-time 5 "http://127.0.0.1:2322/status"
+stage_progress() {
+    [ "$1" = importing ] && tail -n 1 "$RUN/build.pv" 2>/dev/null | tr -cd '0-9'
 }
 
-case "${1:-serve}" in
-    serve) serve ;;
-    build) build ;;
+server_start() {
+    java -Xmx"$serve_heap" "${java_options[@]}" -jar "$jar" serve -data-dir "$DATA/current" -listen-ip 0.0.0.0 -listen-port 2322 \
+        -query-timeout 2 &
+}
+
+server_ready() {
+    curl -fsS -o /dev/null --max-time 3 "http://127.0.0.1:2322/status"
+}
+
+case "${1:-run}" in
+    run) supervise ;;
     health) health ;;
+    refresh) refresh ;;
+    _build) build_next ;;
     *)
-        log "unknown command \"$1\": serve, build or health."
+        log "unknown command \"$1\": run, health or refresh."
         exit 2
         ;;
 esac
