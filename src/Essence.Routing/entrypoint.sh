@@ -23,9 +23,9 @@ data_version() { echo "OSRM $(osrm-routed --version)"; }
 
 data_rules() { sha256sum "$profile" | cut -d ' ' -f 1; }
 
-# The extract's Last-Modified: Geofabrik replaces it once a day.
+# The extract's Last-Modified: Geofabrik replaces it once a day. quebec-latest redirects to the day's file, which has it.
 source_id() {
-    curl -fsSI --max-time 30 "$pbf_url" | tr -d '\r' | sed -n 's/^[Ll]ast-[Mm]odified: *//p' | grep .
+    curl -fsSIL --max-time 30 "$pbf_url" | tr -d '\r' | sed -n 's/^[Ll]ast-[Mm]odified: *//p' | tail -n 1 | grep .
 }
 
 # Geofabrik's extract and its checksum, cut down to what a car's routing reads (osmium: roads, ferries, movable bridges,
