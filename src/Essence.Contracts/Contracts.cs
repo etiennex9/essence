@@ -188,3 +188,14 @@ public sealed record TripStation(
 /// <param name="Detail">Where it is: "Montréal, QC H3A 4W5" for an address, the town for a street, the address for a named place.</param>
 /// <param name="Kind"><c>address</c>, <c>street</c>, <c>town</c> (or part of one), or <c>named</c> (a business, a park…).</param>
 public sealed record PlaceSuggestion(string Label, string Detail, double Latitude, double Longitude, string Kind);
+
+/// <summary>Whether trips and the address search are ready (<c>/services</c>), or how far their data is.</summary>
+public sealed record DataServicesStatus(ServiceReadiness Routing, ServiceReadiness Geocoding);
+
+/// <param name="State"><c>serving</c>, <c>building</c> (no data yet), <c>refreshing</c> (serving while building the next),
+/// <c>starting</c> (loading its data), <c>waiting</c> (to try a failed build again), or <c>unknown</c> when it doesn't say.</param>
+/// <param name="Ready">It answers; also true when it doesn't say (<c>unknown</c>), so nothing is promised.</param>
+/// <param name="Stage">The build's stage while there's one: <c>downloading</c>, <c>extracting</c>, <c>importing</c>…</param>
+/// <param name="Percent">How far the build is, 0 to 100.</param>
+/// <param name="DataDate">The date of the data served, "2026-10-27".</param>
+public sealed record ServiceReadiness(string State, bool Ready, string? Stage, int? Percent, string? DataDate);

@@ -9,6 +9,9 @@ public sealed class RoutingOptions
     public const string SectionName = "Routing";
 
     public Uri BaseUrl { get; set; } = new("http://routing:5000/");
+
+    /// <summary>The routing container's status server (its supervisor's GET /status).</summary>
+    public Uri StatusUrl { get; set; } = new("http://routing:9090/");
 }
 
 public static class OsrmRouting
@@ -64,19 +67,28 @@ public static class OsrmRouting
 }
 
 /// <summary>
-/// Whether the routing container answers. Registered as Degraded: the API answers without it (Best near you estimates
-/// distances, trips answer 503), so <c>/health</c> stays 200 and says so.
+/// Whether the routing container answers, or how far its data is. Registered as Degraded: the API answers without it
+/// (Best near you estimates distances, trips answer 503), so <c>/health</c> stays 200 and says so.
 /// </summary>
-public sealed class RoutingHealthCheck(OsrmClient osrm) : IHealthCheck
+public sealed class RoutingHealthCheck(OsrmClient osrm, DataServiceMonitor monitor) : IHealthCheck
 {
     private static readonly LatLon Montreal = new(45.5017, -73.5673);
 
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
+        var status = await monitor.GetAsync(DataService.Routing, cancellationToken);
+        if (status is { Serving: false })
+        {
+            return new HealthCheckResult(
+                context.Registration.FailureStatus, $"The routing data is being prepared ({DataServiceRegistration.Describe(status)}).",
+                data: DataServiceRegistration.HealthData(status));
+        }
+
         try
         {
             await osrm.NearestAsync(Montreal, cancellationToken);
-            return HealthCheckResult.Healthy("The routing server answers.");
+            return HealthCheckResult.Healthy(
+                "The routing server answers.", status is null ? null : DataServiceRegistration.HealthData(status));
         }
         catch (OsrmException ex)
         {

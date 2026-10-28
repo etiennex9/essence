@@ -36,6 +36,7 @@ public static class TripEndpoints
         EssenceDbContext db,
         StationSnapshot snapshot,
         OsrmClient osrm,
+        DataServiceMonitor services,
         ILoggerFactory loggers,
         [Description("Latitude of the start, in degrees.")] double fromLat,
         [Description("Longitude of the start, in degrees.")] double fromLon,
@@ -83,6 +84,12 @@ public static class TripEndpoints
         if (!QuebecArea.Contains(to))
         {
             return NoRoad("to", "Outside Québec");
+        }
+
+        // While the routing data is built or loaded, OSRM isn't asked (nor its circuit breaker tripped).
+        if (await services.NotServingAsync(DataService.Routing, cancellationToken) is { } preparing)
+        {
+            return RoutingUnavailable(preparing);
         }
 
         var logger = loggers.CreateLogger(RoutingLog.Category);
@@ -172,13 +179,16 @@ public static class TripEndpoints
             return ex.Failure switch
             {
                 OsrmFailure.NoRoute => NoRoad("to", "No route to this point"),
-                OsrmFailure.Unavailable => TypedResults.Problem(
-                    "The routing server doesn't answer; try again in a few minutes.", statusCode: StatusCodes.Status503ServiceUnavailable,
-                    title: "Routing is unavailable"),
+                OsrmFailure.Unavailable => RoutingUnavailable(await services.GetAsync(DataService.Routing, CancellationToken.None)),
                 _ => TypedResults.Problem("The routing server refused the request.", statusCode: StatusCodes.Status500InternalServerError),
             };
         }
     }
+
+    /// <summary>503, with the routing data's progress when it's being prepared.</summary>
+    private static ProblemHttpResult RoutingUnavailable(DataStatus? status) =>
+        DataServiceRegistration.Unavailable(
+            DataService.Routing, status, "Routing is unavailable", "The routing server doesn't answer; try again in a few minutes.");
 
     /// <summary>422: no road near the start or the destination, or none between them.</summary>
     /// <param name="point"><c>from</c> or <c>to</c>, in the problem's <c>point</c>.</param>

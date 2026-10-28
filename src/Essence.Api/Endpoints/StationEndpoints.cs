@@ -205,6 +205,7 @@ public static class StationEndpoints
         EssenceDbContext db,
         StationSnapshot snapshot,
         OsrmClient osrm,
+        DataServiceMonitor services,
         ILoggerFactory loggers,
         HttpContext http,
         [Description("Latitude of the driver, in degrees.")] double lat,
@@ -246,7 +247,9 @@ public static class StationEndpoints
 
         // By road when the routing server answers; road and estimated figures are never mixed in one ranking.
         var car = new Car((decimal)fillL, (decimal)per100Km);
-        var byRoad = await RankByRoadAsync(osrm, loggers, http, new LatLon(lat, lon), area, car, maxDetourMin, cancellationToken);
+        var byRoad = await services.NotServingAsync(DataService.Routing, cancellationToken) is null
+            ? await RankByRoadAsync(osrm, loggers, http, new LatLon(lat, lon), area, car, maxDetourMin, cancellationToken)
+            : Estimated(http);
         var ranking = byRoad
             ?? NearYou.Rank(area.Select(s => NearYou.Estimate(s.Station.Id, s.PriceCents, s.Km)).ToList(), car, maxDetourMin, byRoad: false);
         if (ranking is null)
@@ -268,6 +271,13 @@ public static class StationEndpoints
         return TypedResults.Ok(new BestNearby(
             ToRanked(ranking.Pick), ranking.Reference.Id, ranking.Reference.Id, ranking.Cheapest.Id,
             ranking.Listed.Select(ToRanked).ToList(), areaRadiusKm, ByRoad: byRoad is not null));
+    }
+
+    /// <summary>The routing data is being built or loaded: the estimate, not cached, as when the server is down.</summary>
+    private static NearbyRanking? Estimated(HttpContext http)
+    {
+        DataVersion.DontCache(http);
+        return null;
     }
 
     /// <summary>

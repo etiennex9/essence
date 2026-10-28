@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text.Json;
 using System.Text;
 using Essence.Contracts;
 using Essence.Ranking;
@@ -31,6 +32,9 @@ public sealed class PlaceEndpointsTests : IDisposable
     private readonly WebApplicationFactory<Program> _factory;
     private Func<HttpRequestMessage, HttpResponseMessage> _respond = _ => Features(Montreal);
 
+    /// <summary>What the routing and geocoding containers' status servers answer: by default nothing (an older image).</summary>
+    private Func<DataService, HttpResponseMessage> _status = _ => new HttpResponseMessage(HttpStatusCode.NotFound);
+
     public PlaceEndpointsTests()
     {
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -39,7 +43,14 @@ public sealed class PlaceEndpointsTests : IDisposable
             builder.UseSetting("ConnectionStrings:Essence", "Host=localhost;Database=unused");
             builder.UseSetting("RateLimiting:Search:PermitLimit", "5");
             builder.ConfigureTestServices(services =>
-                services.AddHttpClient<PhotonClient>().ConfigurePrimaryHttpMessageHandler(() => new StubHandler(this)));
+            {
+                services.AddHttpClient<PhotonClient>().ConfigurePrimaryHttpMessageHandler(() => new StubHandler(this));
+                foreach (var service in (DataService[])[DataService.Routing, DataService.Geocoding])
+                {
+                    services.AddHttpClient(DataServiceMonitor.ClientName(service))
+                        .ConfigurePrimaryHttpMessageHandler(() => new StatusHandler(this, service));
+                }
+            });
         });
     }
 
@@ -176,8 +187,7 @@ public sealed class PlaceEndpointsTests : IDisposable
     public async Task Photon_down_makes_the_health_check_degraded()
     {
         var registration = new HealthCheckRegistration("geocoding", _ => null!, HealthStatus.Degraded, null);
-        var photon = _factory.Services.CreateScope().ServiceProvider.GetRequiredService<PhotonClient>();
-        var check = new GeocodingHealthCheck(photon);
+        var check = ActivatorUtilities.CreateInstance<GeocodingHealthCheck>(_factory.Services.CreateScope().ServiceProvider);
 
         _respond = _ => new HttpResponseMessage(HttpStatusCode.OK)
         {
@@ -189,6 +199,86 @@ public sealed class PlaceEndpointsTests : IDisposable
 
         Assert.Equal(HealthStatus.Healthy, up.Status);
         Assert.Equal(HealthStatus.Degraded, down.Status);
+    }
+
+    [Fact]
+    public async Task While_the_index_is_built_searches_and_pins_say_how_far_it_is_without_asking_Photon()
+    {
+        _status = service => service == DataService.Geocoding ? Status("building", false, "importing", 62) : Status("serving", true);
+
+        var search = await Client.GetAsync("/places/search?q=gaucher", TestContext.Current.CancellationToken);
+        var reverse = await Client.GetAsync("/places/reverse?lat=45.5&lon=-73.6", TestContext.Current.CancellationToken);
+
+        foreach (var response in (HttpResponseMessage[])[search, reverse])
+        {
+            Assert.Equal(HttpStatusCode.ServiceUnavailable, response.StatusCode);
+            using var problem = JsonDocument.Parse(await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+            Assert.Equal("geocoding", problem.RootElement.GetProperty("service").GetString());
+            Assert.Equal("building", problem.RootElement.GetProperty("state").GetString());
+            Assert.Equal("importing", problem.RootElement.GetProperty("stage").GetString());
+            Assert.Equal(62, problem.RootElement.GetProperty("percent").GetInt32());
+        }
+
+        Assert.Empty(_requests);
+    }
+
+    [Fact]
+    public async Task A_pin_outside_Québec_is_still_refused_while_the_index_is_built()
+    {
+        _status = _ => Status("building", false, "downloading", 10);
+
+        var response = await Client.GetAsync("/places/reverse?lat=45.426&lon=-75.695", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Refreshing_while_serving_doesn_t_stop_the_search()
+    {
+        _status = _ => Status("refreshing", true, "downloading", 30);
+
+        var response = await Client.GetAsync("/places/search?q=gaucher", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Single(_requests);
+    }
+
+    [Fact]
+    public async Task A_stale_status_isn_t_believed()
+    {
+        _status = _ => Status("building", false, "importing", 62, heartbeat: DateTimeOffset.UtcNow.AddMinutes(-10));
+
+        var response = await Client.GetAsync("/places/search?q=gaucher", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Services_say_whether_trips_and_the_search_are_ready()
+    {
+        _status = service => service == DataService.Routing ? Status("building", false, "extracting", 45, dataDate: null) : new HttpResponseMessage(HttpStatusCode.NotFound);
+
+        var response = await Client.GetAsync("/services", TestContext.Current.CancellationToken);
+        var services = await response.Content.ReadFromJsonAsync<DataServicesStatus>(TestContext.Current.CancellationToken);
+
+        Assert.Equal(new ServiceReadiness("building", false, "extracting", 45, null), services!.Routing);
+        Assert.Equal(new ServiceReadiness("unknown", true, null, null, null), services.Geocoding);
+        Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+    }
+
+    [Fact]
+    public async Task The_health_check_says_how_far_the_index_is()
+    {
+        _status = _ => Status("building", false, "importing", 62);
+        var registration = new HealthCheckRegistration("geocoding", _ => null!, HealthStatus.Degraded, null);
+        var check = ActivatorUtilities.CreateInstance<GeocodingHealthCheck>(_factory.Services.CreateScope().ServiceProvider);
+
+        var result = await check.CheckHealthAsync(new HealthCheckContext { Registration = registration }, TestContext.Current.CancellationToken);
+
+        Assert.Equal(HealthStatus.Degraded, result.Status);
+        Assert.Contains("building: importing, 62 %", result.Description);
+        Assert.Equal(62, result.Data["percent"]);
+        Assert.Empty(_requests);
     }
 
     [Fact]
@@ -226,6 +316,23 @@ public sealed class PlaceEndpointsTests : IDisposable
     }
 
     public void Dispose() => _factory.Dispose();
+
+    private static HttpResponseMessage Status(
+        string state, bool serving, string? stage = null, int? percent = null, string? dataDate = "2026-10-27", DateTimeOffset? heartbeat = null)
+    {
+        var json = JsonSerializer.Serialize(new Dictionary<string, object?>
+        {
+            ["service"] = "test", ["state"] = state, ["serving"] = serving, ["stage"] = stage, ["percent"] = percent,
+            ["dataDate"] = dataDate, ["heartbeat"] = (heartbeat ?? DateTimeOffset.UtcNow).ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture),
+        });
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
+    }
+
+    private sealed class StatusHandler(PlaceEndpointsTests test, DataService service) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(test._status(service));
+    }
 
     private static HttpResponseMessage Features(params string[] features) =>
         new(HttpStatusCode.OK)

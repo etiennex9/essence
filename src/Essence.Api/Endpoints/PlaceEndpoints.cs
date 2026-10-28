@@ -42,6 +42,7 @@ public static class PlaceEndpoints
 
     private static async Task<Results<Ok<List<PlaceSuggestion>>, ValidationProblem, ProblemHttpResult>> Search(
         PhotonClient photon,
+        DataServiceMonitor services,
         ILoggerFactory loggers,
         CancellationToken cancellationToken,
         [Description("What was typed: 3 to 100 characters.")] string? q = null,
@@ -64,6 +65,11 @@ public static class PlaceEndpoints
             return errors.ToProblem();
         }
 
+        if (await services.NotServingAsync(DataService.Geocoding, cancellationToken) is { } preparing)
+        {
+            return GeocodingUnavailable(preparing);
+        }
+
         try
         {
             var near = lat is { } latitude && lon is { } longitude ? new LatLon(latitude, longitude) : (LatLon?)null;
@@ -72,12 +78,13 @@ public static class PlaceEndpoints
         }
         catch (PhotonException ex)
         {
-            return Failed(loggers, ex);
+            return await FailedAsync(loggers, services, ex);
         }
     }
 
     private static async Task<Results<Ok<PlaceSuggestion>, ValidationProblem, ProblemHttpResult>> Reverse(
         PhotonClient photon,
+        DataServiceMonitor services,
         ILoggerFactory loggers,
         [Description("Latitude of the point, in degrees.")] double lat,
         [Description("Longitude of the point, in degrees.")] double lon,
@@ -99,6 +106,11 @@ public static class PlaceEndpoints
             return OutsideQuebec();
         }
 
+        if (await services.NotServingAsync(DataService.Geocoding, cancellationToken) is { } preparing)
+        {
+            return GeocodingUnavailable(preparing);
+        }
+
         try
         {
             var places = await photon.ReverseAsync(point, lang ?? "fr", Places.ReverseRadiusKm, ReverseLimit, cancellationToken);
@@ -111,7 +123,7 @@ public static class PlaceEndpoints
         }
         catch (PhotonException ex)
         {
-            return Failed(loggers, ex);
+            return await FailedAsync(loggers, services, ex);
         }
     }
 
@@ -122,13 +134,16 @@ public static class PlaceEndpoints
     private static PlaceSuggestion ToSuggestion(PhotonPlace place, PlaceLabel label) =>
         new(label.Label, label.Detail, Math.Round(place.Location.Latitude, 6), Math.Round(place.Location.Longitude, 6), label.Kind);
 
-    private static ProblemHttpResult Failed(ILoggerFactory loggers, PhotonException ex)
+    private static async Task<ProblemHttpResult> FailedAsync(ILoggerFactory loggers, DataServiceMonitor services, PhotonException ex)
     {
         loggers.CreateLogger(GeocodingLog.Category).LogPhotonFailure(ex);
         return ex.Failure == PhotonFailure.Unavailable
-            ? TypedResults.Problem(
-                "The address search doesn't answer; try again in a few minutes.", statusCode: StatusCodes.Status503ServiceUnavailable,
-                title: "Address search is unavailable")
+            ? GeocodingUnavailable(await services.GetAsync(DataService.Geocoding, CancellationToken.None))
             : TypedResults.Problem("The address search refused the request.", statusCode: StatusCodes.Status500InternalServerError);
     }
+
+    /// <summary>503, with the address index's progress when it's being prepared.</summary>
+    private static ProblemHttpResult GeocodingUnavailable(DataStatus? status) =>
+        DataServiceRegistration.Unavailable(
+            DataService.Geocoding, status, "Address search is unavailable", "The address search doesn't answer; try again in a few minutes.");
 }

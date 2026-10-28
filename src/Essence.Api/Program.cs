@@ -21,6 +21,9 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<StationSnapshot>();
 builder.Services.AddOsrmRouting(builder.Configuration);
 builder.Services.AddPhotonGeocoding(builder.Configuration);
+builder.Services.AddDataServiceMonitor(
+    (builder.Configuration.GetSection(RoutingOptions.SectionName).Get<RoutingOptions>() ?? new RoutingOptions()).StatusUrl,
+    (builder.Configuration.GetSection(GeocodingOptions.SectionName).Get<GeocodingOptions>() ?? new GeocodingOptions()).StatusUrl);
 builder.Services.AddProblemDetails();
 builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks()
@@ -73,6 +76,7 @@ app.MapHealthChecks("/alive", new HealthCheckOptions { Predicate = _ => false })
 app.MapStationEndpoints();
 app.MapTripEndpoints();
 app.MapPlaceEndpoints();
+app.MapDataServiceEndpoints();
 app.MapPriceEndpoints();
 app.MapImportEndpoints();
 

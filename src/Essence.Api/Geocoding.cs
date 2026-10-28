@@ -9,6 +9,9 @@ public sealed class GeocodingOptions
     public const string SectionName = "Geocoding";
 
     public Uri BaseUrl { get; set; } = new("http://geocoding:2322/");
+
+    /// <summary>The geocoding container's status server (its supervisor's GET /status).</summary>
+    public Uri StatusUrl { get; set; } = new("http://geocoding:9090/");
 }
 
 public static class PhotonGeocoding
@@ -46,17 +49,27 @@ public static class PhotonGeocoding
 }
 
 /// <summary>
-/// Whether the geocoding container answers. Registered as Degraded: the API answers without it (no suggestions, no
-/// addresses for pins; trips still go to pins and saved places), so <c>/health</c> stays 200 and says so.
+/// Whether the geocoding container answers, or how far its index is. Registered as Degraded: the API answers without it
+/// (no suggestions, no addresses for pins; trips still go to pins and saved places), so <c>/health</c> stays 200 and
+/// says so.
 /// </summary>
-public sealed class GeocodingHealthCheck(PhotonClient photon) : IHealthCheck
+public sealed class GeocodingHealthCheck(PhotonClient photon, DataServiceMonitor monitor) : IHealthCheck
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
+        var status = await monitor.GetAsync(DataService.Geocoding, cancellationToken);
+        if (status is { Serving: false })
+        {
+            return new HealthCheckResult(
+                context.Registration.FailureStatus, $"The address index is being prepared ({DataServiceRegistration.Describe(status)}).",
+                data: DataServiceRegistration.HealthData(status));
+        }
+
         try
         {
             await photon.StatusAsync(cancellationToken);
-            return HealthCheckResult.Healthy("The address search answers.");
+            return HealthCheckResult.Healthy(
+                "The address search answers.", status is null ? null : DataServiceRegistration.HealthData(status));
         }
         catch (PhotonException ex)
         {
