@@ -35,6 +35,9 @@ public sealed class PlaceEndpointsTests : IDisposable
     /// <summary>What the routing and geocoding containers' status servers answer: by default nothing (an older image).</summary>
     private Func<DataService, HttpResponseMessage> _status = _ => new HttpResponseMessage(HttpStatusCode.NotFound);
 
+    /// <summary>How many times the geocoding container's status was asked.</summary>
+    private int _geocodingStatusRequests;
+
     public PlaceEndpointsTests()
     {
         _factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
@@ -261,9 +264,60 @@ public sealed class PlaceEndpointsTests : IDisposable
         var response = await Client.GetAsync("/services", TestContext.Current.CancellationToken);
         var services = await response.Content.ReadFromJsonAsync<DataServicesStatus>(TestContext.Current.CancellationToken);
 
-        Assert.Equal(new ServiceReadiness("building", false, "extracting", 45, null), services!.Routing);
-        Assert.Equal(new ServiceReadiness("unknown", true, null, null, null), services.Geocoding);
+        Assert.Equal(new ServiceReadiness("building", false, "extracting", 45, null, null, null), services!.Routing);
+        Assert.Equal(new ServiceReadiness("unknown", true, null, null, null, null, null), services.Geocoding);
         Assert.Equal("no-store", response.Headers.CacheControl?.ToString());
+    }
+
+    [Fact]
+    public async Task A_build_that_failed_says_so_and_when_it_tries_again_not_that_it_s_ready_soon()
+    {
+        var next = new DateTimeOffset(2026, 10, 28, 18, 5, 0, TimeSpan.Zero);
+        _status = _ => Status("waiting", false, lastError: "the download of canada.jsonl.zst failed", nextAttemptAt: next);
+
+        var search = await Client.GetAsync("/places/search?q=gaucher", TestContext.Current.CancellationToken);
+        var services = await Client.GetFromJsonAsync<DataServicesStatus>("/services", TestContext.Current.CancellationToken);
+
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, search.StatusCode);
+        using var problem = JsonDocument.Parse(await search.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
+        Assert.Equal("waiting", problem.RootElement.GetProperty("state").GetString());
+        Assert.Equal("the download of canada.jsonl.zst failed", problem.RootElement.GetProperty("lastError").GetString());
+        Assert.Equal(next, problem.RootElement.GetProperty("nextAttemptAt").GetDateTimeOffset());
+        Assert.Equal(
+            "It failed (the download of canada.jsonl.zst failed); it tries again at 2026-10-28 18:05 UTC.",
+            problem.RootElement.GetProperty("detail").GetString());
+        Assert.Equal(new ServiceReadiness("waiting", false, null, null, "2026-10-27", "the download of canada.jsonl.zst failed", next), services!.Geocoding);
+    }
+
+    [Fact]
+    public async Task Requests_read_the_status_the_monitor_polls_instead_of_asking_it_each_time()
+    {
+        _status = _ => Status("serving", true);
+        var client = Client;
+
+        for (var i = 0; i < 5; i++)
+        {
+            await client.GetAsync("/places/search?q=gaucher", TestContext.Current.CancellationToken);
+        }
+
+        // The first poll at start; a second if the test ran past the 5 seconds between polls.
+        Assert.InRange(_geocodingStatusRequests, 1, 2);
+    }
+
+    [Fact]
+    public async Task The_services_status_has_a_rate_limit_of_its_own()
+    {
+        var client = Client;
+        var statuses = new List<HttpStatusCode>();
+        for (var i = 0; i < 61; i++)
+        {
+            statuses.Add((await client.GetAsync("/services", TestContext.Current.CancellationToken)).StatusCode);
+        }
+
+        var search = await client.GetAsync("/places/search?q=gaucher", TestContext.Current.CancellationToken);
+
+        Assert.Equal([.. Enumerable.Repeat(HttpStatusCode.OK, 60), HttpStatusCode.TooManyRequests], statuses);
+        Assert.Equal(HttpStatusCode.OK, search.StatusCode);
     }
 
     [Fact]
@@ -318,20 +372,30 @@ public sealed class PlaceEndpointsTests : IDisposable
     public void Dispose() => _factory.Dispose();
 
     private static HttpResponseMessage Status(
-        string state, bool serving, string? stage = null, int? percent = null, string? dataDate = "2026-10-27", DateTimeOffset? heartbeat = null)
+        string state, bool serving, string? stage = null, int? percent = null, string? dataDate = "2026-10-27", DateTimeOffset? heartbeat = null,
+        string? lastError = null, DateTimeOffset? nextAttemptAt = null)
     {
+        static string? Iso(DateTimeOffset? time) => time?.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture);
         var json = JsonSerializer.Serialize(new Dictionary<string, object?>
         {
             ["service"] = "test", ["state"] = state, ["serving"] = serving, ["stage"] = stage, ["percent"] = percent,
-            ["dataDate"] = dataDate, ["heartbeat"] = (heartbeat ?? DateTimeOffset.UtcNow).ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture),
+            ["dataDate"] = dataDate, ["lastError"] = lastError, ["nextAttemptAt"] = Iso(nextAttemptAt),
+            ["heartbeat"] = Iso(heartbeat ?? DateTimeOffset.UtcNow),
         });
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(json, Encoding.UTF8, "application/json") };
     }
 
     private sealed class StatusHandler(PlaceEndpointsTests test, DataService service) : HttpMessageHandler
     {
-        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(test._status(service));
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (service == DataService.Geocoding)
+            {
+                Interlocked.Increment(ref test._geocodingStatusRequests);
+            }
+
+            return Task.FromResult(test._status(service));
+        }
     }
 
     private static HttpResponseMessage Features(params string[] features) =>

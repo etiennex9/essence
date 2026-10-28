@@ -31,6 +31,12 @@ public static class RateLimiting
     /// <summary>The address search and reverse lookups (<c>/places/</c>), counted apart from the rest.</summary>
     public const string SearchPolicyName = "search-per-ip";
 
+    /// <summary>
+    /// <c>/services</c>, counted apart too, so that a page asking it can't use up the rest: the map asks every 10 seconds
+    /// while trips or the search are being prepared, and after a 503. 60 a minute.
+    /// </summary>
+    public const string ServicesPolicyName = "services-per-ip";
+
     public static IServiceCollection AddPerIpRateLimiting(this IServiceCollection services, IConfiguration configuration)
     {
         var options = configuration.GetSection("RateLimiting").Get<RateLimitingOptions>() ?? new RateLimitingOptions();
@@ -50,6 +56,7 @@ public static class RateLimiting
             // Behind Essence.Web's nginx, RemoteIpAddress is the client's: Program.cs applies the forwarded headers.
             limiter.AddPolicy(PolicyName, http => PerIp(http, options.PermitLimit, options.WindowSeconds));
             limiter.AddPolicy(SearchPolicyName, http => PerIp(http, options.Search.PermitLimit, options.Search.WindowSeconds));
+            limiter.AddPolicy(ServicesPolicyName, http => PerIp(http, 60, 60));
         });
     }
 

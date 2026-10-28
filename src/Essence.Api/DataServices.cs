@@ -13,37 +13,46 @@ public enum DataService
 }
 
 /// <summary>
-/// What the routing and geocoding containers say they're doing (their supervisors' GET :9090/status), each asked at most
-/// every 5 seconds. A service that says it isn't serving (its data is being built, or loaded) isn't called: Best near
-/// you estimates, trips and the address search answer 503 with its progress, and the routing client's circuit breaker
-/// isn't tripped by a build. A status that can't be had (the container is down, or an older image) or is stale leaves
-/// things as before: the service is called, and its failure counts.
+/// What the routing and geocoding containers say they're doing (their supervisors' GET :9090/status), asked every 5
+/// seconds in the background, so that requests only read it. A service that says it isn't serving (its data is being
+/// built, or loaded) isn't called: Best near you estimates, trips and the address search answer 503 with its progress,
+/// and the routing client's circuit breaker isn't tripped by a build. A status that can't be had (the container is down,
+/// or an older image) or is stale leaves things as before: the service is called, and its failure counts.
 /// </summary>
-public sealed class DataServiceMonitor(IHttpClientFactory clients, TimeProvider time)
+public sealed class DataServiceMonitor(IHttpClientFactory clients, TimeProvider time) : BackgroundService
 {
-    private static readonly TimeSpan CacheFor = TimeSpan.FromSeconds(5);
+    public static readonly TimeSpan PollEvery = TimeSpan.FromSeconds(5);
 
-    private readonly ConcurrentDictionary<DataService, (DateTimeOffset At, DataStatus? Status)> _cache = new();
+    /// <summary>Older than this, the status is asked on the request: before the first poll, or when the polls stalled.</summary>
+    private static readonly TimeSpan MaxAge = TimeSpan.FromSeconds(15);
+
+    private readonly ConcurrentDictionary<DataService, (DateTimeOffset At, DataStatus? Status)> _latest = new();
+    private readonly Dictionary<DataService, Task<DataStatus?>> _asking = [];
+    private readonly Lock _lock = new();
 
     public static string ClientName(DataService service) => $"{service.ToString().ToLowerInvariant()}-status";
 
-    /// <summary>The service's status, at most 5 seconds old; null when it can't be had or is stale.</summary>
-    public async Task<DataStatus?> GetAsync(DataService service, CancellationToken cancellationToken)
+    /// <summary>The service's status, as last asked; null when it can't be had or is stale.</summary>
+    public async Task<DataStatus?> GetAsync(DataService service, CancellationToken cancellationToken) =>
+        _latest.TryGetValue(service, out var latest) && time.GetUtcNow() - latest.At < MaxAge
+            ? Fresh(latest.Status)
+            : await RefreshAsync(service).WaitAsync(cancellationToken);
+
+    /// <summary>
+    /// Asks the service now, as after a call it refused: it may have just stopped serving (a swap of its data). One
+    /// request at a time per service, which whoever asks meanwhile shares.
+    /// </summary>
+    public Task<DataStatus?> RefreshAsync(DataService service)
     {
-        var now = time.GetUtcNow();
-        if (_cache.TryGetValue(service, out var cached) && now - cached.At < CacheFor)
+        lock (_lock)
         {
-            return cached.Status;
-        }
+            if (!_asking.TryGetValue(service, out var asking) || asking.IsCompleted)
+            {
+                _asking[service] = asking = AskAsync(service);
+            }
 
-        var status = await new DataStatusClient(clients.CreateClient(ClientName(service))).GetAsync(cancellationToken);
-        if (status is not null && !status.IsFresh(now))
-        {
-            status = null;
+            return asking;
         }
-
-        _cache[service] = (now, status);
-        return status;
     }
 
     /// <summary>The service's status when it says it isn't serving (being built, loading, or waiting to try again).</summary>
@@ -53,13 +62,38 @@ public sealed class DataServiceMonitor(IHttpClientFactory clients, TimeProvider 
     /// <summary>For the UI: whether trips and the address search are ready, or how far their data is.</summary>
     public static ServiceReadiness Readiness(DataStatus? status) =>
         status is null
-            ? new ServiceReadiness("unknown", true, null, null, null)
-            : new ServiceReadiness(status.State, status.Serving, status.Stage, status.Percent, status.DataDate);
+            ? new ServiceReadiness("unknown", true, null, null, null, null, null)
+            : new ServiceReadiness(
+                status.State, status.Serving, status.Stage, status.Percent, status.DataDate, status.LastError, status.NextAttemptAt);
+
+    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
+    {
+        try
+        {
+            while (!stoppingToken.IsCancellationRequested)
+            {
+                await Task.WhenAll(RefreshAsync(DataService.Routing), RefreshAsync(DataService.Geocoding));
+                await Task.Delay(PollEvery, time, stoppingToken);
+            }
+        }
+        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+        {
+        }
+    }
+
+    private async Task<DataStatus?> AskAsync(DataService service)
+    {
+        var status = await new DataStatusClient(clients.CreateClient(ClientName(service))).GetAsync(CancellationToken.None);
+        _latest[service] = (time.GetUtcNow(), status);
+        return Fresh(status);
+    }
+
+    private DataStatus? Fresh(DataStatus? status) => status is not null && status.IsFresh(time.GetUtcNow()) ? status : null;
 }
 
 public static class DataServiceRegistration
 {
-    /// <summary>Clients for the two status servers: an answer within a second, or none.</summary>
+    /// <summary>Clients for the two status servers (an answer within a second, or none), and the monitor that asks them.</summary>
     public static IServiceCollection AddDataServiceMonitor(this IServiceCollection services, Uri routingStatusUrl, Uri geocodingStatusUrl)
     {
         foreach (var (service, url) in new[] { (DataService.Routing, routingStatusUrl), (DataService.Geocoding, geocodingStatusUrl) })
@@ -77,12 +111,13 @@ public static class DataServiceRegistration
         }
 
         services.AddSingleton<DataServiceMonitor>();
+        services.AddHostedService(provider => provider.GetRequiredService<DataServiceMonitor>());
         return services;
     }
 
     /// <summary>
     /// 503 for a service that's down or whose data is being prepared, with its <c>service</c>, <c>state</c>,
-    /// <c>stage</c> and <c>percent</c> when its status says them.
+    /// <c>stage</c>, <c>percent</c>, <c>lastError</c> and <c>nextAttemptAt</c> when its status says them.
     /// </summary>
     public static ProblemHttpResult Unavailable(DataService service, DataStatus? status, string title, string detail)
     {
@@ -92,13 +127,19 @@ public static class DataServiceRegistration
             extensions["state"] = status.State;
             extensions["stage"] = status.Stage;
             extensions["percent"] = status.Percent;
-            detail = status.Serving
-                ? detail
-                : $"Its data is being prepared ({Describe(status)}); it's ready in a few minutes.";
+            extensions["lastError"] = status.LastError;
+            extensions["nextAttemptAt"] = status.NextAttemptAt;
+            detail = status.Serving ? detail : NotServing(status);
         }
 
         return TypedResults.Problem(detail, statusCode: StatusCodes.Status503ServiceUnavailable, title: title, extensions: extensions);
     }
+
+    /// <summary>Why a service that isn't serving isn't: its data is being prepared, or that failed and is tried again later.</summary>
+    public static string NotServing(DataStatus status) =>
+        status is { State: "waiting", NextAttemptAt: { } next }
+            ? $"{(status.LastError is { } error ? $"It failed ({error}); it" : "It")} tries again at {next.UtcDateTime:yyyy-MM-dd HH:mm} UTC."
+            : $"Its data is being prepared ({Describe(status)}); it's ready in a few minutes.";
 
     /// <summary>"building: downloading, 45 %", for logs, problems and the health check.</summary>
     public static string Describe(DataStatus status) =>
@@ -130,6 +171,11 @@ public static class DataServiceRegistration
             data["lastError"] = error;
         }
 
+        if (status.NextAttemptAt is { } next)
+        {
+            data["nextAttemptAt"] = next;
+        }
+
         return data;
     }
 
@@ -140,9 +186,9 @@ public static class DataServiceRegistration
             .WithSummary("Whether trips and the address search are ready")
             .WithDescription(
                 "For each of routing (road distances and trips) and geocoding (the address search): its state (`serving`, "
-                + "`building`, `refreshing`, `starting`, `waiting`, or `unknown` when it doesn't say), whether it's ready, and while "
-                + "its data is built, the stage and how far it is in percent, as the routing and geocoding containers report it.")
-            .RequireRateLimiting(RateLimiting.PolicyName);
+                + "`building`, `refreshing`, `starting`, `waiting`, or `unknown` when it doesn't say), whether it's ready, while "
+                + "its data is built the stage and how far it is in percent, and while it waits to try again what failed and when.")
+            .RequireRateLimiting(RateLimiting.ServicesPolicyName);
         return app;
     }
 
@@ -150,8 +196,8 @@ public static class DataServiceRegistration
         DataServiceMonitor monitor, HttpContext http, CancellationToken cancellationToken)
     {
         http.Response.Headers.CacheControl = "no-store";
-        var routing = await monitor.GetAsync(DataService.Routing, cancellationToken);
-        var geocoding = await monitor.GetAsync(DataService.Geocoding, cancellationToken);
-        return TypedResults.Ok(new DataServicesStatus(DataServiceMonitor.Readiness(routing), DataServiceMonitor.Readiness(geocoding)));
+        var routing = monitor.GetAsync(DataService.Routing, cancellationToken);
+        var geocoding = monitor.GetAsync(DataService.Geocoding, cancellationToken);
+        return TypedResults.Ok(new DataServicesStatus(DataServiceMonitor.Readiness(await routing), DataServiceMonitor.Readiness(await geocoding)));
     }
 }

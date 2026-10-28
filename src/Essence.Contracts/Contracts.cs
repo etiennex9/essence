@@ -193,9 +193,13 @@ public sealed record PlaceSuggestion(string Label, string Detail, double Latitud
 public sealed record DataServicesStatus(ServiceReadiness Routing, ServiceReadiness Geocoding);
 
 /// <param name="State"><c>serving</c>, <c>building</c> (no data yet), <c>refreshing</c> (serving while building the next),
-/// <c>starting</c> (loading its data), <c>waiting</c> (to try a failed build again), or <c>unknown</c> when it doesn't say.</param>
+/// <c>starting</c> (loading its data), <c>waiting</c> (to try a failed build again, or to start its server again after it
+/// stopped), or <c>unknown</c> when it doesn't say.</param>
 /// <param name="Ready">It answers; also true when it doesn't say (<c>unknown</c>), so nothing is promised.</param>
 /// <param name="Stage">The build's stage while there's one: <c>downloading</c>, <c>extracting</c>, <c>importing</c>…</param>
 /// <param name="Percent">How far the build is, 0 to 100.</param>
 /// <param name="DataDate">The date of the data served, "2026-10-27".</param>
-public sealed record ServiceReadiness(string State, bool Ready, string? Stage, int? Percent, string? DataDate);
+/// <param name="LastError">What failed last (in English, for the logs and the curious), while it's still the case.</param>
+/// <param name="NextAttemptAt">While <c>waiting</c>: when it tries again.</param>
+public sealed record ServiceReadiness(
+    string State, bool Ready, string? Stage, int? Percent, string? DataDate, string? LastError, DateTimeOffset? NextAttemptAt);

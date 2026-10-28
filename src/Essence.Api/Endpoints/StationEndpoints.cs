@@ -248,7 +248,7 @@ public static class StationEndpoints
         // By road when the routing server answers; road and estimated figures are never mixed in one ranking.
         var car = new Car((decimal)fillL, (decimal)per100Km);
         var byRoad = await services.NotServingAsync(DataService.Routing, cancellationToken) is null
-            ? await RankByRoadAsync(osrm, loggers, http, new LatLon(lat, lon), area, car, maxDetourMin, cancellationToken)
+            ? await RankByRoadAsync(osrm, services, loggers, http, new LatLon(lat, lon), area, car, maxDetourMin, cancellationToken)
             : Estimated(http);
         var ranking = byRoad
             ?? NearYou.Rank(area.Select(s => NearYou.Estimate(s.Station.Id, s.PriceCents, s.Km)).ToList(), car, maxDetourMin, byRoad: false);
@@ -284,10 +284,12 @@ public static class StationEndpoints
     /// Best near you by road: the stations snapped to their own roads, then one table from the driver to them and one
     /// back, the driver on any road (an autoroute included). Null, for the estimate instead, when the routing server fails,
     /// the driver is more than <see cref="NearYou.MaxDriverSnapMeters"/> from a road, or no station has a road there and back.
-    /// An estimate the server's failure forced isn't cached: the same request asks again.
+    /// An estimate the server's failure forced isn't cached: the same request asks again. A server that doesn't answer may
+    /// have just stopped for new data: its status is asked again at once, so the next request doesn't call it meanwhile.
     /// </summary>
     private static async Task<NearbyRanking?> RankByRoadAsync(
         OsrmClient osrm,
+        DataServiceMonitor services,
         ILoggerFactory loggers,
         HttpContext http,
         LatLon driver,
@@ -326,6 +328,11 @@ public static class StationEndpoints
         catch (OsrmException ex)
         {
             loggers.CreateLogger(RoutingLog.Category).LogOsrmFailure(ex);
+            if (ex.Failure == OsrmFailure.Unavailable)
+            {
+                _ = services.RefreshAsync(DataService.Routing);
+            }
+
             DataVersion.DontCache(http);
             return null;
         }

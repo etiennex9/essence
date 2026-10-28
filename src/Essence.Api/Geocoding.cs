@@ -61,7 +61,7 @@ public sealed class GeocodingHealthCheck(PhotonClient photon, DataServiceMonitor
         if (status is { Serving: false })
         {
             return new HealthCheckResult(
-                context.Registration.FailureStatus, $"The address index is being prepared ({DataServiceRegistration.Describe(status)}).",
+                context.Registration.FailureStatus, $"The address search doesn't serve yet. {DataServiceRegistration.NotServing(status)}",
                 data: DataServiceRegistration.HealthData(status));
         }
 

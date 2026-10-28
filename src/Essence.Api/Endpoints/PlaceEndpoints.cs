@@ -138,7 +138,7 @@ public static class PlaceEndpoints
     {
         loggers.CreateLogger(GeocodingLog.Category).LogPhotonFailure(ex);
         return ex.Failure == PhotonFailure.Unavailable
-            ? GeocodingUnavailable(await services.GetAsync(DataService.Geocoding, CancellationToken.None))
+            ? GeocodingUnavailable(await services.RefreshAsync(DataService.Geocoding))
             : TypedResults.Problem("The address search refused the request.", statusCode: StatusCodes.Status500InternalServerError);
     }
 

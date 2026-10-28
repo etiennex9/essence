@@ -80,7 +80,7 @@ public sealed class RoutingHealthCheck(OsrmClient osrm, DataServiceMonitor monit
         if (status is { Serving: false })
         {
             return new HealthCheckResult(
-                context.Registration.FailureStatus, $"The routing data is being prepared ({DataServiceRegistration.Describe(status)}).",
+                context.Registration.FailureStatus, $"The routing server doesn't serve yet. {DataServiceRegistration.NotServing(status)}",
                 data: DataServiceRegistration.HealthData(status));
         }
 
