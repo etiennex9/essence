@@ -34,7 +34,7 @@ source_id() {
 build_next() {
     local next=$DATA/next pbf=$DATA/next/quebec-latest.osm.pbf id
     stage downloading 0 50
-    id=$(source_id) || { echo "Geofabrik doesn't answer" >"$RUN/error"; return 1; }
+    id=$(source_id) || { echo "the extract's server doesn't answer" >"$RUN/error"; return 1; }
     curl -fsSL --retry 3 --max-time 60 -o "$pbf.md5" "$pbf_url.md5" || { echo "the checksum's download failed" >"$RUN/error"; return 1; }
     download "$pbf_url" "$pbf" || return 1
 
@@ -92,7 +92,7 @@ server_start() {
 }
 
 server_ready() {
-    curl -fsS -o /dev/null --max-time 3 "http://127.0.0.1:5000/nearest/v1/driving/-73.5673,45.5017"
+    curl -fs -o /dev/null --max-time 3 "http://127.0.0.1:5000/nearest/v1/driving/-73.5673,45.5017"
 }
 
 case "${1:-run}" in

@@ -100,7 +100,7 @@ server_start() {
 }
 
 server_ready() {
-    curl -fsS -o /dev/null --max-time 3 "http://127.0.0.1:2322/status"
+    curl -fs -o /dev/null --max-time 3 "http://127.0.0.1:2322/status"
 }
 
 case "${1:-run}" in
