@@ -575,10 +575,11 @@
     /// </summary>
     private bool TripsUnavailable => Services.RoutingPreparing || Trips.Unavailable || Best.Result is { ByRoad: false, Pick: not null };
 
-    /// <summary>"Trips will be ready soon: preparing Québec's road map (45 %)", or that they aren't available.</summary>
-    private string TripsUnavailableText => Services.Routing is { Ready: false } routing
-        ? routing.Percent is { } percent ? L["TripsPreparing", percent] : L["TripsPreparingSoon"]
-        : L["TripsUnavailableShort"];
+    /// <summary>
+    /// "Trips will be ready soon: preparing Québec's road map (45 %)", that preparing it failed and is tried again at a
+    /// time, or that they aren't available.
+    /// </summary>
+    private string TripsUnavailableText => ServicesStatus.Note(Services.Routing, L, "Trips") ?? L["TripsUnavailableShort"];
 
     private string TripError => Trips.Error switch
     {
@@ -589,9 +590,6 @@
         _ => L["TripFailed"],
     };
 
-    /// <summary>While the pane is open, the routing data's progress is followed.</summary>
-    private IDisposable? _watching;
-
     protected override async Task OnInitializedAsync()
     {
         Best.Changed += OnChanged;
@@ -599,7 +597,6 @@
         Trips.Changed += OnChanged;
         Places.Changed += OnChanged;
         Services.Changed += OnChanged;
-        _watching = Services.Watch();
         await Cars.LoadAsync();
         await Places.LoadAsync();
     }
@@ -805,6 +802,5 @@
         Trips.Changed -= OnChanged;
         Places.Changed -= OnChanged;
         Services.Changed -= OnChanged;
-        _watching?.Dispose();
     }
 }

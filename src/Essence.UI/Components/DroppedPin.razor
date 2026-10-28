@@ -30,8 +30,7 @@
         @if (TripsUnavailable)
         {
             <p class="note" role="status">
-                @(Services.Routing is { Ready: false, Percent: { } percent } ? L["TripsPreparing", percent]
-                    : Services.RoutingPreparing ? L["TripsPreparingSoon"] : L["TripsUnavailableShort"])
+                @(ServicesStatus.Note(Services.Routing, L, "Trips") ?? L["TripsUnavailableShort"])
             </p>
         }
         else
@@ -89,8 +88,6 @@
     private bool _focusName;
     private bool _focusCard;
     private string _name = "";
-
-    private IDisposable? _watching;
 
     /// <summary>What the address search says of the pin; null while it's asked.</summary>
     private PlaceLookup? _lookup;
@@ -150,7 +147,6 @@
     protected override void OnInitialized()
     {
         Services.Changed += OnServicesChanged;
-        _watching = Services.Watch();
     }
 
     private void OnServicesChanged() => InvokeAsync(StateHasChanged);
@@ -242,6 +238,5 @@
     {
         _lookupCts?.Cancel();
         Services.Changed -= OnServicesChanged;
-        _watching?.Dispose();
     }
 }

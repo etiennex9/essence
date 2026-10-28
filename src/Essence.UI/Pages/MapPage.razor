@@ -200,6 +200,12 @@
     private (string Key, DateTimeOffset At)? _lastFetch;
     private CancellationTokenSource? _loadCts;
     private CancellationTokenSource? _retryCts;
+
+    /// <summary>While the map is open, whether trips and the search are ready is followed (<see cref="ServicesStatus"/>).</summary>
+    private IDisposable? _servicesWatch;
+
+    /// <summary>The last estimate Best near you gave while routing read ready, whose status was asked again.</summary>
+    private BestNearby? _estimateChecked;
     private CancellationTokenSource? _noticeCts;
 
     /// <summary>When the prices shown were imported, as the API says; the next refresh is timed from it.</summary>
@@ -341,7 +347,9 @@
         Cars.Changed += OnCarsChanged;
         Trips.Changed += OnTripChanged;
         Places.Changed += OnPlacesChanged;
+        Services.Changed += OnServicesChanged;
         Services.RoutingReady += OnRoutingReady;
+        _servicesWatch = Services.Watch();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -1367,13 +1375,21 @@
     /// <summary>Another release while the page is away or just back: it reloads by itself.</summary>
     private void OnReloadDue() => InvokeAsync(() => ReloadAsync(automatic: true));
 
+    /// <summary>Trips or the search being prepared, or ready: the chip's "To work" and the pin's card follow.</summary>
+    private void OnServicesChanged() => InvokeAsync(StateHasChanged);
+
     /// <summary>
-    /// The routing data is ready after being prepared: trips are offered again, and Best near you is asked again, by road
-    /// this time.
+    /// The routing data is ready after being prepared: trips are offered again, a trip it refused is planned, and Best near
+    /// you is asked again, by road this time.
     /// </summary>
     private void OnRoutingReady() => InvokeAsync(async () =>
     {
         Trips.ClearUnavailable();
+        if (Trips.IsOpen && Trips.Plan is null && Trips.Error == ApiError.Unavailable)
+        {
+            await Trips.RetryAsync();
+        }
+
         if (Best.Result is { ByRoad: false })
         {
             await Best.RetryAsync();
@@ -1399,9 +1415,20 @@
     /// <summary>Home or Work saved or forgotten: the phone chip's "To Work" follows.</summary>
     private void OnPlacesChanged() => InvokeAsync(StateHasChanged);
 
-    /// <summary>A new Best near you: the map and the chip follow.</summary>
+    /// <summary>
+    /// A new Best near you: the map and the chip follow. Estimates while routing reads ready may mean it just stopped
+    /// serving (new data, a new version): its status is asked once per answer, so the pane says how far it is and Best near
+    /// you is asked again by road once it's back.
+    /// </summary>
     private void OnBestChanged() => InvokeAsync(async () =>
     {
+        if (Best.Result is { ByRoad: false, Pick: not null } estimate && !ReferenceEquals(estimate, _estimateChecked)
+            && !Services.RoutingPreparing)
+        {
+            _estimateChecked = estimate;
+            _ = Services.RefreshAsync();
+        }
+
         await RenderMarkersAsync();
         await FitToBestAsync();
         StateHasChanged();
@@ -1428,7 +1455,9 @@
         Cars.Changed -= OnCarsChanged;
         Trips.Changed -= OnTripChanged;
         Places.Changed -= OnPlacesChanged;
+        Services.Changed -= OnServicesChanged;
         Services.RoutingReady -= OnRoutingReady;
+        _servicesWatch?.Dispose();
         Updates.Stop();
         _loadCts?.Cancel();
         _retryCts?.Cancel();

@@ -1,12 +1,15 @@
+using System.Globalization;
 using Essence.Contracts;
+using Essence.UI.Resources;
+using Microsoft.Extensions.Localization;
 
 namespace Essence.UI.Services;
 
 /// <summary>
-/// Whether trips and the address search are ready (the API's <c>/services</c>). While a pane that offers them is open
-/// (<see cref="Watch"/>) and one of them is being prepared, it asks again every 10 seconds, so the pane says how far it
-/// is and switches it on once it's ready. Nothing is asked while nothing watches, nor once both are ready; a 503
-/// (<see cref="RefreshAsync"/>) asks again.
+/// Whether trips and the address search are ready (the API's <c>/services</c>). While the map is open
+/// (<see cref="Watch"/>) and one of them is being prepared, or waits to try again, it asks again every 10 seconds, so the
+/// panes say how far it is and switch it on once it's ready. Nothing is asked while nothing watches, nor once both are
+/// ready; a 503 or an estimate where a road distance was expected (<see cref="RefreshAsync"/>) asks again.
 /// </summary>
 public sealed class ServicesStatus(EssenceApiClient api, TimeProvider time) : IDisposable
 {
@@ -21,17 +24,34 @@ public sealed class ServicesStatus(EssenceApiClient api, TimeProvider time) : ID
     /// <summary>Routing was being prepared and is ready: Best near you can be by road again, and trips can be offered.</summary>
     public event Action? RoutingReady;
 
+    /// <summary>The address index was being prepared and is ready: what was typed can be searched again.</summary>
+    public event Action? GeocodingReady;
+
     public ServiceReadiness? Routing { get; private set; }
 
     public ServiceReadiness? Geocoding { get; private set; }
 
-    /// <summary>The routing data is being built or loaded: trips will be ready soon.</summary>
+    /// <summary>The routing data is being built or loaded, or that failed and is tried again later: no trips meanwhile.</summary>
     public bool RoutingPreparing => Routing is { Ready: false };
 
-    /// <summary>The address index is being built or loaded: the search will be ready soon.</summary>
+    /// <summary>The address index is being built or loaded, or that failed and is tried again later: no search meanwhile.</summary>
     public bool GeocodingPreparing => Geocoding is { Ready: false };
 
-    /// <summary>A pane that offers trips or the search is open: dispose the result when it closes.</summary>
+    /// <summary>
+    /// What to say about a service that isn't ready: it will be soon (how far, when known), or it failed and tries again at
+    /// a time of day; null when it's ready or doesn't say. <paramref name="prefix"/> picks the texts: <c>Trips</c> or
+    /// <c>Search</c> (TripsPreparing, TripsPreparingSoon, TripsRetrying…).
+    /// </summary>
+    public static string? Note(ServiceReadiness? service, IStringLocalizer<Strings> l, string prefix) => service switch
+    {
+        { Ready: false, State: "waiting", NextAttemptAt: { } next } =>
+            l[$"{prefix}Retrying", Formatting.TimeOfDay(next, TimeZoneInfo.Local, CultureInfo.CurrentCulture)].Value,
+        { Ready: false, Percent: { } percent } => l[$"{prefix}Preparing", percent].Value,
+        { Ready: false } => l[$"{prefix}PreparingSoon"].Value,
+        _ => null,
+    };
+
+    /// <summary>The map is open: dispose the result when it closes.</summary>
     public IDisposable Watch()
     {
         _watchers++;
@@ -75,8 +95,9 @@ public sealed class ServicesStatus(EssenceApiClient api, TimeProvider time) : ID
                 await Task.Delay(PollEvery, time, cts.Token);
             }
 
-            // Asked again only while something is being prepared and a pane shows it.
-            while (await FetchAsync(cts.Token) is not true && _watchers > 0)
+            // Asked again only while something is being prepared and the map shows it. When the API doesn't answer, asked
+            // again only if something was being prepared: an API without /services isn't asked every 10 seconds.
+            while (await FetchAsync(cts.Token) is not true && (RoutingPreparing || GeocodingPreparing) && _watchers > 0)
             {
                 await Task.Delay(PollEvery, time, cts.Token);
             }
@@ -101,12 +122,17 @@ public sealed class ServicesStatus(EssenceApiClient api, TimeProvider time) : ID
             return null;
         }
 
-        var wasPreparing = RoutingPreparing;
+        var (routingWasPreparing, geocodingWasPreparing) = (RoutingPreparing, GeocodingPreparing);
         (Routing, Geocoding) = (services.Routing, services.Geocoding);
         Changed?.Invoke();
-        if (wasPreparing && !RoutingPreparing)
+        if (routingWasPreparing && !RoutingPreparing)
         {
             RoutingReady?.Invoke();
+        }
+
+        if (geocodingWasPreparing && !GeocodingPreparing)
+        {
+            GeocodingReady?.Invoke();
         }
 
         return !RoutingPreparing && !GeocodingPreparing;

@@ -738,4 +738,10 @@
   <data name="SearchPreparingSoon" xml:space="preserve">
     <value>La recherche d’adresses sera prête bientôt : préparation des adresses du Québec. D’ici là, choisissez le lieu sur la carte : maintenez le doigt dessus ou faites un clic droit.</value>
   </data>
+  <data name="TripsRetrying" xml:space="preserve">
+    <value>Les trajets ne sont pas disponibles pour l’instant : la carte routière du Québec n’a pas pu être préparée. Nouvel essai à {0}.</value>
+  </data>
+  <data name="SearchRetrying" xml:space="preserve">
+    <value>La recherche d’adresses n’est pas disponible pour l’instant : les adresses du Québec n’ont pas pu être préparées. Nouvel essai à {0}. D’ici là, choisissez le lieu sur la carte : maintenez le doigt dessus ou faites un clic droit.</value>
+  </data>
 </root>

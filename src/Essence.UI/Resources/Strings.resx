@@ -738,4 +738,10 @@
   <data name="SearchPreparingSoon" xml:space="preserve">
     <value>Address search will be ready soon: preparing Québec’s addresses. Meanwhile, pick the place on the map: press and hold it, or right-click it.</value>
   </data>
+  <data name="TripsRetrying" xml:space="preserve">
+    <value>Trips aren’t available right now: Québec’s road map couldn’t be prepared. Trying again at {0}.</value>
+  </data>
+  <data name="SearchRetrying" xml:space="preserve">
+    <value>Address search isn’t available right now: Québec’s addresses couldn’t be prepared. Trying again at {0}. Meanwhile, pick the place on the map: press and hold it, or right-click it.</value>
+  </data>
 </root>
