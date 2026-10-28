@@ -285,7 +285,7 @@ public static class StationEndpoints
     /// back, the driver on any road (an autoroute included). Null, for the estimate instead, when the routing server fails,
     /// the driver is more than <see cref="NearYou.MaxDriverSnapMeters"/> from a road, or no station has a road there and back.
     /// An estimate the server's failure forced isn't cached: the same request asks again. A server that doesn't answer may
-    /// have just stopped for new data: its status is asked again at once, so the next request doesn't call it meanwhile.
+    /// have just stopped for new data: its status is asked again, so the next requests don't call it meanwhile.
     /// </summary>
     private static async Task<NearbyRanking?> RankByRoadAsync(
         OsrmClient osrm,
@@ -330,7 +330,7 @@ public static class StationEndpoints
             loggers.CreateLogger(RoutingLog.Category).LogOsrmFailure(ex);
             if (ex.Failure == OsrmFailure.Unavailable)
             {
-                _ = services.RefreshAsync(DataService.Routing);
+                _ = services.RefusedAsync(DataService.Routing);
             }
 
             DataVersion.DontCache(http);

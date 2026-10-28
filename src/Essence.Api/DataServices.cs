@@ -55,6 +55,16 @@ public sealed class DataServiceMonitor(IHttpClientFactory clients, TimeProvider 
         }
     }
 
+    /// <summary>
+    /// A call the server refused: it may have just stopped for new data, so its status is asked again in the background,
+    /// for the requests that follow; this one gets the status last known, without waiting.
+    /// </summary>
+    public Task<DataStatus?> RefusedAsync(DataService service)
+    {
+        _ = RefreshAsync(service);
+        return GetAsync(service, CancellationToken.None);
+    }
+
     /// <summary>The service's status when it says it isn't serving (being built, loading, or waiting to try again).</summary>
     public async Task<DataStatus?> NotServingAsync(DataService service, CancellationToken cancellationToken) =>
         await GetAsync(service, cancellationToken) is { Serving: false } status ? status : null;

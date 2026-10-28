@@ -179,7 +179,7 @@ public static class TripEndpoints
             return ex.Failure switch
             {
                 OsrmFailure.NoRoute => NoRoad("to", "No route to this point"),
-                OsrmFailure.Unavailable => RoutingUnavailable(await services.RefreshAsync(DataService.Routing)),
+                OsrmFailure.Unavailable => RoutingUnavailable(await services.RefusedAsync(DataService.Routing)),
                 _ => TypedResults.Problem("The routing server refused the request.", statusCode: StatusCodes.Status500InternalServerError),
             };
         }
