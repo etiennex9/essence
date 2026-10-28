@@ -30,10 +30,8 @@ const NOT_HELD = ".ess-marker, .maplibregl-ctrl";
 // A trip's route (setRoute): GeoJSON sources and layers drawn over the roads, under the labels.
 const ROUTE_SOURCE = "ess-route";
 const BEYOND_SOURCE = "ess-route-beyond";
+const CORRIDOR_SOURCE = "ess-corridor";
 const ROUTE_LAYERS = ["ess-route-corridor", "ess-route-casing", "ess-route-line", "ess-route-beyond-casing", "ess-route-beyond"];
-
-// Metres per pixel at zoom 0 at the equator, with MapLibre's 512 px tiles.
-const METERS_PER_PIXEL_Z0 = 78271.517;
 
 // The corridor shows on a trip seen whole, and fades out as the map zooms in on a stretch of it.
 const CORRIDOR_FADE_FROM_ZOOM = 10;
@@ -112,6 +110,10 @@ export function takeSavedView() {
 
 function lineString(coordinates) {
     return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coordinates ?? [] } };
+}
+
+function multiPolygon(coordinates) {
+    return { type: "Feature", properties: {}, geometry: { type: "MultiPolygon", coordinates: coordinates ?? [] } };
 }
 
 function cssColor(name, fallback) {
@@ -268,13 +270,6 @@ export function createMap(container, options, dotnet) {
         }
     }
 
-    // A line as wide as the corridor stations were looked for in, 2 x halfWidthMeters at every zoom: MapLibre's widths are
-    // in pixels, and a pixel covers half as many metres with each zoom level.
-    function corridorWidth(halfWidthMeters, latitude) {
-        const atZoom0 = 2 * halfWidthMeters / (METERS_PER_PIXEL_Z0 * Math.cos(latitude * Math.PI / 180));
-        return ["interpolate", ["exponential", 2], ["zoom"], 0, atZoom0, 22, atZoom0 * 2 ** 22];
-    }
-
     function removeRouteLayers() {
         for (const id of ROUTE_LAYERS) {
             if (map.getLayer(id)) {
@@ -282,7 +277,7 @@ export function createMap(container, options, dotnet) {
             }
         }
 
-        for (const id of [ROUTE_SOURCE, BEYOND_SOURCE]) {
+        for (const id of [ROUTE_SOURCE, BEYOND_SOURCE, CORRIDOR_SOURCE]) {
             if (map.getSource(id)) {
                 map.removeSource(id);
             }
@@ -311,16 +306,16 @@ export function createMap(container, options, dotnet) {
         const accent = cssColor("--ess-accent", "#185fa5");
         const casing = cssColor("--ess-surface", "#ffffff");
         const round = { "line-cap": "round", "line-join": "round" };
-        const middle = route.path[Math.floor(route.path.length / 2)] ?? [0, 45];
         map.addSource(ROUTE_SOURCE, { type: "geojson", data: lineString(route.path) });
         map.addSource(BEYOND_SOURCE, { type: "geojson", data: lineString(route.beyond) });
+        map.addSource(CORRIDOR_SOURCE, { type: "geojson", data: multiPolygon(route.corridor) });
+        // One shape, filled once: where the route comes back near itself, the tint doesn't double.
         map.addLayer({
-            id: "ess-route-corridor", type: "line", source: ROUTE_SOURCE, layout: round,
+            id: "ess-route-corridor", type: "fill", source: CORRIDOR_SOURCE,
             paint: {
-                "line-color": accent,
+                "fill-color": accent,
                 // Zoomed in on a short trip, the corridor would tint the whole map: it fades out by then.
-                "line-opacity": ["interpolate", ["linear"], ["zoom"], CORRIDOR_FADE_FROM_ZOOM, 0.12, CORRIDOR_GONE_AT_ZOOM, 0],
-                "line-width": corridorWidth(route.halfWidthMeters, middle[1]),
+                "fill-opacity": ["interpolate", ["linear"], ["zoom"], CORRIDOR_FADE_FROM_ZOOM, 0.12, CORRIDOR_GONE_AT_ZOOM, 0],
             },
         }, before);
         map.addLayer({ id: "ess-route-casing", type: "line", source: ROUTE_SOURCE, layout: round, paint: { "line-color": casing, "line-width": 8 } }, before);
@@ -516,9 +511,9 @@ export function createMap(container, options, dotnet) {
         },
 
         // A trip's route, [lon, lat] pairs: the part the car reaches, and the part past its range (dashed; null when none),
-        // with the corridor stations were looked for in, halfWidthMeters either side.
-        setRoute(path, beyond, halfWidthMeters) {
-            route = { path, beyond, halfWidthMeters };
+        // with the corridor stations were looked for in (GeoJSON MultiPolygon coordinates, TripCorridor).
+        setRoute(path, beyond, corridor) {
+            route = { path, beyond, corridor };
             addRouteLayers();
         },
 

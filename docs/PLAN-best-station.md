@@ -343,10 +343,15 @@ message instead of breaking; a trip survives leaving for Google Maps and coming 
   Save names an other place inline; a pin saved before *Best on the way here* names the trip after the place.
 - **Press and hold:** MapLibre fires `contextmenu` only after a `mousedown`, so Android's long press doesn't reach it; the
   550 ms touch timer covers every touch device, and right-clicks cover mice.
-- **The map:** `setRoute(path, beyond, halfWidthMeters)`: the UI splits the path where the range runs out (`TripPath`).
+- **The map:** `setRoute(path, beyond, corridor)`: the UI splits the path where the range runs out (`TripPath`).
   The layers go over every road and area, under the labels drawn after them: OpenFreeMap's dark style has labels before
-  its roads, so "below the first symbol layer" hid the route there. The corridor fades out between zooms 10 and 13, or
-  a short trip would tint the whole map. All the trip's stations are
+  its roads, so "below the first symbol layer" hid the route there. The corridor is one shape the UI computes
+  (`TripCorridor`, with Clipper2: the reached path offset by the half-width with round joins and ends, overlaps merged,
+  holes kept, on a plane at the route's middle latitude) and the map fills once. It was first a line as wide as the
+  corridor, which MapLibre tinted twice where the route came back near itself and broke into spikes at sharp turns
+  (segments shorter than the line's width). The route is simplified to a 25th of the half-width and the arcs kept within
+  a 100th of it: 121 points became 176 for Montréal–Shawinigan, in 23 ms in a Debug build in the browser. The corridor
+  fades out between zooms 10 and 13, or a short trip would tint the whole map. All the trip's stations are
   markers; those neither reachable nor saving at least $0.25 fade (the pick, the reference and the biggest saving never
   do), and the reference takes the closest's ring and the flag "No detour" or "Smallest detour".
 - **Not checked:** Google Maps' `waypoints` with `dir_action=navigate` on Android (needs a phone).

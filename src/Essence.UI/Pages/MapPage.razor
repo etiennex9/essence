@@ -930,7 +930,7 @@
         }
 
         var (reached, beyond, rangeEnd) = TripPath.Split(plan.Path, plan.DistanceKm, plan.StopBeforeKm);
-        await _map.SetRouteAsync(reached, beyond, plan.HalfWidthKm * 1000);
+        await _map.SetRouteAsync(reached, beyond, TripCorridor.Polygons(reached, plan.HalfWidthKm * 1000));
         await _map.SetRangeEndAsync(plan.StopBeforeKm > 0 ? rangeEnd : null, L["RangeEndsAt", Math.Round(plan.StopBeforeKm ?? 0)]);
     }
 

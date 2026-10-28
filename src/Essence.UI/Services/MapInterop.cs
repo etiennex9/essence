@@ -112,10 +112,11 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 
     /// <summary>
     /// A trip's route, [longitude, latitude] pairs: the part the car reaches, then the part past its range, dashed
-    /// (<paramref name="beyond"/>, null when it reaches the end), with the corridor stations were looked for in.
+    /// (<paramref name="beyond"/>, null when it reaches the end), with the corridor stations were looked for in
+    /// (<see cref="TripCorridor.Polygons"/>, GeoJSON MultiPolygon coordinates).
     /// </summary>
-    public ValueTask SetRouteAsync(double[][] path, double[][]? beyond, double halfWidthMeters) =>
-        InvokeAsync("setRoute", path, beyond, halfWidthMeters);
+    public ValueTask SetRouteAsync(double[][] path, double[][]? beyond, double[][][][] corridor) =>
+        InvokeAsync("setRoute", path, beyond, corridor);
 
     public ValueTask ClearRouteAsync() => InvokeAsync("clearRoute");
 
