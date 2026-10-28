@@ -6,9 +6,11 @@
 # - With no data (first start, or data from another OSRM or Photon version), it builds the data, then starts the server.
 # - It refreshes the data on its own every REFRESH_DAYS days (30 by default; 0 never), first checking that the source
 #   changed, and right away after `<command> refresh`. It builds into /data/next while the server answers from
-#   /data/current, swaps them, restarts the server, and keeps the previous data until the new data loads.
-# - A failed build is retried with a growing delay (1 minute, doubling, at most 6 hours); a partial build is thrown away
-#   when the container restarts, and a download picks up where it stopped.
+#   /data/current, swaps them, restarts the server, and keeps the previous data until the server answers from the new
+#   data, going back to the previous data when it doesn't within 10 minutes, even across a restart.
+# - A failed build, or new data the server doesn't start on, is retried with a growing delay (1 minute, doubling, at most
+#   6 hours); a partial build is thrown away when the container restarts, and a download picks up where it stopped.
+# - A server that keeps stopping is started again with a growing delay, and after 5 times in a row the data is rebuilt.
 # - Its state, the build's stage and progress, the data's date, the last error and what's next are served as JSON at
 #   GET /status on STATUS_PORT (9090), with a heartbeat the healthcheck reads: the container is healthy while the
 #   supervisor runs, whether it builds, serves or waits, and unhealthy only when it's stuck.
@@ -43,7 +45,9 @@ failures=0
 next_attempt=0
 next_refresh=0
 server_failures=0
+server_error=
 next_server_start=0
+unready_since=0
 swap_deadline=0
 last_probe=0
 
@@ -75,9 +79,12 @@ data_usable() {
 
 meta() { cat "$DATA/current/$1" 2>/dev/null || true; }
 
-# After a restart: a build that was under way is thrown away, and a swap that was under way is finished or undone.
+# After a restart: a build that was under way is thrown away, a swap that was under way is finished or undone, and new
+# data the server hadn't answered from yet is checked again.
 recover() {
     mkdir -p "$DATA" "$RUN"
+    # Data a rollback was throwing away.
+    rm -rf "$DATA/failed"
     if [ ! -d "$DATA/current" ] && [ -f "$DATA/next/complete" ]; then
         log "finishing a swap a restart interrupted."
         mv "$DATA/next" "$DATA/current"
@@ -91,8 +98,12 @@ recover() {
         rm -rf "$DATA/next"
     fi
 
-    # Kept until new data loaded; a restart in between keeps the current data, which is the new one.
-    if [ -d "$DATA/current" ] && [ -d "$DATA/previous" ]; then
+    # The previous data is kept until the server answers from the new one: that check starts over.
+    if [ -f "$DATA/swap-pending" ] && data_usable "$DATA/current"; then
+        log "checking again that the server answers from the new data, from $(meta data-date)."
+        swap_deadline=$(($(now) + 600))
+    else
+        rm -f "$DATA/swap-pending"
         rm -rf "$DATA/previous"
     fi
 
@@ -121,22 +132,36 @@ stage() {
     log "build: $1."
 }
 
-# Called by build_next: downloads $1 to $2, resuming a download a restart interrupted, with its progress by size.
+# Called by build_next: downloads $1 to $2, resuming a download that failed or that a restart interrupted, with its
+# progress by size.
 download() {
-    local url=$1 target=$2 part="$DATA/downloads/$(basename "$2").part" size
+    local url=$1 target=$2 part="$DATA/downloads/$(basename "$2").part" id size code
     mkdir -p "$DATA/downloads"
-    size=$(curl -fsSLI --max-time 30 "$url" | tr -d '\r' | awk 'tolower($1) == "content-length:" { n = $2 } END { print n }')
+    # The file's size and date, after redirects: a part of an older version of the file is started over.
+    id=$(curl -fsSLI --max-time 30 "$url" | tr -d '\r' \
+        | awk 'tolower($1) == "content-length:" { n = $2 } tolower($1) == "last-modified:" { $1 = ""; m = $0 } END { print n m }')
+    if [ -n "$id" ]; then
+        if [ -f "$part" ] && [ "$(cat "$part.id" 2>/dev/null)" != "$id" ]; then
+            log "$(basename "$2") changed since its download started: starting it over."
+            rm -f "$part"
+        fi
+        echo "$id" >"$part.id"
+    fi
+
+    size=${id%% *}
     echo "${size:-0}" >"$RUN/build.size"
     echo "$part" >"$RUN/build.file"
-    # Abort a stalled transfer (under 10 kB/s for 2 minutes): the build is retried later.
-    if ! curl -fsSL --retry 3 --speed-limit 10000 --speed-time 120 -C - -o "$part" "$url"; then
-        # A file that changed upstream can't be resumed: start over next time.
-        rm -f "$part"
+    # Abort a stalled transfer (under 10 kB/s for 2 minutes): the build is retried later, from where it stopped.
+    curl -fsSL --retry 3 --speed-limit 10000 --speed-time 120 -C - -o "$part" "$url"
+    code=$?
+    if [ "$code" -ne 0 ]; then
+        # 33: the server can't resume it, so the next try starts over.
+        [ "$code" -eq 33 ] && rm -f "$part"
         echo "the download of $(basename "$2") failed" >"$RUN/error"
         return 1
     fi
 
-    rm -f "$RUN/build.file" "$RUN/build.size"
+    rm -f "$RUN/build.file" "$RUN/build.size" "$part.id"
     mv "$part" "$target"
 }
 
@@ -183,30 +208,47 @@ build_percent() {
     echo $((from + (to - from) * ${progress:-0} / 100))
 }
 
+# A build failed, or the server didn't start on its data: tried again after 1 minute, then twice as long each time, at
+# most 6 hours.
+retry_later() {
+    last_error=$1
+    failures=$((failures + 1))
+    local delay=$((60 * (1 << (failures > 9 ? 9 : failures - 1))))
+    [ "$delay" -gt 21600 ] && delay=21600
+    next_attempt=$(($(now) + delay))
+    log "$last_error; trying again in $((delay / 60)) minutes."
+}
+
 # The build ended: swap its data in, or count the failure and wait.
 finish_build() {
     local code=$1
     build_pid=
     if [ "$code" -eq 0 ] && [ -f "$DATA/next/complete" ]; then
         log "build done: $(du -sh "$DATA/next" | cut -f 1) of data from $(cat "$DATA/next/data-date" 2>/dev/null)."
+        if [ -n "$server_pid" ]; then
+            # Said before the server stops, and given time to be read: the api asks every 5 seconds, and doesn't call a
+            # server that says it isn't serving (a refused call counts toward the routing client's circuit breaker).
+            serving=false
+            write_status
+            sleep 7 &
+            wait $!
+        fi
+
         stop_server
+        # Until the server answers from the new data, a restart checks it again and keeps the previous data.
+        touch "$DATA/swap-pending"
         rm -rf "$DATA/previous"
         [ -d "$DATA/current" ] && mv "$DATA/current" "$DATA/previous"
         mv "$DATA/next" "$DATA/current"
-        # Asked for, and done: a refresh asked for and interrupted by a restart starts again.
-        rm -rf "$DATA/downloads" "$DATA/refresh-now"
+        rm -rf "$DATA/downloads"
         server_failures=0
+        server_error=
         next_server_start=0
         swap_deadline=$(($(now) + 600))
         return
     fi
 
-    last_error=$(cat "$RUN/error" 2>/dev/null || echo "the build failed (exit code $code)")
-    failures=$((failures + 1))
-    local delay=$((60 * (1 << (failures > 9 ? 9 : failures - 1))))
-    [ "$delay" -gt 21600 ] && delay=21600
-    next_attempt=$(($(now) + delay))
-    log "$last_error; trying again in $((delay / 60)) minutes."
+    retry_later "$(cat "$RUN/error" 2>/dev/null || echo "the build failed (exit code $code)")"
     rm -rf "$DATA/next"
     rm -f "$RUN"/build.*
 }
@@ -222,15 +264,26 @@ stop_server() {
     serving=false
 }
 
-# Starts the server when there's usable data and it isn't running, after a crash with a growing delay.
+# Starts the server when there's usable data and it isn't running, after a crash with a growing delay (10 seconds,
+# doubling, at most 5 minutes). One that runs without answering for 10 minutes is stopped, and so started again.
 ensure_server() {
+    local code
     if [ -n "$server_pid" ] && ! kill -0 "$server_pid" 2>/dev/null; then
         wait "$server_pid" 2>/dev/null
+        code=$?
         server_pid=
         serving=false
         server_failures=$((server_failures + 1))
         next_server_start=$(($(now) + 5 * (1 << (server_failures > 6 ? 6 : server_failures))))
-        log "the server stopped; starting it again at $(iso "$next_server_start")."
+        server_error="the server stopped (exit code $code)"
+        log "$server_error; starting it again at $(iso "$next_server_start")."
+    fi
+
+    if [ -n "$server_pid" ] && [ "$serving" = false ] && [ "$swap_deadline" -eq 0 ] && [ "$unready_since" -gt 0 ] \
+        && [ $(($(now) - unready_since)) -ge 600 ]; then
+        log "the server hasn't answered for 10 minutes: stopping it."
+        kill "$server_pid" 2>/dev/null
+        unready_since=0
     fi
 
     if [ -z "$server_pid" ] && data_usable "$DATA/current" && [ "$(now)" -ge "$next_server_start" ]; then
@@ -238,6 +291,7 @@ ensure_server() {
         server_start
         server_pid=$!
         last_probe=0
+        unready_since=$(now)
     fi
 }
 
@@ -259,8 +313,11 @@ probe_server() {
         fi
         serving=true
         server_failures=0
+        server_error=
+        unready_since=0
     else
         serving=false
+        [ "$unready_since" -gt 0 ] || unready_since=$(now)
     fi
 }
 
@@ -270,6 +327,8 @@ check_swap() {
     if [ "$serving" = true ]; then
         swap_deadline=0
         rm -rf "$DATA/previous"
+        # A refresh asked for is done once its data is served: asked again after a restart or a rollback before that.
+        rm -f "$DATA/swap-pending" "$DATA/refresh-now"
         failures=0
         last_error=
         next_attempt=0
@@ -277,15 +336,17 @@ check_swap() {
         log "serving the new data; the next refresh is due $(iso "$next_refresh")."
     elif [ "$(now)" -ge "$swap_deadline" ] || [ "$server_failures" -ge 3 ]; then
         swap_deadline=0
-        last_error="the server doesn't start on the new data"
-        log "$last_error: back to the previous data."
+        log "the server doesn't start on the new data: back to the previous data."
         stop_server
-        rm -rf "$DATA/current"
+        # Moved aside first, so that a restart can't find half of it beside the previous data.
+        mv "$DATA/current" "$DATA/failed"
         [ -d "$DATA/previous" ] && mv "$DATA/previous" "$DATA/current"
-        failures=$((failures + 1))
-        next_attempt=$(($(now) + 3600))
+        rm -f "$DATA/swap-pending"
+        rm -rf "$DATA/failed"
         server_failures=0
+        server_error=
         next_server_start=0
+        retry_later "the server doesn't start on the new data"
     fi
 }
 
@@ -303,6 +364,12 @@ decide() {
             last_error=${last_error:-"the data was built by $(meta version), and this image runs $VERSION"}
         fi
         start_build first
+        return
+    fi
+
+    if [ "$server_failures" -ge 5 ]; then
+        log "the server keeps stopping: rebuilding the data."
+        start_build repair
         return
     fi
 
@@ -333,8 +400,10 @@ decide() {
 
 # ---- Status ----
 
+# waiting: for the next try of a failed build (serving the current data meanwhile, if any), or for the server's next
+# start after it stopped; nextAttemptAt says when.
 write_status() {
-    local state stage= percent= t
+    local state stage= percent= t retry_at=0
     t=$(now)
     if [ -n "$build_pid" ]; then
         state=$([ "$serving" = true ] && echo refreshing || echo building)
@@ -342,10 +411,16 @@ write_status() {
         percent=$(build_percent)
     elif [ "$swap_deadline" -gt 0 ] || { [ -n "$server_pid" ] && [ "$serving" = false ]; }; then
         state=starting
+    elif [ -z "$server_pid" ] && [ "$t" -lt "$next_server_start" ]; then
+        state=waiting
+        retry_at=$next_server_start
     elif [ "$t" -lt "$next_attempt" ]; then
         state=waiting
+        retry_at=$next_attempt
     elif [ "$serving" = true ]; then
         state=serving
+    elif data_usable "$DATA/current"; then
+        state=starting
     else
         state=building
     fi
@@ -357,7 +432,7 @@ write_status() {
             "$(json_string "$stage")" "$(json_number "$percent")" "$(json_string "$([ -n "$build_pid" ] && iso "$build_started")")" \
             "$(json_string "$(meta data-date)")"
         printf '"lastError":%s,"nextAttemptAt":%s,"nextRefreshAt":%s,"heartbeat":"%s"}\n' \
-            "$(json_string "$last_error")" "$(json_string "$([ "$t" -lt "$next_attempt" ] && iso "$next_attempt")")" \
+            "$(json_string "${server_error:-$last_error}")" "$(json_string "$(iso "$retry_at")")" \
             "$(json_string "$(iso "$next_refresh")")" "$(iso "$t")"
     } >"$RUN/status.tmp"
     mv "$RUN/status.tmp" "$RUN/status.json"
