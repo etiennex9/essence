@@ -105,6 +105,7 @@ export function takeSavedView() {
         tripPushed: view.tripPushed === true,
         carsOverTrip: view.carsOverTrip === true,
         placesPushed: view.placesPushed === true,
+        bestSelectedId: Number.isSafeInteger(view.bestSelectedId) ? view.bestSelectedId : null,
     };
 }
 
@@ -599,8 +600,9 @@ export function createMap(container, options, dotnet) {
             }, besidePane ? PANE_SETTLE_MS : 0);
         },
 
-        // Pans just enough that the point isn't under the details pane.
-        ensureVisible(lat, lon) {
+        // Pans just enough that the point isn't under the details pane: once it's in place, unless it already is
+        // (waitForPane false, for a station chosen in the pane open).
+        ensureVisible(lat, lon, waitForPane = true) {
             pendingMoves++;
             setTimeout(() => {
                 pendingMoves--;
@@ -611,7 +613,7 @@ export function createMap(container, options, dotnet) {
                 if (!inside) {
                     map.panBy([point.x - right / 2, point.y - bottom / 2]);
                 }
-            }, PANE_SETTLE_MS);
+            }, waitForPane ? PANE_SETTLE_MS : 0);
         },
 
         // Reloads the page. With saveView, the page it reloads into opens on this view, with the page's own `state` (C#'s

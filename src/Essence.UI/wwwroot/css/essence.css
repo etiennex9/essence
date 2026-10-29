@@ -275,6 +275,17 @@ body {
     opacity: 0.4;
 }
 
+/* The station chosen in the pane, or whose details are open, when it's also the pick or the closest: on top of both, with
+   the selected ring (the closest's dark one would hide it). */
+.ess-marker.is-selected.is-best,
+.ess-marker.is-selected.is-closest {
+    z-index: 100000 !important;
+}
+
+.ess-marker.is-closest.is-selected .ess-pill {
+    box-shadow: 0 0 0 2px #185fa5, 0 2px 6px rgba(0, 0, 0, 0.3);
+}
+
 /* Zoomed out: brand-colored dots, centered on the station. The selected station and Best near you's pick keep their
    full pill. */
 .ess-map--compact .ess-marker:not(.is-selected):not(.is-best) {

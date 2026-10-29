@@ -120,8 +120,8 @@
     else if (View is BestView or TripView)
     {
         <BestPanel Trip="@(View == TripView)" Locating="_locating" LocationProblem="_locationProblem"
-                   OnClose="() => View == TripView ? CloseTripAsync() : CloseListAsync()" OnOpenStation="OpenListedStation"
-                   OnOpenCars="ShowCars" OnLocate="() => LocateAsync(moveMap: false, fallBackToMontreal: false)"
+                   OnClose="() => View == TripView ? CloseTripAsync() : CloseListAsync()" OnOpenStation="OpenStationFromBest"
+                   OnStationSelected="ShowSelectedAsync" OnOpenCars="ShowCars" OnLocate="() => LocateAsync(moveMap: false, fallBackToMontreal: false)"
                    OnUseMapCenter="UseMapCenterAsync" OnStartTrip="StartTripAsync" OnEndTrip="EndTripAsync" OnRefreshTrip="RefreshTripAsync"
                    OnDropPinAtCenter="DropPinAtCenterAsync" OnSearchPlaces="ShowPlaces" />
     }
@@ -158,9 +158,6 @@
 
     /// <summary>The address search and the saved places, pushed over Best near you. Nothing typed goes in the URL.</summary>
     private const string PlacesView = "places";
-
-    /// <summary>Savings under this are "about the same" (Essence.Ranking's NearYou.SmallestSaving).</summary>
-    private const decimal SmallestSaving = 0.25m;
 
     private const double CompactBelowZoom = 12;
     private const double OverviewZoom = 5.5;
@@ -266,6 +263,9 @@
     /// <summary>The emphasis last given to the markers (<see cref="MapInterop.SetEmphasisAsync"/>), sent again only when it changes.</summary>
     private string? _emphasis;
 
+    /// <summary>The station last ringed on the map (<see cref="MapSelected"/>), sent again only when it changes.</summary>
+    private long? _mapSelected;
+
     [SupplyParameterFromQuery(Name = "station")]
     public long? Station { get; set; }
 
@@ -295,6 +295,12 @@
 
     /// <summary>The trip plan the map shows in trip mode; none while the one in is for another fuel.</summary>
     private TripPlan? MapTrip => TripMode && Trips.PlanQuery?.Fuel == _fuel ? Trips.Plan : null;
+
+    /// <summary>
+    /// The station ringed on the map: the one whose details are open, else the one Best near you or the trip shows on top
+    /// when it isn't the pick (the pick has its flag).
+    /// </summary>
+    private long? MapSelected => Station ?? (MapTrip is not null ? Trips.SelectedId : MapBest is not null ? Best.SelectedId : null);
 
     /// <summary>The pick the phone chip shows: once the user is located, while no pane is open.</summary>
     private RankedStation? ChipPick =>
@@ -384,7 +390,10 @@
 
         if (!BestOpen)
         {
+            // Best near you's choice lasts while its pane is open, under details, My cars or the address search too: closed,
+            // or a trip opened, it's the pick again.
             _fitted = null;
+            Best.Select(null);
         }
 
         if (!TripMode)
@@ -402,7 +411,7 @@
 
         if (_map is not null)
         {
-            await _map.SetSelectedAsync(Station);
+            await SyncSelectedAsync();
             await RenderMarkersAsync();
             await RenderTripAsync();
             await FitToBestAsync();
@@ -464,7 +473,7 @@
             this);
         _mapReady = true;
         Updates.Start();
-        await _map.SetSelectedAsync(Station);
+        await SyncSelectedAsync();
         await RenderTripAsync();
         await FitToTripAsync();
         var planning = Trips.SetFuelAsync(_fuel);
@@ -488,6 +497,7 @@
             _userLocation = new GeoPoint(userLat, userLon);
             await _map.ShowUserLocationAsync(_userLocation.Value);
             await Best.SetOriginAsync(new BestOrigin(_userLocation.Value));
+            Best.Select(saved.BestSelectedId);
             StateHasChanged();
         }
 
@@ -737,8 +747,8 @@
         if (_mapReady)
         {
             await _map!.ReloadAsync(
-                new ReloadState(_fuel, _stationPushed, _listPushed, _carsPushed, _tripPushed, _carsOverTrip, _placesPushed), saveView: _placed,
-                automatic);
+                new ReloadState(_fuel, _stationPushed, _listPushed, _carsPushed, _tripPushed, _carsOverTrip, _placesPushed, Best.SelectedId),
+                saveView: _placed, automatic);
         }
     }
 
@@ -789,13 +799,39 @@
             long?[] named = [trip.PickId, trip.ReferenceId, trip.BiggestSavingId];
             return new MapEmphasis(
                 trip.PickId, trip.ReferenceId,
-                [.. trip.Stations.Where(s => named.Contains(s.Id) || (s.Reachable && s.SavesDollars >= SmallestSaving)).Select(s => s.Id)],
+                [.. trip.Stations.Where(s => named.Contains(s.Id) || (s.Reachable && s.SavesDollars >= StationChoice.SmallestSaving)).Select(s => s.Id)],
                 trip.ReferenceOnTheWay ? L["NoDetour"] : L["SmallestDetour"], trip.ReferenceOnTheWay ? "MarkerNoDetour" : "MarkerSmallestDetour");
         }
 
         return MapBest is { } best
             ? new MapEmphasis(best.Pick?.Id, best.ClosestId, [.. best.Stations.Select(s => s.Id)], L["Closest"], "MarkerClosest")
             : null;
+    }
+
+    /// <summary>Rings <see cref="MapSelected"/> on the map, when it changed.</summary>
+    private async Task SyncSelectedAsync()
+    {
+        var selected = MapSelected;
+        if (!_mapReady || selected == _mapSelected)
+        {
+            return;
+        }
+
+        _mapSelected = selected;
+        await _map!.SetSelectedAsync(selected);
+    }
+
+    /// <summary>
+    /// A station chosen in Best near you or on the way: it's ringed, and panned out from under the pane if it's under it.
+    /// The map isn't fitted again, so the route or the pick stay in view.
+    /// </summary>
+    private async Task ShowSelectedAsync(GeoPoint point)
+    {
+        await SyncSelectedAsync();
+        if (_mapReady)
+        {
+            await _map!.EnsureVisibleAsync(point, waitForPane: false);
+        }
     }
 
     /// <summary>The emphasis is sent again only when it changes.</summary>
@@ -1114,6 +1150,17 @@
     }
 
     /// <summary>
+    /// The details of the station Best near you or the trip shows on top: they open over the pane like a list's, but the map
+    /// stays where it is (the route in view), only panning the station out from under them.
+    /// </summary>
+    private void OpenStationFromBest(long id)
+    {
+        _stationPushed = true;
+        _centerOnStation = false;
+        Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", id));
+    }
+
+    /// <summary>
     /// Closes what's on top: the dropped pin's card, the details, My cars or the address search, the trip (back to Best near
     /// you), else the list.
     /// </summary>
@@ -1398,7 +1445,10 @@
         StateHasChanged();
     });
 
-    /// <summary>A new plan, or the trip opened or ended: the map follows. A 503 asks how far the routing data is.</summary>
+    /// <summary>
+    /// A new plan, the trip opened or ended, or another station shown on top: the map follows. A 503 asks how far the
+    /// routing data is.
+    /// </summary>
     private void OnTripChanged() => InvokeAsync(async () =>
     {
         if (Trips.Error == ApiError.Unavailable && !Trips.Loading)
@@ -1406,6 +1456,7 @@
             _ = Services.RefreshAsync();
         }
 
+        await SyncSelectedAsync();
         await RenderMarkersAsync();
         await RenderTripAsync();
         await FitToTripAsync();
@@ -1416,9 +1467,9 @@
     private void OnPlacesChanged() => InvokeAsync(StateHasChanged);
 
     /// <summary>
-    /// A new Best near you: the map and the chip follow. Estimates while routing reads ready may mean it just stopped
-    /// serving (new data, a new version): its status is asked once per answer, so the pane says how far it is and Best near
-    /// you is asked again by road once it's back.
+    /// A new Best near you, or another station shown on top: the map and the chip follow. Estimates while routing reads
+    /// ready may mean it just stopped serving (new data, a new version): its status is asked once per answer, so the pane
+    /// says how far it is and Best near you is asked again by road once it's back.
     /// </summary>
     private void OnBestChanged() => InvokeAsync(async () =>
     {
@@ -1429,6 +1480,7 @@
             _ = Services.RefreshAsync();
         }
 
+        await SyncSelectedAsync();
         await RenderMarkersAsync();
         await FitToBestAsync();
         StateHasChanged();

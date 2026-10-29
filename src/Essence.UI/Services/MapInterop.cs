@@ -33,8 +33,10 @@ public sealed record MarkerModel(
 /// <param name="TripPushed">The same for <c>?view=trip</c>, pushed over Best near you.</param>
 /// <param name="CarsOverTrip">My cars is open over a trip, which the map keeps showing.</param>
 /// <param name="PlacesPushed">The same as <paramref name="CarsPushed"/> for <c>?view=places</c>, pushed over Best near you.</param>
+/// <param name="BestSelectedId">The station Best near you shows on top (<see cref="BestNearYou.SelectedId"/>); null for the pick.</param>
 public sealed record ReloadState(
-    string Fuel, bool StationPushed, bool ListPushed, bool CarsPushed, bool TripPushed, bool CarsOverTrip, bool PlacesPushed);
+    string Fuel, bool StationPushed, bool ListPushed, bool CarsPushed, bool TripPushed, bool CarsOverTrip, bool PlacesPushed,
+    long? BestSelectedId);
 
 /// <summary>The view and state a reload for a new release left for the page it reloaded into.</summary>
 /// <param name="UserLat">Where the user's dot was, if it was shown.</param>
@@ -50,7 +52,8 @@ public sealed record SavedView(
     bool CarsPushed,
     bool TripPushed,
     bool CarsOverTrip,
-    bool PlacesPushed);
+    bool PlacesPushed,
+    long? BestSelectedId);
 
 /// <summary>What the map reports back.</summary>
 public interface IMapListener
@@ -140,7 +143,9 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
         InvokeAsync("fitBounds", west, south, east, north, besidePane);
 
     /// <summary>Pans just enough to bring a point out from under the details pane.</summary>
-    public ValueTask EnsureVisibleAsync(GeoPoint point) => InvokeAsync("ensureVisible", point.Latitude, point.Longitude);
+    /// <param name="waitForPane">Waits for a pane opening to be in place first; a pane already open needn't be waited for.</param>
+    public ValueTask EnsureVisibleAsync(GeoPoint point, bool waitForPane = true) =>
+        InvokeAsync("ensureVisible", point.Latitude, point.Longitude, waitForPane);
 
     [JSInvokable]
     public Task OnViewportChanged(Viewport viewport) => _listener?.OnViewportChangedAsync(viewport) ?? Task.CompletedTask;

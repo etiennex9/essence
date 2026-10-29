@@ -56,6 +56,17 @@
     transition: opacity 150ms;
 }
 
+/* Which station a tile or row put on top: for screen readers only. */
+.announce {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
 /* Ranked from the map's centre, or from an approximate location. */
 .origin {
     margin: 0 0 10px;
@@ -161,6 +172,12 @@
     color: var(--ess-text);
 }
 
+/* A station chosen that wouldn't be picked: past the longest detour, not sure by road, or past the range. */
+.saves.is-blocked {
+    font-size: 17px;
+    color: var(--ess-warning-text);
+}
+
 .why {
     margin: 0;
     font-size: 13px;
@@ -223,7 +240,7 @@
     font: 600 10px/1 var(--ess-font);
 }
 
-/* ---- Closest, best value, cheapest ---- */
+/* ---- Closest, best value, cheapest: each puts its station on top, pressed while it's there ---- */
 
 .tiles {
     display: grid;
@@ -256,6 +273,7 @@
 .tile.is-on {
     padding: 7px 8px;
     border: 1.5px solid var(--ess-accent);
+    background: var(--ess-selected);
 }
 
 .tile .label {
@@ -319,6 +337,12 @@
 
 .row:hover {
     background: var(--ess-hover);
+}
+
+/* The station on top, in "Also worth it" or on the way. */
+.row.is-on {
+    background: var(--ess-selected);
+    box-shadow: inset 3px 0 0 var(--ess-accent);
 }
 
 .row .logo {
@@ -748,6 +772,10 @@ button.chip::after {
 
 .on-way li.is-out {
     opacity: 0.6;
+}
+
+.on-way li.is-out:has(> .row.is-on) {
+    opacity: 1;
 }
 
 .row-saves.is-neutral {

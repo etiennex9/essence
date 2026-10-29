@@ -246,6 +246,24 @@
   <data name="BestWhyOnly" xml:space="preserve">
     <value>No other station near here has a price for {0}.</value>
   </data>
+  <data name="BestWhyPastDetour" xml:space="preserve">
+    <value>That’s past your longest detour: its round trip takes over {0} min longer than the closest’s.</value>
+  </data>
+  <data name="BestWhyNotSure" xml:space="preserve">
+    <value>Distances are estimated, though, and by road it might not save.</value>
+  </data>
+  <data name="WhyReference" xml:space="preserve">
+    <value>Savings are counted against it: {0}, the best value, saves {1} on {2} L.</value>
+  </data>
+  <data name="HeroCostsMore" xml:space="preserve">
+    <value>Costs {0} more</value>
+  </data>
+  <data name="StationShownLabel" xml:space="preserve">
+    <value>Station shown above</value>
+  </data>
+  <data name="ShownStation" xml:space="preserve">
+    <value>Shown above: {0}.</value>
+  </data>
   <data name="Members" xml:space="preserve">
     <value>Members</value>
   </data>
@@ -521,6 +539,12 @@
   </data>
   <data name="TripWhyOnly" xml:space="preserve">
     <value>It’s the only station on the way with a price for {0}.</value>
+  </data>
+  <data name="TripWhyPastDetour" xml:space="preserve">
+    <value>That’s past your longest detour, {0} min.</value>
+  </data>
+  <data name="TripWhyPastRange" xml:space="preserve">
+    <value>It’s {0} away by road, past the {1} km you can count on.</value>
   </data>
   <data name="OverMinutes" xml:space="preserve">
     <value>Over {0} min</value>

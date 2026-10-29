@@ -9,9 +9,10 @@
 
 @* Best near you: the station worth going to (the hero), the closest, best value and cheapest at a glance, a few others that
    save, and what it was worked out for, with "Going somewhere?" above them. With Trip, Best on the way: the trip, the range,
-   where to stop, and the stations along the route. The rankings are the API's (/stations/best, /trips/best); BestNearYou and
-   TripState keep the latest. *@
-<Pane TitleId="ess-best-title" OnClose="OnClose">
+   where to stop, and the stations along the route. The tiles and rows choose the station the hero shows (StationChoice),
+   whose Details open it. The rankings are the API's (/stations/best, /trips/best); BestNearYou and TripState keep the
+   latest, and the station chosen. *@
+<Pane @ref="_pane" TitleId="ess-best-title" OnClose="OnClose">
     <Header>
         <h2 id="ess-best-title" class="title">@(Trip ? L["BestOnTheWay"] : L["BestNearYou"])</h2>
     </Header>
@@ -25,6 +26,8 @@
         </button>
     </Actions>
     <ChildContent>
+        @* Says which station a tile or row put on top, and what it saves: the hero changing isn't announced. *@
+        <p class="announce" role="status">@(_announcement is { } said && said.Id == ShownId ? said.Text : null)</p>
         @if (Trip)
         {
             @* ---- Best on the way ---- *@
@@ -74,6 +77,7 @@
                     var stations = plan.Stations;
                     var pick = TripFind(plan, plan.PickId);
                     var reference = TripFind(plan, plan.ReferenceId);
+                    var shown = Trips.Shown;
                     <div class="result @(Trips.Loading ? "is-loading" : null)" aria-busy="@(Trips.Loading ? "true" : "false")">
                         <div class="chips">
                             @if (plan.LongTrip)
@@ -145,67 +149,64 @@
                             <p class="need is-fine"><b>@L["NoStopNeeded"]</b> @L["NoStopNeededWhy", coveredKm, query.SpareKm]</p>
                         }
 
-                        @if (pick is not null && reference is not null)
+                        @* The pick, or the station chosen: one past the range too, even when none is reachable. *@
+                        @if (shown is not null)
                         {
-                            <section class="hero" aria-labelledby="ess-trip-pick">
+                            var (saves, tone, why) = TripTexts(shown, plan, query);
+                            <section class="hero" aria-labelledby="ess-trip-pick" @ref="_hero">
                                 <div class="top">
-                                    @Logo(pick.Brand, "logo")
+                                    @Logo(shown.Brand, "logo")
                                     <div class="who">
                                         <h3 id="ess-trip-pick">
-                                            @NameOf(pick.Brand)
-                                            @if (pick.MembersOnly)
+                                            @NameOf(shown.Brand)
+                                            @if (shown.MembersOnly)
                                             {
                                                 <span class="tag">@L["Members"]</span>
                                             }
                                         </h3>
-                                        <p>@($"{pick.Address} · {L["KmAlong", Math.Round(pick.KmAlong)]} · {Detour(pick)}")</p>
+                                        <p>@($"{shown.Address} · {L["KmAlong", Math.Round(shown.KmAlong)]} · {Detour(shown)}")</p>
                                     </div>
-                                    <span class="big">@Price(pick.PriceCents)<small> ¢/L</small></span>
+                                    <span class="big">@Price(shown.PriceCents)<small> ¢/L</small></span>
                                 </div>
-                                @if (pick.Id != reference.Id)
+                                @if (saves is not null)
                                 {
-                                    <p class="saves">@L["Saves", Money(pick.SavesDollars)]</p>
-                                    <p class="why">
-                                        @(L[plan.ReferenceOnTheWay ? "TripWhy" : "TripWhySmallestDetour", Litres(query.FillLitres), NameOf(reference.Brand),
-                                            Math.Round(reference.KmAlong), Price(reference.PriceCents)])
-                                    </p>
+                                    <p class="saves @tone">@saves</p>
                                 }
-                                else
+                                @if (why is not null)
                                 {
-                                    <p class="saves is-neutral">@(plan.ReferenceOnTheWay ? L["OnYourWay"] : L["SmallestDetour"])</p>
-                                    <p class="why">@PickIsReferenceWhy(plan, query)</p>
+                                    <p class="why">@why</p>
                                 }
                                 <div class="actions">
                                     <a class="go" target="_blank" rel="noopener"
-                                       href="@GoogleMaps.DirectionsVia(destination.Latitude, destination.Longitude, pick.Latitude, pick.Longitude, navigate: true)">
+                                       href="@GoogleMaps.DirectionsVia(destination.Latitude, destination.Longitude, shown.Latitude, shown.Longitude, navigate: true)">
                                         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"
                                              stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Directions" /></svg>
                                         @L["GoViaGoogleMaps"]
                                     </a>
-                                    <button type="button" class="secondary" @onclick="() => OnOpenStation.InvokeAsync(pick.Id)">@L["Details"]</button>
+                                    <button type="button" class="secondary" @onclick="() => OnOpenStation.InvokeAsync(shown.Id)">@L["Details"]</button>
                                 </div>
                             </section>
+                        }
 
-                            @if (stations.Count(s => s.Reachable) > 1)
-                            {
-                                var third = TripFind(plan, plan.BiggestSavingId);
-                                var cheapest = stations.Where(s => s.Reachable).OrderBy(s => s.PriceCents).ThenBy(s => s.CostDollars).First();
-                                <div class="tiles">
-                                    @Tile(plan.ReferenceOnTheWay ? L["NoDetour"] : L["SmallestDetour"], reference.Id, reference.Brand, reference.PriceCents,
-                                        false, TripSub(reference))
-                                    @Tile(L["BestValue"], pick.Id, pick.Brand, pick.PriceCents, true, TripSub(pick))
-                                    @if (third is not null)
-                                    {
-                                        @Tile(L["BiggestSaving"], third.Id, third.Brand, third.PriceCents, false, TripSub(third),
-                                            third.OverDetourLimit ? L["OverMinutes", query.MaxDetourMinutes] : L["Saves", Money(third.SavesDollars)])
-                                    }
-                                    else
-                                    {
-                                        @Tile(L["Cheapest"], cheapest.Id, cheapest.Brand, cheapest.PriceCents, false,
-                                            cheapest.Id == pick.Id ? L["SameAsBest"] : TripSub(cheapest))
-                                    }
-                                </div>
-                            }
+                        @if (pick is not null && reference is not null && stations.Count(s => s.Reachable) > 1)
+                        {
+                            var third = TripFind(plan, plan.BiggestSavingId);
+                            var cheapest = stations.Where(s => s.Reachable).OrderBy(s => s.PriceCents).ThenBy(s => s.CostDollars).First();
+                            <div class="tiles" role="group" aria-label="@L["StationShownLabel"]">
+                                @Tile(plan.ReferenceOnTheWay ? L["NoDetour"] : L["SmallestDetour"], reference.Id, reference.Brand, reference.PriceCents,
+                                    reference.Id == shown?.Id, TripSub(reference))
+                                @Tile(L["BestValue"], pick.Id, pick.Brand, pick.PriceCents, pick.Id == shown?.Id, TripSub(pick))
+                                @if (third is not null)
+                                {
+                                    @Tile(L["BiggestSaving"], third.Id, third.Brand, third.PriceCents, third.Id == shown?.Id, TripSub(third),
+                                        third.OverDetourLimit ? L["OverMinutes", query.MaxDetourMinutes] : L["Saves", Money(third.SavesDollars)])
+                                }
+                                else
+                                {
+                                    @Tile(L["Cheapest"], cheapest.Id, cheapest.Brand, cheapest.PriceCents, cheapest.Id == shown?.Id,
+                                        cheapest.Id == pick.Id ? L["SameAsBest"] : TripSub(cheapest))
+                                }
+                            </div>
                         }
 
                         @if (stations.Count > 0)
@@ -220,8 +221,10 @@
                                     @foreach (var station in stations)
                                     {
                                         var (statusClass, statusText) = Status(station, reference, query);
+                                        var on = station.Id == shown?.Id;
                                         <li @key="station.Id" class="@(station.Reachable ? null : "is-out")">
-                                            <button type="button" class="row" @onclick="() => OnOpenStation.InvokeAsync(station.Id)">
+                                            <button type="button" class="row @(on ? "is-on" : null)" aria-pressed="@(on ? "true" : "false")"
+                                                    @onclick="() => SelectAsync(station.Id)">
                                                 <span class="km">
                                                     @L["KmAlong", Math.Round(station.KmAlong)]
                                                     <small>@(IsOnTheWay(station) ? L["NoDetour"] : L["DetourMinutesShort", Math.Round(station.DetourMin)])</small>
@@ -255,10 +258,10 @@
                             @CarFooter(query.FillLitres, query.LitresPer100Km, query.CostcoMember)
                             @(" ")
                             <button type="button" class="link" @onclick="OnOpenCars">@(Cars.IsTypical ? L["SetUpYourCar"] : L["Change"])</button>
-                            @if (pick is not null)
+                            @if (shown is not null)
                             {
                                 @(" ")
-                                @L["GoViaNote", NameOf(pick.Brand)]
+                                @L["GoViaNote", NameOf(shown.Brand)]
                             }
                             @if (SavedPlaceOf(destination) is { } saved)
                             {
@@ -371,80 +374,68 @@
                     {
                         var reference = Find(result, result.ReferenceId) ?? pick;
                         var cheapest = Find(result, result.CheapestId) ?? pick;
+                        var shown = Best.Shown ?? pick;
+                        var (saves, tone, why) = NearTexts(shown, result, query);
                         @if (result.RadiusKm is null)
                         {
                             <p class="message">@L["BestNothingWithin", WideRadiusKm]</p>
                         }
 
-                        <section class="hero" aria-labelledby="ess-best-pick">
+                        <section class="hero" aria-labelledby="ess-best-pick" @ref="_hero">
                             <div class="top">
-                                @Logo(pick.Brand, "logo")
+                                @Logo(shown.Brand, "logo")
                                 <div class="who">
                                     <h3 id="ess-best-pick">
-                                        @NameOf(pick.Brand)
-                                        @if (pick.MembersOnly)
+                                        @NameOf(shown.Brand)
+                                        @if (shown.MembersOnly)
                                         {
                                             <span class="tag">@L["Members"]</span>
                                         }
                                     </h3>
-                                    <p>@pick.Address · @Away(pick)</p>
+                                    <p>@shown.Address · @Away(shown)</p>
                                 </div>
-                                <span class="big">@Price(pick.PriceCents)<small> ¢/L</small></span>
+                                <span class="big">@Price(shown.PriceCents)<small> ¢/L</small></span>
                             </div>
-                            @if (pick.Id != result.ReferenceId)
+                            @if (saves is not null)
                             {
-                                <p class="saves">@L["Saves", Money(pick.SavesDollars)]</p>
-                                <p class="why">
-                                    @L["BestWhy", Litres(query.FillLitres), Distance(2 * pick.DistanceKm), NameOf(reference.Brand), Distance(reference.DistanceKm), Price(reference.PriceCents)]
-                                </p>
+                                <p class="saves @tone">@saves</p>
                             }
-                            else if (result.RadiusKm is not null)
+                            @if (why is not null)
                             {
-                                var blocked = result.Stations.FirstOrDefault(s => s.Id != pick.Id && s.SavesDollars >= SmallestSaving);
-                                @if (blocked is not null)
-                                {
-                                    <p class="saves is-neutral">@L["ClosestStation"]</p>
-                                    <p class="why">@(blocked.OverDetourLimit ? L["BestWhyDetour", query.MaxDetourMinutes] : L["BestWhyUncertain"])</p>
-                                }
-                                else if (result.Stations.Count == 1)
-                                {
-                                    <p class="why">@L["BestWhyOnly", query.Fuel]</p>
-                                }
-                                else
-                                {
-                                    <p class="saves is-neutral">@L["AboutTheSame"]</p>
-                                    <p class="why">@L["BestWhyNothingSaves", Money(SmallestSaving), Litres(query.FillLitres)]</p>
-                                }
+                                <p class="why">@why</p>
                             }
                             <div class="actions">
-                                <a class="go" target="_blank" rel="noopener" href="@GoogleMaps.Directions(pick.Latitude, pick.Longitude, navigate: true)">
+                                <a class="go" target="_blank" rel="noopener" href="@GoogleMaps.Directions(shown.Latitude, shown.Longitude, navigate: true)">
                                     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"
                                          stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Directions" /></svg>
                                     @L["GoGoogleMaps"]
                                 </a>
-                                <button type="button" class="secondary" @onclick="() => OnOpenStation.InvokeAsync(pick.Id)">@L["Details"]</button>
+                                <button type="button" class="secondary" @onclick="() => OnOpenStation.InvokeAsync(shown.Id)">@L["Details"]</button>
                             </div>
                         </section>
 
                         @if (result.Stations.Count > 1)
                         {
-                            <div class="tiles">
-                                @Tile(L["Closest"], reference.Id, reference.Brand, reference.PriceCents, false, NearSub(reference))
-                                @Tile(L["BestValue"], pick.Id, pick.Brand, pick.PriceCents, true, pick.Id == reference.Id ? L["SameAsClosest"] : NearSub(pick))
-                                @Tile(L["Cheapest"], cheapest.Id, cheapest.Brand, cheapest.PriceCents, false,
+                            <div class="tiles" role="group" aria-label="@L["StationShownLabel"]">
+                                @Tile(L["Closest"], reference.Id, reference.Brand, reference.PriceCents, reference.Id == shown.Id, NearSub(reference))
+                                @Tile(L["BestValue"], pick.Id, pick.Brand, pick.PriceCents, pick.Id == shown.Id,
+                                    pick.Id == reference.Id ? L["SameAsClosest"] : NearSub(pick))
+                                @Tile(L["Cheapest"], cheapest.Id, cheapest.Brand, cheapest.PriceCents, cheapest.Id == shown.Id,
                                     cheapest.Id == pick.Id ? L["SameAsBest"] : NearSub(cheapest))
                             </div>
                         }
 
-                        var others = Others(result, pick);
+                        var others = StationChoice.Others(result, pick);
                         @if (others.Count > 0)
                         {
                             <h3 class="others-title" id="ess-best-others">@L["AlsoWorthIt"]</h3>
                             <ul class="others" aria-labelledby="ess-best-others">
                                 @foreach (var station in others)
                                 {
+                                    var on = station.Id == shown.Id;
                                     <li @key="station.Id">
-                                        <button type="button" class="row" @onclick="() => OnOpenStation.InvokeAsync(station.Id)">
+                                        <button type="button" class="row @(on ? "is-on" : null)" aria-pressed="@(on ? "true" : "false")"
+                                                @onclick="() => SelectAsync(station.Id)">
                                             @Logo(station.Brand, "logo small")
                                             <span class="name">
                                                 @NameOf(station.Brand)
@@ -496,15 +487,9 @@
 </Pane>
 
 @code {
-    /// <summary>Savings under this are "about the same" (Essence.Ranking's NearYou.SmallestSaving).</summary>
-    private const decimal SmallestSaving = 0.25m;
-
     /// <summary>The API's search radius (Essence.Ranking's SearchArea): the default, and the widest.</summary>
     private const double DefaultRadiusKm = 10;
     private const double WideRadiusKm = 25;
-
-    /// <summary>"Also worth it" shows at most this many stations.</summary>
-    private const int MaxOthers = 3;
 
     /// <summary>A stop that adds at most this is on the way (Essence.Ranking's OnTheWay.NoDetourKm and NoDetourMinutes).</summary>
     private const double NoDetourKm = 1.0;
@@ -517,6 +502,18 @@
 
     /// <summary>Every station on the way is listed, not only the pick and the tiles.</summary>
     private bool _allStations;
+
+    /// <summary>The mode last shown: Best on the way, or Best near you; null before the first.</summary>
+    private bool? _shownTrip;
+
+    private Pane? _pane;
+    private ElementReference _hero;
+
+    /// <summary>A station was just chosen: on phones, the pane scrolls up to the hero, which shows it.</summary>
+    private bool _revealHero;
+
+    /// <summary>What was said of the station chosen last, said again only while it's the one shown.</summary>
+    private (long Id, string Text)? _announcement;
 
     /// <summary>Best on the way instead of Best near you: the trip <see cref="TripState"/> has open.</summary>
     [Parameter]
@@ -533,8 +530,13 @@
     [Parameter]
     public EventCallback OnClose { get; set; }
 
+    /// <summary>The details of the station the hero shows.</summary>
     [Parameter]
     public EventCallback<long> OnOpenStation { get; set; }
+
+    /// <summary>A tile or row put a station on top: the map shows where it is.</summary>
+    [Parameter]
+    public EventCallback<GeoPoint> OnStationSelected { get; set; }
 
     [Parameter]
     public EventCallback OnOpenCars { get; set; }
@@ -568,6 +570,9 @@
     public EventCallback OnDropPinAtCenter { get; set; }
 
     private string CarName => Cars.IsTypical || string.IsNullOrWhiteSpace(Cars.Active.Name) ? L["MyCar"] : Cars.Active.Name;
+
+    /// <summary>The station the hero shows.</summary>
+    private long? ShownId => Trip ? Trips.Shown?.Id : Best.Shown?.Id;
 
     /// <summary>
     /// Trips can't be planned now: the routing data is being prepared, the routing server answered 503, or Best near you
@@ -603,10 +608,126 @@
 
     protected override void OnParametersSet()
     {
-        if (!Trip)
+        if (Trip == _shownTrip)
         {
-            (_editingRange, _allStations) = (false, false);
+            return;
         }
+
+        // Back from a station's details too: the list is open when the station chosen is in it rather than the pick.
+        _shownTrip = Trip;
+        _editingRange = false;
+        _allStations = Trip && Trips.SelectedId is not null;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_revealHero && _pane is not null)
+        {
+            _revealHero = false;
+            await _pane.RevealAsync(_hero);
+        }
+    }
+
+    /// <summary>
+    /// A tile or row: its station goes on top, the map shows where it is, and a screen reader hears which it is and what it
+    /// saves. The station already shown stays.
+    /// </summary>
+    private async Task SelectAsync(long id)
+    {
+        if (id == ShownId)
+        {
+            return;
+        }
+
+        GeoPoint point;
+        string text;
+        if (Trip)
+        {
+            await Trips.SelectAsync(id);
+            if (Trips.Shown is not { } station || Trips.Plan is not { } plan || Trips.PlanQuery is not { } query)
+            {
+                return;
+            }
+
+            point = new GeoPoint(station.Latitude, station.Longitude);
+            text = Announcement(NameOf(station.Brand), TripTexts(station, plan, query).Saves);
+        }
+        else
+        {
+            Best.Select(id);
+            if (Best.Shown is not { } station || Best.Result is not { } result || Best.ResultQuery is not { } query)
+            {
+                return;
+            }
+
+            point = new GeoPoint(station.Latitude, station.Longitude);
+            text = Announcement(NameOf(station.Brand), NearTexts(station, result, query).Saves);
+        }
+
+        _announcement = (id, text);
+        _revealHero = true;
+        await OnStationSelected.InvokeAsync(point);
+    }
+
+    /// <summary>"Shown above: Costco. Saves $3.10."</summary>
+    private string Announcement(string name, string? saves) => saves is null ? L["ShownStation", name] : $"{L["ShownStation", name]} {saves}.";
+
+    /// <summary>What the hero says of a station near you, by how it compares (<see cref="HeroCase"/>): its headline, the headline's tone, and why.</summary>
+    private (string? Saves, string? Tone, string? Why) NearTexts(RankedStation station, BestNearby result, BestQuery query)
+    {
+        var pick = result.Pick ?? station;
+        var reference = Find(result, result.ReferenceId) ?? pick;
+        string Compared() =>
+            L["BestWhy", Litres(query.FillLitres), Distance(2 * station.DistanceKm), NameOf(reference.Brand), Distance(reference.DistanceKm),
+                Price(reference.PriceCents)];
+        return StationChoice.CaseOf(station, result) switch
+        {
+            HeroCase.Saves => (L["Saves", Money(station.SavesDollars)], null, Compared()),
+            HeroCase.SavesOverDetour => (L["SavesOverDetour", Money(station.SavesDollars), query.MaxDetourMinutes], "is-blocked",
+                $"{Compared()} {L["BestWhyPastDetour", query.MaxDetourMinutes]}"),
+            HeroCase.SavesUncertain => (L["SavesUncertain", Money(station.SavesDollars)], "is-blocked", $"{Compared()} {L["BestWhyNotSure"]}"),
+            HeroCase.AboutTheSame => (L["AboutTheSame"], "is-neutral", Compared()),
+            HeroCase.CostsMore => (L["HeroCostsMore", Money(-station.SavesDollars)], "is-neutral", Compared()),
+            HeroCase.Reference => (L["ClosestStation"], "is-neutral",
+                L["WhyReference", NameOf(pick.Brand), Money(pick.SavesDollars), Litres(query.FillLitres)]),
+            HeroCase.PickIsReferenceDetour => (L["ClosestStation"], "is-neutral", L["BestWhyDetour", query.MaxDetourMinutes]),
+            HeroCase.PickIsReferenceUncertain => (L["ClosestStation"], "is-neutral", L["BestWhyUncertain"]),
+            HeroCase.PickIsReferenceOnly => (null, null, L["BestWhyOnly", query.Fuel]),
+            HeroCase.PickIsReferenceNothingSaves => (L["AboutTheSame"], "is-neutral",
+                L["BestWhyNothingSaves", Money(StationChoice.SmallestSaving), Litres(query.FillLitres)]),
+            _ => (null, null, null),
+        };
+    }
+
+    /// <summary>What the hero says of a station on the way, by how it compares (<see cref="HeroCase"/>): its headline, the headline's tone, and why.</summary>
+    private (string? Saves, string? Tone, string? Why) TripTexts(TripStation station, TripPlan plan, TripQuery query)
+    {
+        var pick = TripFind(plan, plan.PickId);
+        var reference = TripFind(plan, plan.ReferenceId);
+        string referenceIs = plan.ReferenceOnTheWay ? L["OnYourWay"] : L["SmallestDetour"];
+        string? Compared() =>
+            reference is null
+                ? null
+                : (string)L[plan.ReferenceOnTheWay ? "TripWhy" : "TripWhySmallestDetour", Litres(query.FillLitres), NameOf(reference.Brand),
+                    Math.Round(reference.KmAlong), Price(reference.PriceCents)];
+        return StationChoice.CaseOf(station, plan) switch
+        {
+            // What the range counts on: all of it with low fuel (the stations within it are offered), else less the spare.
+            HeroCase.PastRange => (L["PastYourRange"], "is-blocked",
+                query.RangeKm is { } rangeKm ? (string)L["TripWhyPastRange", Distance(station.DistanceKm), rangeKm - (plan.LowFuel ? 0 : query.SpareKm)] : null),
+            HeroCase.Saves => (L["Saves", Money(station.SavesDollars)], null, Compared()),
+            HeroCase.SavesOverDetour => (L["SavesOverDetour", Money(station.SavesDollars), query.MaxDetourMinutes], "is-blocked",
+                $"{Compared()} {L["TripWhyPastDetour", query.MaxDetourMinutes]}".Trim()),
+            HeroCase.AboutTheSame => (L["AboutTheSame"], "is-neutral", Compared()),
+            HeroCase.CostsMore => (L["HeroCostsMore", Money(-station.SavesDollars)], "is-neutral", Compared()),
+            HeroCase.Reference => (referenceIs, "is-neutral",
+                pick is null ? null : (string)L["WhyReference", NameOf(pick.Brand), Money(pick.SavesDollars), Litres(query.FillLitres)]),
+            HeroCase.PickIsReferenceDetour => (referenceIs, "is-neutral", L["TripWhyDetour", query.MaxDetourMinutes]),
+            HeroCase.PickIsReferenceOnly => (referenceIs, "is-neutral", L["TripWhyOnly", query.Fuel]),
+            HeroCase.PickIsReferenceNothingSaves => (referenceIs, "is-neutral",
+                L["TripWhyNothingSaves", Money(StationChoice.SmallestSaving), Litres(query.FillLitres)]),
+            _ => (null, null, null),
+        };
     }
 
     /// <summary>Home or Work: a trip there once it's saved, until then the address search to set it.</summary>
@@ -619,19 +740,6 @@
                  stroke-linecap="round" stroke-linejoin="round"><path d="@icon" /></svg>
             @label
         </button>;
-
-    /// <summary>Why the reference stays the pick: a station that saves more is past the longest detour, it's the only one, or none saves enough.</summary>
-    private string PickIsReferenceWhy(TripPlan plan, TripQuery query)
-    {
-        if (plan.Stations.Any(s => s.Id != plan.PickId && s.Reachable && s.SavesDollars >= SmallestSaving))
-        {
-            return L["TripWhyDetour", query.MaxDetourMinutes];
-        }
-
-        return plan.Stations.Count(s => s.Reachable) == 1
-            ? L["TripWhyOnly", query.Fuel]
-            : L["TripWhyNothingSaves", Money(SmallestSaving), Litres(query.FillLitres)];
-    }
 
     /// <summary>How a station on the way compares: past the range, the reference, what it saves, or what it costs more.</summary>
     private (string? Class, string Text) Status(TripStation station, TripStation? reference, TripQuery query)
@@ -646,7 +754,7 @@
             return ("is-neutral", Trips.Plan?.ReferenceOnTheWay == true ? L["NoDetour"] : L["SmallestDetour"]);
         }
 
-        if (station.SavesDollars >= SmallestSaving)
+        if (station.SavesDollars >= StationChoice.SmallestSaving)
         {
             return station.OverDetourLimit
                 ? ("is-blocked", L["SavesOverDetour", Money(station.SavesDollars), query.MaxDetourMinutes])
@@ -720,23 +828,12 @@
 
     private static TripStation? TripFind(TripPlan plan, long? id) => id is null ? null : plan.Stations.FirstOrDefault(s => s.Id == id);
 
-    /// <summary>
-    /// Other stations that save, besides the pick: those that could be picked first, then those past the longest detour or
-    /// whose saving is uncertain, each lowest cost first.
-    /// </summary>
-    private static List<RankedStation> Others(BestNearby result, RankedStation pick) =>
-        result.Stations
-            .Where(s => s.Id != pick.Id && s.SavesDollars >= SmallestSaving)
-            .OrderBy(s => s.OverDetourLimit || s.SavingUncertain)
-            .ThenBy(s => s.CostDollars)
-            .Take(MaxOthers)
-            .ToList();
-
     private static RankedStation? Find(BestNearby result, long? id) => result.Stations.FirstOrDefault(s => s.Id == id);
 
+    /// <summary>A tile: it puts its station on top, and it's pressed while that station is there.</summary>
     /// <param name="note">A last line, for what makes the station stand out: what it saves, or that it's past the longest detour.</param>
-    private RenderFragment Tile(string label, long id, string? brand, decimal priceCents, bool highlighted, string sub, string? note = null) =>
-        @<button type="button" class="tile @(highlighted ? "is-on" : null)" @onclick="() => OnOpenStation.InvokeAsync(id)">
+    private RenderFragment Tile(string label, long id, string? brand, decimal priceCents, bool on, string sub, string? note = null) =>
+        @<button type="button" class="tile @(on ? "is-on" : null)" aria-pressed="@(on ? "true" : "false")" @onclick="() => SelectAsync(id)">
             <span class="label">@label</span>
             <span class="name">@($"{NameOf(brand)} {Price(priceCents)}")</span>
             <span class="sub">@sub</span>
