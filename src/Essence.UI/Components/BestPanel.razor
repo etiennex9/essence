@@ -671,6 +671,10 @@
         Services.Changed += OnChanged;
         await Cars.LoadAsync();
         await Places.LoadAsync();
+
+        // A tab restored or reloaded on a trip opens here before MapPage reads the trip: its station chosen is in by
+        // OnParametersSetAsync.
+        await Trips.LoadAsync();
     }
 
     protected override async Task OnParametersSetAsync()
@@ -680,7 +684,8 @@
             return;
         }
 
-        // Back from a station's details too: the list is open when the station chosen is in it rather than the pick.
+        // Back from a station's details, or in a restored tab, too: the list is open when the station chosen is in it rather
+        // than the pick.
         _shownTrip = Trip;
         _editingRange = false;
         _allStations = Trip && Trips.SelectedId is not null;

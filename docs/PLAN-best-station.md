@@ -526,7 +526,8 @@ the footnotes in an ⓘ, Refresh as an icon, and the car as a real menu.
   value, saves $3.10 on 40 L."), then by saving: at least $0.25 (past the longest detour or not sure by road in amber),
   within $0.25 "About the same", else "Costs $0.40 more". A trip with nothing reachable can show a station past the
   range. Details is the only way to the details, and doesn't fly the map (`OpenStationFromBest`): the station is only
-  panned out from under them. Back from them, a trip's list is open when the station chosen isn't the pick.
+  panned out from under them. Back from them, or in a restored tab, a trip's list is open when the station chosen isn't
+  the pick.
 - **The map** rings the station chosen (`is-selected`, never dimmed, on top of the pick's and the closest's markers) and
   pans it out from under the pane at once (`ensureVisible` without waiting for the pane); it isn't fitted again. On
   phones the sheet scrolls up to the hero (`reveal`, smooth unless motion is reduced); the side panel doesn't.
