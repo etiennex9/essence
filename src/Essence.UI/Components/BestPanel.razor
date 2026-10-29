@@ -90,7 +90,7 @@
     </Actions>
     <ChildContent>
         @* Says which station a tile or row put on top, and what it saves: the hero changing isn't announced. *@
-        <p class="announce" role="status">@(_announcement is { } said && said.Id == ShownId ? said.Text : null)</p>
+        <p class="announce" role="status">@Announced</p>
         @if (Trip)
         {
             @* ---- Best on the way ---- *@
@@ -547,8 +547,8 @@
     /// <summary>A station was just chosen: on phones, the pane scrolls up to the hero, which shows it.</summary>
     private bool _revealHero;
 
-    /// <summary>What was said of the station chosen last, said again only while it's the one shown.</summary>
-    private (long Id, string Text)? _announcement;
+    /// <summary>What was said of the station chosen last, and the answer (<see cref="Answer"/>) it was chosen in.</summary>
+    private (long Id, object Answer, string Text)? _announcement;
 
     /// <summary>The header's popups: the car menu, and the info bubble.</summary>
     private enum Popup { None, Car, Info }
@@ -628,6 +628,16 @@
     /// <summary>The station the hero shows.</summary>
     private long? ShownId => Trip ? Trips.Shown?.Id : Best.Shown?.Id;
 
+    /// <summary>The answer the hero's station is from: the trip's plan, or Best near you's.</summary>
+    private object? Answer => Trip ? Trips.Plan : Best.Result;
+
+    /// <summary>
+    /// The status line: what was said of the station chosen last, while it's shown from the answer it was chosen in. Another
+    /// answer that shows it (another car, a trip whose pick it is) doesn't say it again with the old saving.
+    /// </summary>
+    private string? Announced =>
+        _announcement is { } said && said.Id == ShownId && ReferenceEquals(said.Answer, Answer) ? said.Text : null;
+
     /// <summary>The trip is being planned again, or the location to plan it from is being found: the ⟳ spins.</summary>
     private bool Planning => Trips.Loading || Locating;
 
@@ -674,6 +684,7 @@
         _shownTrip = Trip;
         _editingRange = false;
         _allStations = Trip && Trips.SelectedId is not null;
+        _announcement = null;
         await ClosePopupAsync(restoreFocus: false);
     }
 
@@ -829,6 +840,7 @@
         }
 
         GeoPoint point;
+        object answer;
         string text;
         if (Trip)
         {
@@ -838,7 +850,7 @@
                 return;
             }
 
-            point = new GeoPoint(station.Latitude, station.Longitude);
+            (point, answer) = (new GeoPoint(station.Latitude, station.Longitude), plan);
             text = Announcement(NameOf(station.Brand), TripTexts(station, plan, query).Saves);
         }
         else
@@ -849,11 +861,11 @@
                 return;
             }
 
-            point = new GeoPoint(station.Latitude, station.Longitude);
+            (point, answer) = (new GeoPoint(station.Latitude, station.Longitude), result);
             text = Announcement(NameOf(station.Brand), NearTexts(station, result, query).Saves);
         }
 
-        _announcement = (id, text);
+        _announcement = (id, answer, text);
         _revealHero = true;
         await OnStationSelected.InvokeAsync(point);
     }
