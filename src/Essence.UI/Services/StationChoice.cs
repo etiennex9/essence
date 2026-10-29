@@ -129,7 +129,10 @@ public static class StationChoice
         return BySaving(station.SavesDollars, station.OverDetourLimit, station.SavingUncertain);
     }
 
-    /// <summary>How a station on the way compares: past the range, the pick (and why it's the reference, when it is), the reference, or by its saving.</summary>
+    /// <summary>
+    /// How a station on the way compares: past the range, the pick (and why it's the reference, when it is), the reference,
+    /// or by its saving.
+    /// </summary>
     public static HeroCase CaseOf(TripStation station, TripPlan plan)
     {
         if (!station.Reachable)

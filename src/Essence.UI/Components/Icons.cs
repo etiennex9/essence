@@ -1,6 +1,6 @@
 namespace Essence.UI.Components;
 
-/// <summary>Path data (24×24 view box) of icons named for what they show: those drawn in more than one component, and the long ones.</summary>
+/// <summary>Path data (24×24 view box) of the icons drawn in more than one component, and of the long ones.</summary>
 internal static class Icons
 {
     public const string Star = "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z";

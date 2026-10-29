@@ -706,7 +706,9 @@
     }
 
     /// <summary>Opens a popup, closing the other one; asked for again, it closes.</summary>
-    /// <param name="focus">Where the focus goes in the car menu (<see cref="FocusChecked"/>, <see cref="FocusLast"/>); null leaves it on the button.</param>
+    /// <param name="focus">
+    /// Where the focus goes in the car menu (<see cref="FocusChecked"/>, <see cref="FocusLast"/>); null leaves it on the button.
+    /// </param>
     private async Task TogglePopupAsync(Popup popup, string? focus)
     {
         var open = _popup;
@@ -857,9 +859,10 @@
     }
 
     /// <summary>"Shown above: Costco. Saves $3.10."</summary>
-    private string Announcement(string name, string? saves) => saves is null ? L["ShownStation", name] : $"{L["ShownStation", name]} {saves}.";
+    private string Announcement(string name, string? saves) =>
+        saves is null ? L["ShownStation", name] : $"{L["ShownStation", name]} {saves}.";
 
-    /// <summary>What the hero says of a station near you, by how it compares (<see cref="HeroCase"/>): its headline, the headline's tone, and why.</summary>
+    /// <summary>What the hero says of a station near you, by how it compares (<see cref="HeroCase"/>): a headline, its tone, and why.</summary>
     private (string? Saves, string? Tone, string? Why) NearTexts(RankedStation station, BestNearby result, BestQuery query)
     {
         var pick = result.Pick ?? station;
@@ -872,7 +875,8 @@
             HeroCase.Saves => (L["Saves", Money(station.SavesDollars)], null, Compared()),
             HeroCase.SavesOverDetour => (L["SavesOverDetour", Money(station.SavesDollars), query.MaxDetourMinutes], "is-blocked",
                 $"{Compared()} {L["BestWhyPastDetour", query.MaxDetourMinutes]}"),
-            HeroCase.SavesUncertain => (L["SavesUncertain", Money(station.SavesDollars)], "is-blocked", $"{Compared()} {L["BestWhyNotSure"]}"),
+            HeroCase.SavesUncertain => (L["SavesUncertain", Money(station.SavesDollars)], "is-blocked",
+                $"{Compared()} {L["BestWhyNotSure"]}"),
             HeroCase.AboutTheSame => (L["AboutTheSame"], "is-neutral", Compared()),
             HeroCase.CostsMore => (L["HeroCostsMore", Money(-station.SavesDollars)], "is-neutral", Compared()),
             HeroCase.Reference => (L["ClosestStation"], "is-neutral",
@@ -886,7 +890,7 @@
         };
     }
 
-    /// <summary>What the hero says of a station on the way, by how it compares (<see cref="HeroCase"/>): its headline, the headline's tone, and why.</summary>
+    /// <summary>What the hero says of a station on the way, by how it compares (<see cref="HeroCase"/>): a headline, its tone, and why.</summary>
     private (string? Saves, string? Tone, string? Why) TripTexts(TripStation station, TripPlan plan, TripQuery query)
     {
         var pick = TripFind(plan, plan.PickId);
@@ -901,7 +905,9 @@
         {
             // What the range counts on: all of it with low fuel (the stations within it are offered), else less the spare.
             HeroCase.PastRange => (L["PastYourRange"], "is-blocked",
-                query.RangeKm is { } rangeKm ? (string)L["TripWhyPastRange", Distance(station.DistanceKm), rangeKm - (plan.LowFuel ? 0 : query.SpareKm)] : null),
+                query.RangeKm is { } rangeKm
+                    ? (string)L["TripWhyPastRange", Distance(station.DistanceKm), rangeKm - (plan.LowFuel ? 0 : query.SpareKm)]
+                    : null),
             HeroCase.Saves => (L["Saves", Money(station.SavesDollars)], null, Compared()),
             HeroCase.SavesOverDetour => (L["SavesOverDetour", Money(station.SavesDollars), query.MaxDetourMinutes], "is-blocked",
                 $"{Compared()} {L["TripWhyPastDetour", query.MaxDetourMinutes]}".Trim()),

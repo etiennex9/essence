@@ -121,8 +121,9 @@
     {
         <BestPanel Trip="@(View == TripView)" Locating="_locating" LocationProblem="_locationProblem"
                    OnClose="() => View == TripView ? CloseTripAsync() : CloseListAsync()" OnOpenStation="OpenStationFromBest"
-                   OnStationSelected="ShowSelectedAsync" OnOpenCars="ShowCars" OnLocate="() => LocateAsync(moveMap: false, fallBackToMontreal: false)"
-                   OnUseMapCenter="UseMapCenterAsync" OnStartTrip="StartTripAsync" OnEndTrip="EndTripAsync" OnRefreshTrip="RefreshTripAsync"
+                   OnStationSelected="ShowSelectedAsync" OnOpenCars="ShowCars"
+                   OnLocate="() => LocateAsync(moveMap: false, fallBackToMontreal: false)" OnUseMapCenter="UseMapCenterAsync"
+                   OnStartTrip="StartTripAsync" OnEndTrip="EndTripAsync" OnRefreshTrip="RefreshTripAsync"
                    OnDropPinAtCenter="DropPinAtCenterAsync" OnSearchPlaces="ShowPlaces" />
     }
     else if (View == CarsView)
@@ -747,7 +748,8 @@
         if (_mapReady)
         {
             await _map!.ReloadAsync(
-                new ReloadState(_fuel, _stationPushed, _listPushed, _carsPushed, _tripPushed, _carsOverTrip, _placesPushed, Best.SelectedId),
+                new ReloadState(
+                    _fuel, _stationPushed, _listPushed, _carsPushed, _tripPushed, _carsOverTrip, _placesPushed, Best.SelectedId),
                 saveView: _placed, automatic);
         }
     }
@@ -799,7 +801,9 @@
             long?[] named = [trip.PickId, trip.ReferenceId, trip.BiggestSavingId];
             return new MapEmphasis(
                 trip.PickId, trip.ReferenceId,
-                [.. trip.Stations.Where(s => named.Contains(s.Id) || (s.Reachable && s.SavesDollars >= StationChoice.SmallestSaving)).Select(s => s.Id)],
+                [.. trip.Stations
+                    .Where(s => named.Contains(s.Id) || (s.Reachable && s.SavesDollars >= StationChoice.SmallestSaving))
+                    .Select(s => s.Id)],
                 trip.ReferenceOnTheWay ? L["NoDetour"] : L["SmallestDetour"], trip.ReferenceOnTheWay ? "MarkerNoDetour" : "MarkerSmallestDetour");
         }
 
