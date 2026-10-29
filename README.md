@@ -22,7 +22,7 @@ and shows them on a map of nearby stations.
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. |
 | `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM and Photon clients against stub servers; the address search's labels and filtering; Québec's boundary at its borders. |
 | `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs. |
-| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations. |
+| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the station shown in Best near you and on the way, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations. |
 | `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
 The full design and its rationale are in [docs/PLAN.md](docs/PLAN.md).

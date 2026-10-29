@@ -2,7 +2,8 @@
 
 > **Status (2026-10-25):** designed with the owner through mockups and Q&A; every decision below was confirmed by the
 > owner. Phases 1 to 3 are built (see "Phase 1 as built", "Phase 2 as built" and "Phase 3 as built" for where they
-> differ from the steps); phase 4 isn't. Work in phase order: each phase ships on its own and is usable without the next.
+> differ from the steps), with the owner's review of the pane after them ("Owner's review: choosing a station"); phase 4
+> isn't. Work in phase order: each phase ships on its own and is usable without the next.
 > To resume: tell Claude *"Implement docs/PLAN-best-station.md, phase N"*.
 
 ## Context
@@ -508,6 +509,37 @@ the YAML; it replaces phase 2's and phase 3's build-on-the-host steps and `deplo
   them), a build that can't download (503 and the pin's card say it failed and when it tries again), and the search
   with geocoding stopped (one search, one /services) or going from building to ready (searched again once).
 - **Not checked:** on TrueNAS itself (the volumes, the app's state during a first build).
+
+## Owner's review: choosing a station
+The tiles and rows opened a station's details, which replaced the pane: the hero and its Google Maps hand-off were lost
+while comparing. The owner asked for them to choose the station the hero shows instead, keeping the route in view, with
+the footnotes in an ⓘ, Refresh as an icon, and the car as a real menu.
+- **Choosing:** the tiles (Closest, Best value, Cheapest; the trip's equivalents), "Also worth it" and every station on
+  the way are `aria-pressed` toggles (one station can sit in two tiles, and tiles and rows are in different containers),
+  and a hidden status line says "Shown above: Costco. Saves $3.10." The pick is shown by default. `StationChoice` (pure,
+  tested) keeps a choice while the same question is answered again and the station is still listed; another fuel, car,
+  start or destination, or a failure, shows the pick. Near you, the choice lasts while the pane is open (details, My
+  cars or the search on top included) and through a release reload (`ReloadState.BestSelectedId`); on a trip, as long as
+  the trip, in the tab's storage (`StoredTrip.SelectedId`; an older trip reads as the pick).
+- **The hero** shows the station chosen, Go and Go via included, and explains it by `HeroCase`: past the range first, then
+  the pick (and why it's the reference, as before), the reference ("Savings are counted against it: Costco, the best
+  value, saves $3.10 on 40 L."), then by saving: at least $0.25 (past the longest detour or not sure by road in amber),
+  within $0.25 "About the same", else "Costs $0.40 more". A trip with nothing reachable can show a station past the
+  range. Details is the only way to the details, and doesn't fly the map (`OpenStationFromBest`): the station is only
+  panned out from under them. Back from them, a trip's list is open when the station chosen isn't the pick.
+- **The map** rings the station chosen (`is-selected`, never dimmed, on top of the pick's and the closest's markers) and
+  pans it out from under the pane at once (`ensureVisible` without waiting for the pane); it isn't fitted again. On
+  phones the sheet scrolls up to the hero (`reveal`, smooth unless motion is reduced); the side panel doesn't.
+- **The header:** the car is a menu button (the cars, the one driven checked, then Manage cars…; with none set up, "My
+  car (typical)" and Set up your car…), and ⓘ a toggletip whose bubble (in a `role="status"` holder) says what the
+  footnotes did: the radius, the car, estimated distances, when the trip was planned, and Forget this place for a saved
+  destination. Google Maps' "opens with X as a stop" went with them. The trip bar's ⟳ (Plan again from here) spins while
+  the trip is planned or the location found, dimmed instead under reduced motion.
+- **`essencePopup.js`** serves both: it places the popup (above the header when a short sheet leaves no room below,
+  moved in from the left edge), moves the menu's focus (arrows, Home, End, wrapping; Tab moves on), and closes it on
+  Escape, a tap outside or the focus leaving. It listens on the window in the capture phase, so Escape and a tap on the
+  map close only the popup: the click a tap outside ends with is dropped, so a tap on another control only closes it too.
+  The sheet doesn't drag from a popup.
 
 ## Phase 4 (optional): fuel level from the car (OBD2)
 **Before starting:** the owner tests both cars with an OBDLink CX in a terminal app:
