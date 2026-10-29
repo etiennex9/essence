@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json.Nodes;
 using Essence.UI.Services;
 using Microsoft.Extensions.Time.Testing;
 
@@ -131,6 +132,29 @@ public class TripStateTests
         Assert.Single(_requests);
         Assert.Equal(4, restored.SelectedId);
         Assert.Equal(4, restored.Shown!.Id);
+    }
+
+    [Fact]
+    public async Task A_trip_stored_before_stations_could_be_chosen_shows_the_pick()
+    {
+        _json = StationsJson;
+        var trip = NewTrip();
+        await trip.StartAsync(Montreal, Quebec);
+        await trip.SelectAsync(5);
+
+        // As the version before stored it: no station chosen.
+        var stored = JsonNode.Parse((await _session.GetAsync(TripState.StorageKey))!)!.AsObject();
+        Assert.True(stored.Remove("selectedId"));
+        await _session.SetAsync(TripState.StorageKey, stored.ToJsonString());
+
+        var restored = NewTrip();
+        await restored.LoadAsync();
+        await restored.SetFuelAsync(Fuels.Default);
+
+        Assert.Single(_requests);
+        Assert.True(restored.IsOpen);
+        Assert.Null(restored.SelectedId);
+        Assert.Equal(3, restored.Shown!.Id);
     }
 
     [Fact]
