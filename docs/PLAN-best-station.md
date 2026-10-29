@@ -529,8 +529,9 @@ the footnotes in an ⓘ, Refresh as an icon, and the car as a real menu.
   panned out from under them. Back from them, or in a restored tab, a trip's list is open when the station chosen isn't
   the pick.
 - **The map** rings the station chosen (`is-selected`, never dimmed, on top of the pick's and the closest's markers) and
-  pans it out from under the pane at once (`ensureVisible` without waiting for the pane); it isn't fitted again. On
-  phones the sheet scrolls up to the hero (`reveal`, smooth unless motion is reduced); the side panel doesn't.
+  pans it out from under the pane at once (`ensureVisible` without waiting for the pane); it isn't fitted again. The
+  pane scrolls up to the hero when it's scrolled past (`reveal`, smooth unless motion is reduced): the sheet on phones,
+  and the side panel under a long trip's every station.
 - **The header:** the car is a menu button (the cars, the one driven checked, then Manage cars…; with none set up, "My
   car (typical)" and Set up your car…), and ⓘ a toggletip whose bubble (in a `role="status"` holder) says what the
   footnotes did: the radius, the car, estimated distances, when the trip was planned, and Forget this place for a saved

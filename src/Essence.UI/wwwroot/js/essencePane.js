@@ -1,6 +1,6 @@
 // The bottom sheet behind Pane.razor on narrow screens. Dragging its header (or the bar above it) resizes it between its
 // default size and an expanded one, or slides it away to close it. Wide screens show a side panel, which doesn't drag.
-// On phones, the sheet's body also scrolls up to an element on request (reveal).
+// Either one's body also scrolls up to an element on request (reveal).
 
 const SNAP_MS = 200;
 const DRAG_SLOP_PX = 4; // movement before a press on the header counts as a drag
@@ -207,11 +207,12 @@ export function attachSheet(pane, dotnet) {
     };
 }
 
-// On phones, scrolls the sheet's body up to an element above what it shows (the hero, once a station far down a list is
-// chosen), smoothly unless motion is reduced. Only the body scrolls, not the page; the side panel is tall enough as it is.
+// Scrolls the pane's body up to an element above what it shows (the hero, once a station far down a list is chosen),
+// smoothly unless motion is reduced: the sheet's on phones, the side panel's under a long trip's every station. Only the
+// body scrolls, not the page.
 export function reveal(element) {
     const body = element?.closest(".body");
-    if (!body || !narrow.matches) {
+    if (!body) {
         return;
     }
 
