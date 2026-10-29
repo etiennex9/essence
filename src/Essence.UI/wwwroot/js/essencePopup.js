@@ -4,6 +4,7 @@
 // Escape and a tap before the map does (essenceMap.js), which would close the whole pane: they close only the popup.
 
 const EDGE_PX = 8; // kept from the screen's edges
+const GAP_PX = 6; // between the popup and its trigger (BestPanel.razor.css)
 const SWALLOW_MS = 1000; // a tap outside closes the popup, and the click it ends with is dropped if it comes this soon
 
 let current = null; // { trigger, panel, dotnet, menu }
@@ -13,18 +14,25 @@ function menuItems() {
     return [...current.panel.querySelectorAll('[role^="menuitem"]')];
 }
 
-// Below the trigger, or above it when there's no room below and more above (a short bottom sheet); moved in from the
-// left edge when it would go past it (it's aligned with the trigger's right edge).
+// Below the trigger, or above it when there's no room below and more above (a short bottom sheet), no taller than the
+// room on that side (--popup-room: the rest scrolls); moved in from the left edge when it would go past it (it's aligned
+// with the trigger's right edge).
 function place(trigger, panel) {
     delete panel.dataset.side;
     panel.style.removeProperty("right");
+    panel.style.removeProperty("--popup-room");
     const viewport = window.visualViewport;
+    const top = viewport ? viewport.offsetTop : 0;
     const bottom = viewport ? viewport.offsetTop + viewport.height : window.innerHeight;
     const box = trigger.getBoundingClientRect();
-    const below = bottom - box.bottom;
-    if (below < panel.offsetHeight + EDGE_PX && box.top > below) {
+    const above = box.top - top - GAP_PX - EDGE_PX;
+    const below = bottom - box.bottom - GAP_PX - EDGE_PX;
+    const flip = below < panel.offsetHeight && above > below;
+    if (flip) {
         panel.dataset.side = "above";
     }
+
+    panel.style.setProperty("--popup-room", `${Math.max(0, flip ? above : below)}px`);
 
     const left = panel.getBoundingClientRect().left;
     if (left < EDGE_PX) {

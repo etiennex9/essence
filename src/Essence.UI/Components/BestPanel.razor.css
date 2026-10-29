@@ -75,14 +75,17 @@
     color: var(--ess-text);
 }
 
-/* Under its button, its right edge on the button's; above it when there's no room below (data-side). On phones the
-   header drags the sheet and takes no text selection: not in here. */
+/* Under its button, its right edge on the button's; above it when there's no room below (data-side). No taller than the
+   room on that side (--popup-room, essencePopup.js): the rest scrolls. On phones the header drags the sheet and takes no
+   text selection: not in here. */
 .popup {
     position: absolute;
     z-index: 5;
     top: calc(100% + 6px);
     right: 0;
     box-sizing: border-box;
+    max-height: var(--popup-room, none);
+    overflow-y: auto;
     border: 0.5px solid var(--ess-border-strong);
     border-radius: 12px;
     background: var(--ess-surface);
@@ -101,9 +104,8 @@
 .menu {
     min-width: 210px;
     max-width: min(300px, calc(100vw - 24px));
-    max-height: min(60vh, 420px);
+    max-height: min(60vh, 420px, var(--popup-room, 100vh));
     padding: 6px;
-    overflow-y: auto;
     overscroll-behavior: contain;
     touch-action: pan-y;
 }

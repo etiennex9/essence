@@ -537,10 +537,10 @@ the footnotes in an ⓘ, Refresh as an icon, and the car as a real menu.
   destination. Google Maps' "opens with X as a stop" went with them. The trip bar's ⟳ (Plan again from here) spins while
   the trip is planned or the location found, dimmed instead under reduced motion.
 - **`essencePopup.js`** serves both: it places the popup (above the header when a short sheet leaves no room below,
-  moved in from the left edge), moves the menu's focus (arrows, Home, End, wrapping; Tab moves on), and closes it on
-  Escape, a tap outside or the focus leaving. It listens on the window in the capture phase, so Escape and a tap on the
-  map close only the popup: the click a tap outside ends with is dropped, so a tap on another control only closes it too.
-  The sheet doesn't drag from a popup.
+  no taller than the room there, a long menu scrolling, and moved in from the left edge), moves the menu's focus
+  (arrows, Home, End, wrapping; Tab moves on), and closes it on Escape, a tap outside or the focus leaving. It listens
+  on the window in the capture phase, so Escape and a tap on the map close only the popup: the click a tap outside ends
+  with is dropped, so a tap on another control only closes it too. The sheet doesn't drag from a popup.
 
 ## Phase 4 (optional): fuel level from the car (OBD2)
 **Before starting:** the owner tests both cars with an OBDLink CX in a terminal app:
