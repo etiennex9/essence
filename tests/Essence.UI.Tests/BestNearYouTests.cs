@@ -14,12 +14,19 @@ public class BestNearYouTests
          "referenceId":1,"closestId":1,"cheapestId":1,"stations":[],"radiusKm":10,"byRoad":false}
         """;
 
+    /// <summary>Picked 2, closest 1, cheapest 3; 4 saves under $0.25, so the pane doesn't list it.</summary>
+    private static readonly string RankedJson = $$"""
+        {"pick":{{Ranked(2, "1.20")}},"referenceId":1,"closestId":1,"cheapestId":3,
+         "stations":[{{Ranked(1, "0")}},{{Ranked(2, "1.20")}},{{Ranked(3, "0.30")}},{{Ranked(4, "0.10")}}],"radiusKm":10,"byRoad":true}
+        """;
+
     private static readonly BestOrigin Montreal = new(new GeoPoint(45.5017, -73.5673), AccuracyMeters: 20);
 
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 24, 12, 0, 0, TimeSpan.Zero));
     private readonly MemoryPreferences _preferences = new();
     private readonly List<Uri> _requests = [];
     private HttpStatusCode _status = HttpStatusCode.OK;
+    private string _json = BestJson;
     private DateTimeOffset _importedAt;
     private readonly CarProfiles _cars;
     private readonly BestNearYou _best;
@@ -135,12 +142,74 @@ public class BestNearYouTests
         Assert.Single(_requests);
     }
 
+    [Fact]
+    public async Task A_refresh_keeps_the_station_selected()
+    {
+        _json = RankedJson;
+        await _best.SetOriginAsync(Montreal);
+
+        _best.Select(3);
+        _time.Advance(TimeSpan.FromMinutes(5));
+
+        Assert.Equal(2, _requests.Count);
+        Assert.Equal(3, _best.SelectedId);
+        Assert.Equal(3, _best.Shown!.Id);
+    }
+
+    [Fact]
+    public async Task Another_car_shows_the_pick_again()
+    {
+        _json = RankedJson;
+        await _best.SetOriginAsync(Montreal);
+        _best.Select(3);
+
+        await _cars.SaveAsync(_cars.Active with { FillLitres = 50 });
+
+        Assert.Null(_best.SelectedId);
+        Assert.Equal(2, _best.Shown!.Id);
+    }
+
+    [Fact]
+    public async Task Only_a_station_the_pane_lists_can_be_selected()
+    {
+        _json = RankedJson;
+        await _best.SetOriginAsync(Montreal);
+        var changes = 0;
+        _best.Changed += () => changes++;
+
+        _best.Select(4);
+        _best.Select(99);
+        _best.Select(2);
+
+        Assert.Null(_best.SelectedId);
+        Assert.Equal(2, _best.Shown!.Id);
+        Assert.Equal(0, changes);
+
+        _best.Select(1);
+        Assert.Equal(1, _best.Shown!.Id);
+        Assert.Equal(1, changes);
+    }
+
+    [Fact]
+    public async Task The_pick_is_shown_even_when_it_isnt_among_the_stations()
+    {
+        await _best.SetOriginAsync(Montreal);
+
+        Assert.Equal(1, _best.Shown!.Id);
+    }
+
     [Theory]
     [InlineData(false, 1500.0, true)]
     [InlineData(false, 1000.0, false)]
     [InlineData(true, null, false)]
     public void Only_an_inaccurate_device_location_is_approximate(bool mapCenter, double? accuracy, bool approximate) =>
         Assert.Equal(approximate, new BestOrigin(new GeoPoint(45.5, -73.6), mapCenter, accuracy).IsApproximate);
+
+    private static string Ranked(long id, string savesDollars) => $$"""
+        {"id":{{id}},"name":null,"brand":"Shell","address":"{{id}} rue Principale","latitude":45.5,"longitude":-73.56,"priceCents":166.9,
+         "distanceKm":{{id}},"durationMin":{{2 * id}},"costDollars":66.99,"savesDollars":{{savesDollars}},"membersOnly":false,
+         "overDetourLimit":false,"savingUncertain":false}
+        """;
 
     private sealed class StubHandler(BestNearYouTests test) : HttpMessageHandler
     {
@@ -150,7 +219,7 @@ public class BestNearYouTests
             var response = new HttpResponseMessage(test._status);
             if (test._status == HttpStatusCode.OK)
             {
-                response.Content = new StringContent(BestJson, Encoding.UTF8, "application/json");
+                response.Content = new StringContent(test._json, Encoding.UTF8, "application/json");
                 response.Content.Headers.LastModified = test._importedAt;
             }
 

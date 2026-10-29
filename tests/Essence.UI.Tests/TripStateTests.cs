@@ -16,6 +16,14 @@ public class TripStateTests
          "pickId":3,"referenceId":3,"referenceOnTheWay":false,"biggestSavingId":null}
         """;
 
+    /// <summary>Picked 3, the reference 5, and 4 past the range.</summary>
+    private static readonly string StationsJson = $$"""
+        {"path":[[-73.5673,45.5017],[-71.208,46.8139]],"distanceKm":250.3,"durationMin":155.2,"halfWidthKm":5,"longTrip":true,
+         "stopBeforeKm":150,"lowFuel":false,
+         "stations":[{{OnTheWay(3, "1.26", reachable: true)}},{{OnTheWay(5, "0", reachable: true)}},{{OnTheWay(4, "2.10", reachable: false)}}],
+         "pickId":3,"referenceId":5,"referenceOnTheWay":true,"biggestSavingId":null}
+        """;
+
     private static readonly GeoPoint Montreal = new(45.5017, -73.5673);
     private static readonly TripDestination Quebec = new(46.8139, -71.208);
     private static readonly TripDestination Work = new(45.4995, -73.5662, PlaceKind.Work);
@@ -25,6 +33,7 @@ public class TripStateTests
     private readonly MemorySession _session = new();
     private readonly List<Uri> _requests = [];
     private HttpStatusCode _status = HttpStatusCode.OK;
+    private string _json = PlanJson;
     private readonly CarProfiles _cars;
 
     public TripStateTests() => _cars = new CarProfiles(_preferences);
@@ -108,6 +117,74 @@ public class TripStateTests
     }
 
     [Fact]
+    public async Task The_station_selected_survives_the_tab_being_discarded()
+    {
+        _json = StationsJson;
+        var trip = NewTrip();
+        await trip.StartAsync(Montreal, Quebec);
+        await trip.SelectAsync(4);
+
+        var restored = NewTrip();
+        await restored.LoadAsync();
+        await restored.SetFuelAsync(Fuels.Default);
+
+        Assert.Single(_requests);
+        Assert.Equal(4, restored.SelectedId);
+        Assert.Equal(4, restored.Shown!.Id);
+    }
+
+    [Fact]
+    public async Task Planning_from_elsewhere_shows_the_pick_again()
+    {
+        _json = StationsJson;
+        var trip = NewTrip();
+        await trip.StartAsync(Montreal, Quebec);
+        await trip.SelectAsync(5);
+
+        await trip.RefreshAsync(new GeoPoint(45.8833, -72.4842));
+
+        Assert.Null(trip.SelectedId);
+        Assert.Equal(3, trip.Shown!.Id);
+
+        await trip.SelectAsync(5);
+        await trip.StartAsync(Montreal, Work);
+        Assert.Null(trip.SelectedId);
+    }
+
+    [Fact]
+    public async Task A_new_plan_for_the_same_trip_keeps_the_station_selected()
+    {
+        _json = StationsJson;
+        var trip = NewTrip();
+        await trip.StartAsync(Montreal, Quebec);
+        await trip.SelectAsync(5);
+
+        await trip.RetryAsync();
+        await trip.RefreshAsync(Montreal);
+
+        Assert.Equal(3, _requests.Count);
+        Assert.Equal(5, trip.SelectedId);
+        Assert.Equal(5, trip.Shown!.Id);
+    }
+
+    [Fact]
+    public async Task Selecting_the_pick_or_a_station_off_the_way_shows_the_pick()
+    {
+        _json = StationsJson;
+        var trip = NewTrip();
+        await trip.StartAsync(Montreal, Quebec);
+        await trip.SelectAsync(4);
+
+        await trip.SelectAsync(99);
+        Assert.Null(trip.SelectedId);
+
+        await trip.SelectAsync(4);
+        await trip.SelectAsync(3);
+        Assert.Null(trip.SelectedId);
+        Assert.Equal(3, trip.Shown!.Id);
+    }
+
+    [Fact]
     public async Task A_restored_trip_for_another_fuel_is_planned_again()
     {
         var trip = NewTrip();
@@ -166,6 +243,7 @@ public class TripStateTests
 
         Assert.False(trip.IsOpen);
         Assert.Null(trip.Plan);
+        Assert.Null(trip.Shown);
         var restored = NewTrip();
         await restored.LoadAsync();
         Assert.False(restored.IsOpen);
@@ -227,6 +305,12 @@ public class TripStateTests
         Assert.False(trip.IsOpen);
     }
 
+    private static string OnTheWay(long id, string savesDollars, bool reachable) => $$"""
+        {"id":{{id}},"name":null,"brand":"Petro-Canada","address":"{{id}} boul. Saint-Joseph, Drummondville","latitude":45.88,
+         "longitude":-72.48,"priceCents":159.9,"kmAlong":{{30 * id}},"distanceKm":{{30 * id}},"detourKm":0,"detourMin":0,"costDollars":64.50,
+         "savesDollars":{{savesDollars}},"membersOnly":false,"reachable":{{(reachable ? "true" : "false")}},"overDetourLimit":false}
+        """;
+
     private sealed class StubHandler(TripStateTests test) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
@@ -235,7 +319,7 @@ public class TripStateTests
             var response = new HttpResponseMessage(test._status);
             if (test._status == HttpStatusCode.OK)
             {
-                response.Content = new StringContent(PlanJson, Encoding.UTF8, "application/json");
+                response.Content = new StringContent(test._json, Encoding.UTF8, "application/json");
             }
 
             return Task.FromResult(response);

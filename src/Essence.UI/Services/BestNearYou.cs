@@ -16,7 +16,8 @@ public sealed record BestOrigin(GeoPoint Point, bool IsMapCenter = false, double
 /// The latest Best near you for where the user is, the map's fuel and the car being driven, fetched again when one of them
 /// changes. A scoped service, so the result outlives the pane: a station's details opening over it, or the phone chip
 /// while it's closed. It refreshes by itself when the next prices should be in (<see cref="RefreshSchedule"/>, on its own
-/// data's time: the map's refresh stops below zoom 9), and not while the page is hidden.
+/// data's time: the map's refresh stops below zoom 9), and not while the page is hidden. It also keeps the station the
+/// pane shows on top (<see cref="StationChoice"/>), so it's still chosen when the details close.
 /// </summary>
 public sealed class BestNearYou : IDisposable
 {
@@ -62,6 +63,24 @@ public sealed class BestNearYou : IDisposable
 
     /// <summary>When the prices behind <see cref="Result"/> were imported.</summary>
     public DateTimeOffset? DataAsOf { get; private set; }
+
+    /// <summary>The station chosen to be shown on top, among those the pane lists; null for the pick.</summary>
+    public long? SelectedId { get; private set; }
+
+    /// <summary>The station shown on top: the one chosen, else the pick.</summary>
+    public RankedStation? Shown =>
+        SelectedId is { } id && Result?.Stations.FirstOrDefault(s => s.Id == id) is { } station ? station : Result?.Pick;
+
+    /// <summary>Shows a station the pane lists on top; null, or one it doesn't list, shows the pick.</summary>
+    public void Select(long? id)
+    {
+        var selected = Result is { } result ? StationChoice.Keep(id, true, result.Pick?.Id, StationChoice.Selectable(result)) : null;
+        if (selected != SelectedId)
+        {
+            SelectedId = selected;
+            Changed?.Invoke();
+        }
+    }
 
     /// <summary>Where to rank from; null forgets the result.</summary>
     public Task SetOriginAsync(BestOrigin? origin)
@@ -119,7 +138,7 @@ public sealed class BestNearYou : IDisposable
             _fetchCts?.Cancel();
             CancelRefresh();
             _lastFetch = null;
-            (Result, ResultQuery, Error, Loading) = (null, null, ApiError.None, false);
+            (Result, ResultQuery, Error, Loading, SelectedId) = (null, null, ApiError.None, false, null);
             Changed?.Invoke();
             return;
         }
@@ -173,12 +192,15 @@ public sealed class BestNearYou : IDisposable
         if (result.Value is { } best)
         {
             _lateRefreshes = background && result.DataAsOf == DataAsOf ? _lateRefreshes + 1 : 0;
+
+            // A refresh keeps the station chosen while it's still listed; another car, fuel or location shows the pick.
+            SelectedId = StationChoice.Keep(SelectedId, query == ResultQuery, best.Pick?.Id, StationChoice.Selectable(best));
             (Result, ResultQuery, DataAsOf) = (best, query, result.DataAsOf);
         }
         else
         {
             // An answer for other inputs would mislead; the refresh tries again later, as if late.
-            (Result, ResultQuery) = (null, null);
+            (Result, ResultQuery, SelectedId) = (null, null, null);
             _lateRefreshes++;
         }
 

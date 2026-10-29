@@ -17,10 +17,11 @@ public sealed record TripDestination(double Latitude, double Longitude, PlaceKin
 }
 
 /// <summary>
-/// The trip open in Best on the way: where it goes, where it was planned from, and the latest plan. A trip is planned once,
-/// from where the user is; <see cref="RefreshAsync"/> plans it again from where they are then, and another car, car
-/// setting or fuel plans it again from the same start. Kept in the tab's storage (<see cref="ISessionStore"/>), so it's
-/// still there when the browser restores a tab it discarded while Google Maps navigated.
+/// The trip open in Best on the way: where it goes, where it was planned from, the latest plan, and the station shown on
+/// top (<see cref="StationChoice"/>). A trip is planned once, from where the user is; <see cref="RefreshAsync"/> plans it
+/// again from where they are then, and another car, car setting or fuel plans it again from the same start. Kept in the
+/// tab's storage (<see cref="ISessionStore"/>), so it's still there when the browser restores a tab it discarded while
+/// Google Maps navigated.
 /// </summary>
 public sealed class TripState : IDisposable
 {
@@ -76,6 +77,15 @@ public sealed class TripState : IDisposable
 
     public bool Loading { get; private set; }
 
+    /// <summary>The station chosen to be shown on top, among those on the way; null for the pick.</summary>
+    public long? SelectedId { get; private set; }
+
+    /// <summary>The station shown on top: the one chosen, else the pick; null when there's neither (none reachable).</summary>
+    public TripStation? Shown =>
+        Plan is not { } plan ? null
+        : SelectedId is { } id && plan.Stations.FirstOrDefault(s => s.Id == id) is { } station ? station
+        : plan.Stations.FirstOrDefault(s => s.Id == plan.PickId);
+
     /// <summary>A trip is open.</summary>
     public bool IsOpen => Destination is not null && Origin is not null;
 
@@ -100,7 +110,7 @@ public sealed class TripState : IDisposable
     {
         await LoadAsync();
         (Destination, Origin, FromMapCenter) = (destination, origin, fromMapCenter);
-        (Plan, PlanQuery, PlannedAt, Error) = (null, null, null, ApiError.None);
+        (Plan, PlanQuery, PlannedAt, Error, SelectedId) = (null, null, null, ApiError.None, null);
         await SaveAsync();
         await PlanAsync();
     }
@@ -120,12 +130,27 @@ public sealed class TripState : IDisposable
     /// <summary>Asks again after a failure.</summary>
     public Task RetryAsync() => PlanAsync(force: true);
 
+    /// <summary>Shows a station on the way on top, for as long as the trip; null, or one not on the way, shows the pick.</summary>
+    public async Task SelectAsync(long? id)
+    {
+        var selected = Plan is { } plan ? StationChoice.Keep(id, true, plan.PickId, StationChoice.Selectable(plan)) : null;
+        if (selected == SelectedId)
+        {
+            return;
+        }
+
+        SelectedId = selected;
+        await SaveAsync();
+        Changed?.Invoke();
+    }
+
     /// <summary>Closes the trip: back to Best near you.</summary>
     public async Task EndAsync()
     {
         _planCts?.Cancel();
         (Destination, Origin, FromMapCenter) = (null, null, false);
         (Plan, PlanQuery, PlannedAt, Error, Loading, _pendingQuery) = (null, null, null, ApiError.None, false, null);
+        SelectedId = null;
         await _session.RemoveAsync(StorageKey);
         Changed?.Invoke();
     }
@@ -187,12 +212,15 @@ public sealed class TripState : IDisposable
         _unavailableAt = result.Error == ApiError.Unavailable ? _time.GetUtcNow() : null;
         if (result.Value is { } plan)
         {
+            // Planned again for the same inputs, the station chosen stays while it's still on the way; planned from
+            // elsewhere or for another car or fuel, the pick shows.
+            SelectedId = StationChoice.Keep(SelectedId, query == PlanQuery, plan.PickId, StationChoice.Selectable(plan));
             (Plan, PlanQuery, PlannedAt) = (plan, query, _time.GetUtcNow());
         }
         else
         {
             // A plan for other inputs would mislead.
-            (Plan, PlanQuery, PlannedAt) = (null, null, null);
+            (Plan, PlanQuery, PlannedAt, SelectedId) = (null, null, null, null);
         }
 
         await SaveAsync();
@@ -222,6 +250,7 @@ public sealed class TripState : IDisposable
         (Plan, PlanQuery, PlannedAt) = stored.Plan is not null && stored.Query is not null
             ? (stored.Plan, stored.Query, stored.PlannedAt)
             : (null, null, null);
+        SelectedId = Plan is { } plan ? StationChoice.Keep(stored.SelectedId, true, plan.PickId, StationChoice.Selectable(plan)) : null;
         if (stored.Query?.Fuel is { } fuel && Plan is not null)
         {
             Fuel = fuel;
@@ -235,7 +264,7 @@ public sealed class TripState : IDisposable
             ? _session.SetAsync(
                 StorageKey,
                 JsonSerializer.Serialize(
-                    new StoredTrip(destination, origin, FromMapCenter, PlanQuery, Plan, PlannedAt),
+                    new StoredTrip(destination, origin, FromMapCenter, PlanQuery, Plan, PlannedAt, SelectedId),
                     TripStateJsonContext.Default.StoredTrip))
             : ValueTask.CompletedTask;
 
@@ -248,13 +277,15 @@ public sealed class TripState : IDisposable
         _planCts?.Cancel();
     }
 
+    /// <param name="SelectedId">The station shown on top; null (and in what an older version stored) the pick.</param>
     internal sealed record StoredTrip(
         TripDestination? Destination,
         GeoPoint Origin,
         bool FromMapCenter,
         TripQuery? Query,
         TripPlan? Plan,
-        DateTimeOffset? PlannedAt);
+        DateTimeOffset? PlannedAt,
+        long? SelectedId = null);
 }
 
 /// <summary>Source-generated (trim-safe) serialization of the trip kept in the tab's storage.</summary>
