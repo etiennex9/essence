@@ -247,7 +247,7 @@
     <value>Aucune autre station près d’ici n’affiche de prix pour le {0}.</value>
   </data>
   <data name="BestWhyPastDetour" xml:space="preserve">
-    <value>C’est au-delà de votre détour maximal : son aller-retour prend plus de {0} min de plus que celui de la plus proche.</value>
+    <value>C’est au-delà de votre détour maximal : son aller-retour dépasse de plus de {0} min celui de la plus proche.</value>
   </data>
   <data name="BestWhyNotSure" xml:space="preserve">
     <value>Les distances sont toutefois estimées et, par la route, l’économie n’est pas sûre.</value>
