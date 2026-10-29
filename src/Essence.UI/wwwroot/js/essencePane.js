@@ -103,7 +103,9 @@ export function attachSheet(pane, dotnet) {
     }
 
     function onPointerDown(e) {
-        if (!narrow.matches || e.button !== 0 || !e.target.closest("header, .handle") || e.target.closest("button, a, input")) {
+        // Not from a control, nor from a menu or bubble open in the header (essencePopup.js), which scrolls or selects.
+        if (!narrow.matches || e.button !== 0 || !e.target.closest("header, .handle")
+            || e.target.closest("button, a, input, [data-ess-popup]")) {
             return;
         }
 

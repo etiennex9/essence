@@ -1,29 +1,92 @@
-@implements IDisposable
+@implements IAsyncDisposable
 @inject BestNearYou Best
 @inject CarProfiles Cars
 @inject TripState Trips
 @inject SavedPlaces Places
 @inject ServicesStatus Services
 @inject TimeProvider Time
+@inject IJSRuntime JS
 @inject IStringLocalizer<Strings> L
 
 @* Best near you: the station worth going to (the hero), the closest, best value and cheapest at a glance, a few others that
    save, and what it was worked out for, with "Going somewhere?" above them. With Trip, Best on the way: the trip, the range,
    where to stop, and the stations along the route. The tiles and rows choose the station the hero shows (StationChoice),
-   whose Details open it. The rankings are the API's (/stations/best, /trips/best); BestNearYou and TripState keep the
-   latest, and the station chosen. *@
+   whose Details open it. In the header, the car menu switches cars, and the info bubble says what it was all worked out
+   for (essencePopup.js places, focuses and closes them). The rankings are the API's (/stations/best, /trips/best);
+   BestNearYou and TripState keep the latest, and the station chosen. *@
 <Pane @ref="_pane" TitleId="ess-best-title" OnClose="OnClose">
     <Header>
         <h2 id="ess-best-title" class="title">@(Trip ? L["BestOnTheWay"] : L["BestNearYou"])</h2>
     </Header>
     <Actions>
-        <button type="button" class="car" @onclick="OnOpenCars" aria-label="@L["CarChipLabel", CarName]" title="@L["CarChipLabel", CarName]">
-            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M3 17v-4l2-5h14l2 5v4M7 17v2M17 17v2M7.5 13.5h.01M16.5 13.5h.01" /></svg>
-            <span>@CarName</span>
-            <svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4"
-                 stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
-        </button>
+        @* The car being driven: a menu of the cars set up, and My cars. *@
+        <div class="car-pop">
+            <button type="button" class="car" id="ess-car-button" @ref="_carButton" aria-haspopup="menu"
+                    aria-expanded="@(_popup == Popup.Car ? "true" : "false")" aria-controls="@(_popup == Popup.Car ? "ess-car-menu" : null)"
+                    aria-label="@L["CarMenuLabel", CarName]" title="@L["CarMenuLabel", CarName]"
+                    @onclick="() => TogglePopupAsync(Popup.Car, FocusChecked)" @onkeydown="OnCarKeyDownAsync">
+                <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M3 17v-4l2-5h14l2 5v4M7 17v2M17 17v2M7.5 13.5h.01M16.5 13.5h.01" /></svg>
+                <span>@CarName</span>
+                <svg class="chevron" viewBox="0 0 24 24" width="12" height="12" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4"
+                     stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6" /></svg>
+            </button>
+            @if (_popup == Popup.Car)
+            {
+                <div class="popup menu" id="ess-car-menu" role="menu" aria-labelledby="ess-car-button" data-ess-popup @ref="_carMenu">
+                    <div role="group" aria-label="@L["Car"]">
+                        @if (Cars.IsTypical)
+                        {
+                            <button type="button" class="item" role="menuitemradio" aria-checked="true" tabindex="-1"
+                                    @onclick="() => ClosePopupAsync(restoreFocus: true)">
+                                @Check()
+                                <span>@L["TypicalCar"]</span>
+                            </button>
+                        }
+                        @foreach (var car in Cars.Cars)
+                        {
+                            var on = car.Id == Cars.Active.Id;
+                            <button type="button" class="item" role="menuitemradio" aria-checked="@(on ? "true" : "false")" tabindex="-1" @key="car.Id"
+                                    @onclick="() => ChooseCarAsync(car.Id)">
+                                @Check()
+                                <span>@CarLabel(car)</span>
+                            </button>
+                        }
+                    </div>
+                    <div class="sep" role="separator"></div>
+                    <button type="button" class="item" role="menuitem" tabindex="-1" @onclick="ManageCarsAsync">
+                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Settings" /></svg>
+                        <span>@(Cars.IsTypical ? L["SetUpYourCar"] : L["ManageCars"])</span>
+                    </button>
+                </div>
+            }
+        </div>
+
+        @* What it was worked out for: a toggletip, whose bubble is announced as it opens. *@
+        <div class="info-pop">
+            <button type="button" class="icon-button" @ref="_infoButton" aria-expanded="@(_popup == Popup.Info ? "true" : "false")"
+                    aria-controls="ess-best-info" aria-label="@L["HowItsWorkedOut"]" title="@L["HowItsWorkedOut"]"
+                    @onclick="() => TogglePopupAsync(Popup.Info, null)">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round"><path d="@Icons.Info" /></svg>
+            </button>
+            <div class="info-live" id="ess-best-info" role="status">
+                @if (_popup == Popup.Info)
+                {
+                    <div class="popup info" data-ess-popup @ref="_infoBubble">
+                        @foreach (var line in InfoLines())
+                        {
+                            <p>@line</p>
+                        }
+                        @if (Trip && Trips.Destination is { } destination && SavedPlaceOf(destination) is { } saved)
+                        {
+                            <button type="button" class="link" @onclick="() => ForgetPlaceAsync(saved.Id)">@L["ForgetPlace"]</button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
     </Actions>
     <ChildContent>
         @* Says which station a tile or row put on top, and what it saves: the hero changing isn't announced. *@
@@ -48,7 +111,12 @@
                             <span>@($"{L["DistanceByRoad", Formatting.Km(plan.DistanceKm, CultureInfo.CurrentCulture)]} · {Formatting.Duration(plan.DurationMin, CultureInfo.CurrentCulture)}")</span>
                         }
                     </span>
-                    <button type="button" class="end" @onclick="OnEndTrip" aria-label="@L["EndTrip"]" title="@L["EndTrip"]">
+                    <button type="button" class="bar-button refresh @(Planning ? "is-busy" : null)" aria-disabled="@(Planning ? "true" : null)"
+                            @onclick="PlanAgainAsync" aria-label="@L["PlanAgain"]" title="@L["PlanAgain"]">
+                        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Refresh" /></svg>
+                    </button>
+                    <button type="button" class="bar-button" @onclick="OnEndTrip" aria-label="@L["EndTrip"]" title="@L["EndTrip"]">
                         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
                              stroke-linecap="round"><path d="@Icons.Close" /></svg>
                     </button>
@@ -246,29 +314,6 @@
                                 </ul>
                             }
                         }
-
-                        <p class="foot">
-                            @(Trips.FromMapCenter || Trips.PlannedAt is not { } plannedAt
-                                ? L["TripFromMapCenter"]
-                                : L["TripPlannedAt", Formatting.TimeOfDay(plannedAt, TimeZoneInfo.Local, CultureInfo.CurrentCulture)])
-                            @(" ")
-                            <button type="button" class="link" @onclick="OnRefreshTrip">@L["Refresh"]</button>
-                        </p>
-                        <p class="foot">
-                            @CarFooter(query.FillLitres, query.LitresPer100Km, query.CostcoMember)
-                            @(" ")
-                            <button type="button" class="link" @onclick="OnOpenCars">@(Cars.IsTypical ? L["SetUpYourCar"] : L["Change"])</button>
-                            @if (shown is not null)
-                            {
-                                @(" ")
-                                @L["GoViaNote", NameOf(shown.Brand)]
-                            }
-                            @if (SavedPlaceOf(destination) is { } saved)
-                            {
-                                @(" ")
-                                <button type="button" class="link" @onclick="() => Places.RemoveAsync(saved.Id)">@L["ForgetPlace"]</button>
-                            }
-                        </p>
                     </div>
                 }
             }
@@ -464,22 +509,6 @@
                             </ul>
                         }
                     }
-
-                    <p class="foot">
-                        @if (result.RadiusKm is { } radiusKm)
-                        {
-                            @(radiusKm > DefaultRadiusKm ? L["FooterWidened", radiusKm] : L["FooterWithin", radiusKm])
-                            @(" ")
-                        }
-                        @CarFooter(query.FillLitres, query.LitresPer100Km, query.CostcoMember)
-                        @if (!result.ByRoad)
-                        {
-                            @(" ")
-                            @L["FooterEstimated"]
-                        }
-                        @(" ")
-                        <button type="button" class="link" @onclick="OnOpenCars">@(Cars.IsTypical ? L["SetUpYourCar"] : L["Change"])</button>
-                    </p>
                 </div>
             }
         }
@@ -494,6 +523,12 @@
     /// <summary>A stop that adds at most this is on the way (Essence.Ranking's OnTheWay.NoDetourKm and NoDetourMinutes).</summary>
     private const double NoDetourKm = 1.0;
     private const double NoDetourMinutes = 2.0;
+
+    private const string PopupModulePath = "./_content/Essence.UI/js/essencePopup.js";
+
+    /// <summary>Where the focus goes in the car menu as it opens (essencePopup.js): the car being driven, or the last item.</summary>
+    private const string FocusChecked = "checked";
+    private const string FocusLast = "last";
 
     /// <summary>The range is being typed, after a tap on its chip.</summary>
     private bool _editingRange;
@@ -514,6 +549,25 @@
 
     /// <summary>What was said of the station chosen last, said again only while it's the one shown.</summary>
     private (long Id, string Text)? _announcement;
+
+    /// <summary>The header's popups: the car menu, and the info bubble.</summary>
+    private enum Popup { None, Car, Info }
+
+    private Popup _popup;
+
+    /// <summary>A popup to open once it's rendered, and where the focus goes in it.</summary>
+    private (Popup Popup, string? Focus)? _opening;
+
+    private Task<IJSObjectReference>? _popups;
+    private DotNetObjectReference<BestPanel>? _self;
+    private ElementReference _carButton;
+    private ElementReference _carMenu;
+    private ElementReference _infoButton;
+    private ElementReference _infoBubble;
+
+    /// <summary>The place was forgotten from the bubble: the focus goes back to its button.</summary>
+    private bool _focusInfo;
+    private bool _disposed;
 
     /// <summary>Best on the way instead of Best near you: the trip <see cref="TripState"/> has open.</summary>
     [Parameter]
@@ -557,7 +611,7 @@
     [Parameter]
     public EventCallback OnEndTrip { get; set; }
 
-    /// <summary>Plans the trip again from where the user is now.</summary>
+    /// <summary>Plans the trip again from where the user is now (the trip bar's ⟳).</summary>
     [Parameter]
     public EventCallback OnRefreshTrip { get; set; }
 
@@ -573,6 +627,9 @@
 
     /// <summary>The station the hero shows.</summary>
     private long? ShownId => Trip ? Trips.Shown?.Id : Best.Shown?.Id;
+
+    /// <summary>The trip is being planned again, or the location to plan it from is being found: the ⟳ spins.</summary>
+    private bool Planning => Trips.Loading || Locating;
 
     /// <summary>
     /// Trips can't be planned now: the routing data is being prepared, the routing server answered 503, or Best near you
@@ -606,7 +663,7 @@
         await Places.LoadAsync();
     }
 
-    protected override void OnParametersSet()
+    protected override async Task OnParametersSetAsync()
     {
         if (Trip == _shownTrip)
         {
@@ -617,14 +674,144 @@
         _shownTrip = Trip;
         _editingRange = false;
         _allStations = Trip && Trips.SelectedId is not null;
+        await ClosePopupAsync(restoreFocus: false);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        if (_opening is { } opening)
+        {
+            _opening = null;
+            var (trigger, panel) = opening.Popup == Popup.Car ? (_carButton, _carMenu) : (_infoButton, _infoBubble);
+            var popups = await (_popups ??= JS.InvokeAsync<IJSObjectReference>("import", PopupModulePath).AsTask());
+            _self ??= DotNetObjectReference.Create(this);
+            // Still the one asked for, once the module is in.
+            if (_popup == opening.Popup && !_disposed)
+            {
+                await popups.InvokeVoidAsync("open", trigger, panel, _self, opening.Focus);
+            }
+        }
+
         if (_revealHero && _pane is not null)
         {
             _revealHero = false;
             await _pane.RevealAsync(_hero);
+        }
+
+        if (_focusInfo)
+        {
+            _focusInfo = false;
+            await _infoButton.FocusAsync();
+        }
+    }
+
+    /// <summary>Opens a popup, closing the other one; asked for again, it closes.</summary>
+    /// <param name="focus">Where the focus goes in the car menu (<see cref="FocusChecked"/>, <see cref="FocusLast"/>); null leaves it on the button.</param>
+    private async Task TogglePopupAsync(Popup popup, string? focus)
+    {
+        var open = _popup;
+        await ClosePopupAsync(restoreFocus: false);
+        if (open != popup)
+        {
+            (_popup, _opening) = (popup, (popup, focus));
+        }
+    }
+
+    private async Task ClosePopupAsync(bool restoreFocus)
+    {
+        if (_popup == Popup.None)
+        {
+            return;
+        }
+
+        (_popup, _opening) = (Popup.None, null);
+        if (_popups is not null)
+        {
+            try
+            {
+                await (await _popups).InvokeVoidAsync("close", restoreFocus);
+            }
+            catch (JSDisconnectedException)
+            {
+                // The page is going away.
+            }
+        }
+    }
+
+    /// <summary>essencePopup.js closed the popup: Escape, a tap outside, or the focus left it.</summary>
+    [JSInvokable]
+    public void OnPopupClosed()
+    {
+        if (_popup != Popup.None)
+        {
+            (_popup, _opening) = (Popup.None, null);
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>A menu button's keys: the arrows open the menu on the car being driven, or on its last item.</summary>
+    private async Task OnCarKeyDownAsync(KeyboardEventArgs e)
+    {
+        if (_popup != Popup.Car && e.Key is "ArrowDown" or "ArrowUp")
+        {
+            await TogglePopupAsync(Popup.Car, e.Key == "ArrowDown" ? FocusChecked : FocusLast);
+        }
+    }
+
+    /// <summary>Another car from the menu: Best near you or the trip is worked out for it.</summary>
+    private async Task ChooseCarAsync(string id)
+    {
+        await ClosePopupAsync(restoreFocus: true);
+        await Cars.SelectAsync(id);
+    }
+
+    /// <summary>The menu's last item: My cars, to set one up or change them.</summary>
+    private async Task ManageCarsAsync()
+    {
+        await ClosePopupAsync(restoreFocus: false);
+        await OnOpenCars.InvokeAsync();
+    }
+
+    /// <summary>The bubble's Forget this place: the link goes, and the focus goes back to the bubble's button.</summary>
+    private async Task ForgetPlaceAsync(string id)
+    {
+        _focusInfo = true;
+        await Places.RemoveAsync(id);
+    }
+
+    /// <summary>The trip bar's ⟳, unless it's already planning.</summary>
+    private Task PlanAgainAsync() => Planning ? Task.CompletedTask : OnRefreshTrip.InvokeAsync();
+
+    /// <summary>
+    /// The info bubble's lines: on a trip, when it was planned and for which car; near you, the radius, the car, and
+    /// whether distances are estimated.
+    /// </summary>
+    private IEnumerable<string> InfoLines()
+    {
+        if (Trip && Trips.PlanQuery is { } trip)
+        {
+            yield return Trips.FromMapCenter || Trips.PlannedAt is not { } plannedAt
+                ? L["TripFromMapCenter"]
+                : L["TripPlannedAt", Formatting.TimeOfDay(plannedAt, TimeZoneInfo.Local, CultureInfo.CurrentCulture)];
+            yield return CarFooter(trip.FillLitres, trip.LitresPer100Km, trip.CostcoMember);
+        }
+        else if (!Trip && Best.Result is { } result && Best.ResultQuery is { } query)
+        {
+            if (result.RadiusKm is { } radiusKm)
+            {
+                yield return radiusKm > DefaultRadiusKm ? L["FooterWidened", radiusKm] : L["FooterWithin", radiusKm];
+            }
+
+            yield return CarFooter(query.FillLitres, query.LitresPer100Km, query.CostcoMember);
+            if (!result.ByRoad)
+            {
+                yield return L["FooterEstimated"];
+            }
+        }
+        else
+        {
+            var car = Cars.Active;
+            yield return CarFooter(car.FillLitres, car.LitresPer100Km, car.CostcoMember);
         }
     }
 
@@ -872,6 +1059,13 @@
 
     private string NameOf(string? brand) => BrandCatalog.For(brand).Name ?? L["Independent"];
 
+    private string CarLabel(CarProfile car) => string.IsNullOrWhiteSpace(car.Name) ? L["MyCar"] : car.Name;
+
+    /// <summary>The car menu's check, shown on the car being driven.</summary>
+    private static RenderFragment Check() =>
+        @<svg class="check" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.4"
+              stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Check" /></svg>;
+
     private string Distance(double km)
     {
         var value = Formatting.Km(km, CultureInfo.CurrentCulture);
@@ -892,12 +1086,32 @@
 
     private void OnChanged() => InvokeAsync(StateHasChanged);
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
+        _disposed = true;
         Best.Changed -= OnChanged;
         Cars.Changed -= OnChanged;
         Trips.Changed -= OnChanged;
         Places.Changed -= OnChanged;
         Services.Changed -= OnChanged;
+        try
+        {
+            if (_popups is not null)
+            {
+                var popups = await _popups;
+                if (_popup != Popup.None)
+                {
+                    await popups.InvokeVoidAsync("close", false);
+                }
+
+                await popups.DisposeAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page is going away; the popup goes with it.
+        }
+
+        _self?.Dispose();
     }
 }

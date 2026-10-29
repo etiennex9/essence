@@ -99,7 +99,7 @@
     @* Alone in the bottom-left corner (the map's own controls are bottom-right), under a bottom sheet while one is open. *@
     <button type="button" class="tool about" @onclick="() => _about!.ShowAsync()" aria-label="@L["About"]" title="@L["About"]">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-             stroke-linecap="round"><circle cx="12" cy="12" r="9" /><path d="M12 16.5v-5M12 7.75v.01" /></svg>
+             stroke-linecap="round"><path d="@Icons.Info" /></svg>
     </button>
 
     @* The details open over a list (?view=…&station=…): closing them goes back to it. *@

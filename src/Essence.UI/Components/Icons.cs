@@ -1,6 +1,6 @@
 namespace Essence.UI.Components;
 
-/// <summary>Path data (24×24 view box) of the icons drawn in more than one component.</summary>
+/// <summary>Path data (24×24 view box) of icons named for what they show: those drawn in more than one component, and the long ones.</summary>
 internal static class Icons
 {
     public const string Star = "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z";
@@ -37,4 +37,21 @@ internal static class Icons
 
     /// <summary>A road: a street, in the address search.</summary>
     public const string Street = "M5 21L9 3M19 21L15 3M12 4v2M12 10v3M12 17v3";
+
+    /// <summary>An i in a circle: About, and how Best near you is worked out.</summary>
+    public const string Info = "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18zM12 16.5v-5M12 7.75v.01";
+
+    /// <summary>Two arrows going round: plan the trip again.</summary>
+    public const string Refresh = "M20 12a8 8 0 0 0-15.52-2.74M4 4v5h5M4 12a8 8 0 0 0 15.52 2.74M20 20v-5h-5";
+
+    /// <summary>A gear (Feather's, MIT): manage the cars.</summary>
+    public const string Settings =
+        "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"
+        + "M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 "
+        + "1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06"
+        + "a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 "
+        + "2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 "
+        + "0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 "
+        + "1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21"
+        + "a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z";
 }

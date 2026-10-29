@@ -345,7 +345,8 @@ export function createMap(container, options, dotnet) {
 
     function onKeyDown(e) {
         // Esc in a modal dialog (About) closes that dialog only, not the pane behind it; in the address search with text
-        // typed, it clears the text (PlacesPanel), and the next one closes the pane.
+        // typed, it clears the text (PlacesPanel), and the next one closes the pane. An open menu or info bubble in the
+        // pane's header takes it first: essencePopup.js stops it at the window, so it never gets here.
         if (e.key === "Escape" && !document.querySelector("dialog:modal") && !(e.target.matches?.("input[type=search]") && e.target.value)) {
             call("OnDismiss");
         }

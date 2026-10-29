@@ -219,8 +219,8 @@
   <data name="BestChipVsClosest" xml:space="preserve">
     <value>qu’à la plus proche</value>
   </data>
-  <data name="CarChipLabel" xml:space="preserve">
-    <value>Voiture : {0}. Changer</value>
+  <data name="CarMenuLabel" xml:space="preserve">
+    <value>Voiture : {0}</value>
   </data>
   <data name="Saves" xml:space="preserve">
     <value>Économie de {0}</value>
@@ -319,7 +319,16 @@
     <value>Modifier</value>
   </data>
   <data name="SetUpYourCar" xml:space="preserve">
-    <value>Configurer votre voiture</value>
+    <value>Configurer votre voiture…</value>
+  </data>
+  <data name="TypicalCar" xml:space="preserve">
+    <value>Ma voiture (valeurs types)</value>
+  </data>
+  <data name="ManageCars" xml:space="preserve">
+    <value>Gérer les voitures…</value>
+  </data>
+  <data name="HowItsWorkedOut" xml:space="preserve">
+    <value>Comment c’est calculé</value>
   </data>
   <data name="DistanceApprox" xml:space="preserve">
     <value>≈ {0} km</value>
@@ -552,9 +561,6 @@
   <data name="GoViaGoogleMaps" xml:space="preserve">
     <value>Y passer · Google Maps</value>
   </data>
-  <data name="GoViaNote" xml:space="preserve">
-    <value>Google Maps s’ouvre avec {0} comme arrêt en chemin.</value>
-  </data>
   <data name="AllStationsOnTheWay" xml:space="preserve">
     <value>Les {0} stations sur le chemin</value>
   </data>
@@ -576,8 +582,8 @@
   <data name="TripFromMapCenter" xml:space="preserve">
     <value>Planifié à partir du centre de la carte.</value>
   </data>
-  <data name="Refresh" xml:space="preserve">
-    <value>Actualiser</value>
+  <data name="PlanAgain" xml:space="preserve">
+    <value>Recalculer à partir d’ici</value>
   </data>
   <data name="ForgetPlace" xml:space="preserve">
     <value>Oublier ce lieu</value>

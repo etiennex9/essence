@@ -1,14 +1,23 @@
-/* The car being driven, beside Close: it opens My cars. */
-.car {
+/* ---- The header's popups (essencePopup.js places and closes them) ---- */
+
+/* The car being driven, before the info button: it opens the car menu. Narrow, so the title keeps room at 390 px. */
+.car-pop {
     position: relative;
     flex: none;
     align-self: center;
     display: flex;
+    max-width: 40%;
+    margin-right: -6px;
+}
+
+.car {
+    position: relative;
+    display: flex;
     align-items: center;
     gap: 5px;
-    max-width: 45%;
+    max-width: 100%;
+    min-width: 0;
     height: 34px;
-    margin-right: -6px;
     padding: 0 10px;
     border: 0.5px solid var(--ess-border-strong);
     border-radius: 999px;
@@ -39,6 +48,156 @@
     text-overflow: ellipsis;
     white-space: nowrap;
 }
+
+.car[aria-expanded="true"] {
+    border-color: var(--ess-accent);
+    background: var(--ess-hover);
+}
+
+.car .chevron {
+    transition: transform 150ms;
+}
+
+.car[aria-expanded="true"] .chevron {
+    transform: rotate(180deg);
+}
+
+/* The info button sits against Close, as icon buttons do. */
+.info-pop {
+    position: relative;
+    flex: none;
+    align-self: flex-start;
+    margin-right: -10px;
+}
+
+.info-pop .icon-button[aria-expanded="true"] {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+/* Under its button, its right edge on the button's; above it when there's no room below (data-side). On phones the
+   header drags the sheet and takes no text selection: not in here. */
+.popup {
+    position: absolute;
+    z-index: 5;
+    top: calc(100% + 6px);
+    right: 0;
+    box-sizing: border-box;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 12px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    box-shadow: var(--ess-shadow-lg);
+    text-align: left;
+    cursor: auto;
+}
+
+.popup[data-side="above"] {
+    top: auto;
+    bottom: calc(100% + 6px);
+}
+
+/* The cars, then My cars. Many cars scroll. */
+.menu {
+    min-width: 210px;
+    max-width: min(300px, calc(100vw - 24px));
+    max-height: min(60vh, 420px);
+    padding: 6px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--ess-text);
+    font: 500 14px/1.2 var(--ess-font);
+    text-align: left;
+    cursor: pointer;
+}
+
+.item:hover,
+.item:focus-visible {
+    background: var(--ess-hover);
+}
+
+.item svg {
+    flex: none;
+}
+
+.item span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.item .check {
+    visibility: hidden;
+    color: var(--ess-accent);
+}
+
+.item[aria-checked="true"] {
+    font-weight: 600;
+}
+
+.item[aria-checked="true"] .check {
+    visibility: visible;
+}
+
+.sep {
+    height: 0.5px;
+    margin: 6px 4px;
+    background: var(--ess-border);
+}
+
+/* What it was worked out for. Pane's shared styles stop at the body: the link has its own. */
+.info {
+    width: min(290px, calc(100vw - 24px));
+    padding: 10px 12px;
+    font: 400 12.5px/1.45 var(--ess-font);
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.info p {
+    margin: 0;
+}
+
+.info p + p {
+    margin-top: 6px;
+}
+
+.info .link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    margin-top: 2px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ess-accent);
+    font: 500 12.5px var(--ess-font);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .car .chevron {
+        transition: none;
+    }
+}
+
+/* ---- The pane's body ---- */
 
 .choices {
     display: flex;
@@ -391,20 +550,6 @@
     color: var(--ess-warning-text);
 }
 
-/* ---- What it was worked out for ---- */
-
-.foot {
-    margin: 12px 0 0;
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--ess-text-muted);
-}
-
-.foot .link {
-    font-size: 12px;
-    text-decoration: underline;
-}
-
 .tile .note {
     font-size: 11px;
     font-weight: 600;
@@ -564,7 +709,8 @@
     color: var(--ess-text-muted);
 }
 
-.end {
+/* Plan again from here (⟳), and end the trip (✕). */
+.bar-button {
     flex: none;
     display: grid;
     place-items: center;
@@ -578,9 +724,38 @@
     cursor: pointer;
 }
 
-.end:hover {
+.bar-button + .bar-button {
+    margin-left: -8px;
+}
+
+.bar-button:hover {
     background: var(--ess-hover);
     color: var(--ess-text);
+}
+
+.refresh[aria-disabled="true"] {
+    cursor: progress;
+}
+
+.refresh.is-busy svg {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(-360deg);
+    }
+}
+
+/* Under reduced motion, planning dims it instead. */
+@media (prefers-reduced-motion: reduce) {
+    .refresh.is-busy svg {
+        animation: none;
+    }
+
+    .refresh.is-busy {
+        opacity: 0.45;
+    }
 }
 
 .chips {
