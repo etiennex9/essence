@@ -874,6 +874,32 @@
         await OnStationSelected.InvokeAsync(point);
     }
 
+    /// <summary>
+    /// A station tapped on the map during a trip: one on the way goes on top as if chosen in the list, which opens to show
+    /// it, and true says it was; false leaves it to open its details.
+    /// </summary>
+    public async Task<bool> SelectFromMapAsync(long id)
+    {
+        if (!Trip || Trips.Plan is not { } plan || !plan.Stations.Any(s => s.Id == id))
+        {
+            return false;
+        }
+
+        _allStations = true;
+        if (id == ShownId)
+        {
+            // Already on top: the pane only scrolls up to it.
+            _revealHero = true;
+        }
+        else
+        {
+            await SelectAsync(id);
+        }
+
+        StateHasChanged();
+        return true;
+    }
+
     /// <summary>"Shown above: Costco. Saves $3.10."</summary>
     private string Announcement(string name, string? saves) =>
         saves is null ? L["ShownStation", name] : $"{L["ShownStation", name]} {saves}.";

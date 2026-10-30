@@ -119,7 +119,7 @@
     }
     else if (View is BestView or TripView)
     {
-        <BestPanel Trip="@(View == TripView)" Locating="_locating" LocationProblem="_locationProblem"
+        <BestPanel @ref="_bestPanel" Trip="@(View == TripView)" Locating="_locating" LocationProblem="_locationProblem"
                    OnClose="() => View == TripView ? CloseTripAsync() : CloseListAsync()" OnOpenStation="OpenStationFromBest"
                    OnStationSelected="ShowSelectedAsync" OnOpenCars="ShowCars"
                    OnLocate="() => LocateAsync(moveMap: false, fallBackToMontreal: false)" OnUseMapCenter="UseMapCenterAsync"
@@ -176,6 +176,7 @@
     private readonly StationViewport _stations = new();
     private MapInterop? _map;
     private AboutDialog? _about;
+    private BestPanel? _bestPanel;
     private ElementReference _mapElement;
     private string _fuel = Fuels.Default;
     private Viewport? _viewport;
@@ -1169,8 +1170,14 @@
         }
     }
 
-    public Task OnMarkerClickedAsync(long id)
+    public async Task OnMarkerClickedAsync(long id)
     {
+        // On a trip, a station on the way goes on top of the trip's pane, as one chosen in its list would; another opens.
+        if (View == TripView && Station is null && _bestPanel is not null && await _bestPanel.SelectFromMapAsync(id))
+        {
+            return;
+        }
+
         if (Station != id)
         {
             // Switching stations replaces the entry, so Back still closes the pane instead of walking through stations.
@@ -1179,8 +1186,6 @@
             _centerOnStation = false;
             Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", id), replace: replace);
         }
-
-        return Task.CompletedTask;
     }
 
     /// <summary>A station picked in a list: its details open over it, and the map flies to it.</summary>
