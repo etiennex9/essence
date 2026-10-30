@@ -13,14 +13,15 @@ const FIT_PADDING_PX = 56;
 const FIT_TOP_PX = 130; // under the toolbar, with room for a flag
 const FIT_MAX_ZOOM = 15;
 
-// Press and hold (a right-click on desktops, a long press on Android, a touch timer on iOS, which has neither) picks a
-// destination. A finger that moves farther than this, or a second finger, is panning or zooming instead.
+// Press and hold (a long press on Android, a touch timer on iOS, which has none, the left mouse button held, or a
+// right-click) picks a destination. A finger or mouse that moves farther than this, or a second finger, is panning or
+// zooming instead.
 const HOLD_MS = 550;
 const HOLD_SLOP_PX = 10;
 
 // Android fires contextmenu around when the touch timer does: a second hold this soon after is the same one. The click
-// that ends a hold (when the finger lifts, however long after) mustn't count as a click on the map, which would close the
-// pane.
+// that ends a hold (when the finger or the button lifts, however long after) mustn't count as a click on the map, which
+// would close the pane.
 const HOLD_REPEAT_MS = 800;
 const HOLD_CLICK_MS = 700;
 
@@ -163,7 +164,7 @@ export function createMap(container, options, dotnet) {
     // Press and hold.
     let holdTimer = 0;
     let holdStart = null;
-    let heldThisTouch = false;
+    let heldThisPress = false;
     let lastHoldAt = 0;
     let swallowClickUntil = 0;
 
@@ -216,7 +217,7 @@ export function createMap(container, options, dotnet) {
         }
 
         lastHoldAt = now;
-        heldThisTouch = true;
+        heldThisPress = true;
         swallowClickUntil = now + HOLD_CLICK_MS;
         const { lng, lat } = map.unproject(point);
         call("OnMapHeld", lat, lng);
@@ -236,38 +237,71 @@ export function createMap(container, options, dotnet) {
         holdTimer = 0;
     }
 
-    function onTouchStart(e) {
+    // A finger or the mouse's button down at a point of the page: held still long enough, it's a press and hold.
+    function startHold(clientX, clientY, target) {
         cancelHold();
-        heldThisTouch = false;
-        if (e.touches.length !== 1 || e.target.closest?.(NOT_HELD)) {
+        heldThisPress = false;
+        if (target.closest?.(NOT_HELD)) {
             return;
         }
 
-        const touch = e.touches[0];
         const rect = container.getBoundingClientRect();
-        holdStart = { x: touch.clientX, y: touch.clientY, point: [touch.clientX - rect.left, touch.clientY - rect.top] };
+        holdStart = { x: clientX, y: clientY, point: [clientX - rect.left, clientY - rect.top] };
         holdTimer = setTimeout(() => {
             holdTimer = 0;
             held(holdStart.point);
         }, HOLD_MS);
     }
 
-    function onTouchEnd() {
+    function moveHold(clientX, clientY) {
+        if (holdTimer && Math.hypot(clientX - holdStart.x, clientY - holdStart.y) > HOLD_SLOP_PX) {
+            cancelHold();
+        }
+    }
+
+    function endHold() {
         cancelHold();
-        if (heldThisTouch) {
-            heldThisTouch = false;
+        if (heldThisPress) {
+            heldThisPress = false;
             swallowClickUntil = Date.now() + HOLD_CLICK_MS;
         }
     }
 
-    function onTouchMove(e) {
-        if (!holdTimer) {
+    function onTouchStart(e) {
+        if (e.touches.length !== 1) {
+            cancelHold();
+            heldThisPress = false;
             return;
         }
 
-        const touch = e.touches[0];
-        if (e.touches.length !== 1 || Math.hypot(touch.clientX - holdStart.x, touch.clientY - holdStart.y) > HOLD_SLOP_PX) {
+        startHold(e.touches[0].clientX, e.touches[0].clientY, e.target);
+    }
+
+    function onTouchMove(e) {
+        if (e.touches.length !== 1) {
             cancelHold();
+            return;
+        }
+
+        moveHold(e.touches[0].clientX, e.touches[0].clientY);
+    }
+
+    // The mouse's left button; fingers have the touch events above, and pens their own press and hold (a right-click).
+    function onPointerDown(e) {
+        if (e.pointerType === "mouse" && e.button === 0) {
+            startHold(e.clientX, e.clientY, e.target);
+        }
+    }
+
+    function onPointerMove(e) {
+        if (e.pointerType === "mouse") {
+            moveHold(e.clientX, e.clientY);
+        }
+    }
+
+    function onPointerUp(e) {
+        if (e.pointerType === "mouse") {
+            endHold();
         }
     }
 
@@ -345,9 +379,11 @@ export function createMap(container, options, dotnet) {
 
     function onKeyDown(e) {
         // Esc in a modal dialog (About) closes that dialog only, not the pane behind it; in the address search with text
-        // typed, it clears the text (PlacesPanel), and the next one closes the pane. An open menu or info bubble in the
-        // pane's header takes it first: essencePopup.js stops it at the window, so it never gets here.
-        if (e.key === "Escape" && !document.querySelector("dialog:modal") && !(e.target.matches?.("input[type=search]") && e.target.value)) {
+        // typed, it clears the text (PlacesPanel), and the next one closes the pane; in a field that handles it itself
+        // (renaming a place), it's that field's. An open menu or info bubble in the pane's header takes it first:
+        // essencePopup.js stops it at the window, so it never gets here.
+        if (e.key === "Escape" && !document.querySelector("dialog:modal") && !(e.target.matches?.("input[type=search]") && e.target.value)
+            && !e.target.matches?.("[data-ess-own-escape]")) {
             call("OnDismiss");
         }
     }
@@ -446,8 +482,12 @@ export function createMap(container, options, dotnet) {
     map.on("style.load", addRouteLayers);
     container.addEventListener("touchstart", onTouchStart, { passive: true });
     container.addEventListener("touchmove", onTouchMove, { passive: true });
-    container.addEventListener("touchend", onTouchEnd);
-    container.addEventListener("touchcancel", onTouchEnd);
+    container.addEventListener("touchend", endHold);
+    container.addEventListener("touchcancel", endHold);
+    container.addEventListener("pointerdown", onPointerDown);
+    container.addEventListener("pointermove", onPointerMove);
+    container.addEventListener("pointerup", onPointerUp);
+    container.addEventListener("pointercancel", onPointerUp);
     // Captured, so it sees the search box's text before Blazor's own handler (which may be registered first) clears it.
     document.addEventListener("keydown", onKeyDown, true);
     darkScheme.addEventListener("change", onSchemeChange);
@@ -644,8 +684,12 @@ export function createMap(container, options, dotnet) {
             cancelHold();
             container.removeEventListener("touchstart", onTouchStart);
             container.removeEventListener("touchmove", onTouchMove);
-            container.removeEventListener("touchend", onTouchEnd);
-            container.removeEventListener("touchcancel", onTouchEnd);
+            container.removeEventListener("touchend", endHold);
+            container.removeEventListener("touchcancel", endHold);
+            container.removeEventListener("pointerdown", onPointerDown);
+            container.removeEventListener("pointermove", onPointerMove);
+            container.removeEventListener("pointerup", onPointerUp);
+            container.removeEventListener("pointercancel", onPointerUp);
             document.removeEventListener("keydown", onKeyDown, true);
             darkScheme.removeEventListener("change", onSchemeChange);
             document.removeEventListener("visibilitychange", onVisibilityChange);
