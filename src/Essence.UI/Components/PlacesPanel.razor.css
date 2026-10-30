@@ -1,0 +1,385 @@
+/* The box: what's typed, with Clear. */
+.search {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 48px;
+    padding: 0 4px 0 12px;
+    border: 1.5px solid var(--ess-accent);
+    border-radius: 10px;
+    background: var(--ess-surface);
+    color: var(--ess-text-muted);
+}
+
+.search input {
+    flex: 1;
+    min-width: 0;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--ess-text);
+    font: 500 16px/1.2 var(--ess-font);
+    outline: none;
+}
+
+/* The box's own border shows the focus. */
+.search input:focus-visible {
+    outline: none;
+}
+
+.search:focus-within {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--ess-accent) 25%, transparent);
+}
+
+/* The browser's own clear button: there's one beside it. */
+.search input::-webkit-search-cancel-button {
+    display: none;
+}
+
+.clear {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ess-text-muted);
+    cursor: pointer;
+}
+
+.clear:hover {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+/* Read out as it changes; shown only when it says something else than a count. */
+.status {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--ess-text-muted);
+}
+
+.status:not(.is-message) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+.status.is-message {
+    margin: 10px 2px 0;
+}
+
+/* ---- Suggestions, the place to pick on the map, and the saved places: one row each ---- */
+
+.suggestions,
+.yours ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.suggestions {
+    margin: 6px -16px 0;
+}
+
+/* The answers for a shorter text, while this one's are on their way. */
+.suggestions.is-stale {
+    opacity: 0.6;
+}
+
+.suggestion,
+.row,
+.on-map {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    min-height: 56px;
+    border: 0;
+    background: none;
+    color: var(--ess-text);
+    font-family: var(--ess-font);
+    text-align: left;
+    cursor: pointer;
+}
+
+.suggestion {
+    padding: 8px 16px;
+}
+
+.suggestion:hover,
+.row:hover:not(:disabled) {
+    background: var(--ess-hover);
+}
+
+.ic {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--ess-hover);
+    color: var(--ess-text-muted);
+}
+
+.tx {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.tx b {
+    font-size: 15px;
+    font-weight: 500;
+    overflow-wrap: anywhere;
+}
+
+/* The words typed. */
+.tx b ::deep em {
+    font-style: normal;
+    font-weight: 700;
+}
+
+.tx .sub,
+.tx .touch,
+.tx .mouse {
+    margin-top: 2px;
+    font-size: 12.5px;
+    color: var(--ess-text-muted);
+    overflow-wrap: anywhere;
+}
+
+.km {
+    flex: none;
+    font-size: 12px;
+    color: var(--ess-text-muted);
+    font-variant-numeric: tabular-nums;
+}
+
+.on-map {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border: 0.5px dashed var(--ess-border-strong);
+    border-radius: 10px;
+    background: var(--ess-surface);
+}
+
+.on-map:hover {
+    background: var(--ess-hover);
+}
+
+.on-map b {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* A press and hold is how fingers pick a place, a right-click how mice do. */
+.on-map .mouse {
+    display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .on-map .touch {
+        display: none;
+    }
+
+    .on-map .mouse {
+        display: block;
+    }
+}
+
+.yours {
+    margin-top: 16px;
+}
+
+/* Opened from ✎: the list is the panel, under its title. */
+.yours.is-managing {
+    margin-top: 0;
+}
+
+/* Saved, or forgotten with Undo; kept in the page empty, so it's read out when it says something. */
+.done.is-shown {
+    margin: 10px 0 0;
+    font-size: 13px;
+    color: var(--ess-text-muted);
+}
+
+.done .link {
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
+.yours h3 {
+    margin: 0 0 4px;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.yours li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 0.5px solid var(--ess-border);
+}
+
+.row {
+    flex: 1;
+    min-width: 0;
+    padding: 6px 0;
+    border-radius: 8px;
+}
+
+/* Home or Work not set yet, or the panel isn't for a trip: the row only shows. */
+.row:disabled {
+    cursor: default;
+}
+
+.row[aria-pressed="true"] .sub {
+    color: var(--ess-accent);
+}
+
+.edit {
+    position: relative;
+    flex: none;
+    display: grid;
+    place-items: center;
+    min-width: 44px;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 999px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 600 12.5px/1 var(--ess-font);
+    cursor: pointer;
+}
+
+/* A 44 px target, without making the row taller: sized on its own, since the border isn't in the box it's placed in. */
+.edit::after {
+    content: "";
+    position: absolute;
+    left: -1px;
+    right: -1px;
+    top: 50%;
+    height: 44px;
+    translate: 0 -50%;
+}
+
+.edit:hover {
+    background: var(--ess-hover);
+}
+
+.edit.is-on {
+    border-color: var(--ess-accent);
+    color: var(--ess-accent);
+}
+
+/* Forget: a bin, a 44 px target. */
+.forget {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-right: -10px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: var(--ess-text-muted);
+    cursor: pointer;
+}
+
+.forget:hover {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+/* A place found for "Add a place", waiting for its name; or a place being renamed, in its row. */
+.naming {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.naming.rename {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 6px 0;
+}
+
+.rename label {
+    flex-basis: 100%;
+}
+
+.chosen {
+    flex-basis: 100%;
+    margin: 0 0 2px;
+    font-size: 13px;
+    color: var(--ess-text-muted);
+}
+
+.chosen b {
+    color: var(--ess-text);
+    font-weight: 600;
+}
+
+.naming label {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.naming input {
+    flex: 1 1 140px;
+    min-width: 0;
+    min-height: 44px;
+    box-sizing: border-box;
+    padding: 0 10px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 10px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 400 16px var(--ess-font);
+}
+
+.save {
+    min-height: 44px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--ess-accent);
+    color: var(--ess-on-accent);
+    font: 600 14px var(--ess-font);
+    cursor: pointer;
+}
+
+.save:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.naming .link {
+    min-height: 44px;
+    padding: 0 4px;
+}
+
+.attribution {
+    margin: 16px 0 0;
+    font-size: 11px;
+    line-height: 1.4;
+    color: var(--ess-text-muted);
+    text-align: center;
+}

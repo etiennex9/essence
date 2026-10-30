@@ -1,0 +1,143 @@
+@implements IDisposable
+@inject CarProfiles Cars
+@inject IStringLocalizer<Strings> L
+
+@* My cars: the cars set up on this device and the one being driven, opened over Best near you. Each change is saved as it's
+   made (CarProfiles); Done and Back return to the pane. *@
+<Pane TitleId="ess-cars-title" OnClose="OnClose">
+    <Header>
+        <div class="title">
+            <h2 id="ess-cars-title">@L["MyCars"]</h2>
+            <p class="subtitle">@L["MyCarsHelp"]</p>
+        </div>
+    </Header>
+    <ChildContent>
+        @{
+            var car = Cars.Active;
+        }
+        <div class="cars" role="group" aria-label="@L["Car"]">
+            @if (Cars.IsTypical)
+            {
+                <button type="button" class="pick is-on" aria-pressed="true">@NameOf(car)</button>
+            }
+            @foreach (var other in Cars.Cars)
+            {
+                var active = other.Id == car.Id;
+                <button type="button" class="pick @(active ? "is-on" : null)" aria-pressed="@(active ? "true" : "false")"
+                        @onclick="() => Cars.SelectAsync(other.Id)">@NameOf(other)</button>
+            }
+            <button type="button" class="pick add" @onclick="AddAsync" aria-label="@L["AddCar"]" title="@L["AddCar"]">
+                <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                @L["Add"]
+            </button>
+        </div>
+
+        <section aria-labelledby="ess-car-this">
+            <h3 id="ess-car-this">@L["ThisCar"]</h3>
+            <div class="field">
+                <label for="ess-car-name">@L["CarName"]</label>
+                <input id="ess-car-name" class="text" type="text" maxlength="40" autocomplete="off" placeholder="@L["MyCar"]"
+                       value="@car.Name" @onchange="e => SaveAsync(car with { Name = e.Value?.ToString() ?? string.Empty })" />
+            </div>
+            <div class="field wraps">
+                <div class="label">
+                    <span id="ess-car-fuel">@L["FuelLabel"]</span>
+                    <span class="help">@L["CarFuelHelp"]</span>
+                </div>
+                <div class="segments" role="radiogroup" aria-labelledby="ess-car-fuel">
+                    @foreach (var fuel in Fuels.All)
+                    {
+                        var on = fuel == car.Fuel;
+                        <button type="button" role="radio" aria-checked="@(on ? "true" : "false")" class="@(on ? "is-on" : null)"
+                                @onclick="() => SaveAsync(car with { Fuel = fuel })">@fuel</button>
+                    }
+                </div>
+            </div>
+            @(Number("ess-car-fill", L["UsualFill"], L["UsualFillHelp"], car.FillLitres, "L", CarProfile.MinFillLitres,
+                CarProfile.MaxFillLitres, "1", value => car with { FillLitres = value }))
+            @(Number("ess-car-use", L["Consumption"], L["ConsumptionHelp"], car.LitresPer100Km, "L/100 km", CarProfile.MinLitresPer100Km,
+                CarProfile.MaxLitresPer100Km, "0.1", value => car with { LitresPer100Km = value }))
+        </section>
+
+        <section aria-labelledby="ess-car-stations">
+            <h3 id="ess-car-stations">@L["CarStations"]</h3>
+            <div class="field">
+                <div class="label">
+                    <span id="ess-car-costco">@L["CostcoMember"]</span>
+                    <span class="help">@L["CostcoMemberHelp"]</span>
+                </div>
+                <button type="button" class="switch @(car.CostcoMember ? "is-on" : null)" role="switch"
+                        aria-checked="@(car.CostcoMember ? "true" : "false")" aria-labelledby="ess-car-costco"
+                        @onclick="() => SaveAsync(car with { CostcoMember = !car.CostcoMember })"></button>
+            </div>
+            @(Number("ess-car-detour", L["LongestDetour"], L["LongestDetourHelp"], car.MaxDetourMinutes, "min", 0, CarProfile.MaxDetourLimit,
+                "1", value => car with { MaxDetourMinutes = (int)Math.Round(value) }))
+        </section>
+
+        <section aria-labelledby="ess-car-trips">
+            <h3 id="ess-car-trips">@L["Trips"]</h3>
+            @(Number("ess-car-spare", L["KeepSpare"], L["KeepSpareHelp"], car.SpareKm, "km", 0, CarProfile.MaxSpareKm, "1",
+                value => car with { SpareKm = (int)Math.Round(value) }))
+        </section>
+
+        <div class="end">
+            @if (!Cars.IsTypical)
+            {
+                <button type="button" class="delete" @onclick="() => Cars.RemoveAsync(car.Id)">@L["DeleteCar"]</button>
+            }
+            <button type="button" class="done" @onclick="OnClose">@L["Done"]</button>
+        </div>
+    </ChildContent>
+</Pane>
+
+@code {
+    /// <summary>Changes with each number entered, so the inputs show what was saved even when it's what they showed before.</summary>
+    private int _entries;
+
+    /// <summary>The Close button, Done, or the sheet dragged away: back to Best near you.</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Cars.Changed += OnCarsChanged;
+        await Cars.LoadAsync();
+    }
+
+    private string NameOf(CarProfile car) => string.IsNullOrWhiteSpace(car.Name) ? L["MyCar"] : car.Name;
+
+    /// <summary>A number with its unit. A value that isn't a number is dropped, and one out of range is brought into it.</summary>
+    private RenderFragment Number(
+        string id, string label, string help, decimal value, string unit, decimal min, decimal max, string step, Func<decimal, CarProfile> change) =>
+        @<div class="field">
+            <div class="label">
+                <label for="@id">@label</label>
+                <span class="help">@help</span>
+            </div>
+            <span class="number">
+                <input @key="_entries" id="@id" type="number" inputmode="decimal" min="@min.ToString(CultureInfo.InvariantCulture)"
+                       max="@max.ToString(CultureInfo.InvariantCulture)" step="@step" value="@value.ToString(CultureInfo.InvariantCulture)"
+                       @onchange="e => ChangeNumberAsync(e.Value, change)" />
+                <span class="unit">@unit</span>
+            </span>
+        </div>;
+
+    private async Task ChangeNumberAsync(object? value, Func<decimal, CarProfile> change)
+    {
+        // Typed out of range or not a number, the input would keep showing it: it's drawn again with the value saved.
+        _entries++;
+        if (decimal.TryParse(value?.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out var number))
+        {
+            await SaveAsync(change(number));
+        }
+    }
+
+    private Task SaveAsync(CarProfile car) => Cars.SaveAsync(car);
+
+    private Task AddAsync() => Cars.AddAsync(L["NewCar", (Cars.IsTypical ? 1 : Cars.Cars.Count) + 1], firstName: L["MyCar"]);
+
+    private void OnCarsChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Cars.Changed -= OnCarsChanged;
+}

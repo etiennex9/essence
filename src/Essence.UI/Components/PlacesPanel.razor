@@ -1,0 +1,538 @@
+@implements IDisposable
+@inject PlaceSearch Search
+@inject PlaceAddresses Addresses
+@inject SavedPlaces Places
+@inject ServicesStatus Services
+@inject IStringLocalizer<Strings> L
+
+@* Where to: the address search, picking the place on the map instead, and the places saved on this device. Opened over Best
+   near you from "Going somewhere?" (a place found starts a trip there), to set Home, Work or another place (the place found
+   is saved as it), or from ✎ to manage the saved places (the search shows once an address is needed). The search is the
+   API's (/places/search, Photon); PlaceSearch spaces and caches the requests. *@
+<Pane TitleId="ess-places-title" OnClose="OnClose" Expanded="true">
+    <Header>
+        <h2 id="ess-places-title" class="title">@Title</h2>
+    </Header>
+    <ChildContent>
+        @if (Searching)
+        {
+            <form class="search" role="search" @onsubmit="PickFirstAsync">
+                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round"><path d="@Icons.Search" /></svg>
+                <input id="ess-place-search" type="search" autocomplete="off" enterkeyhint="search" spellcheck="false"
+                       maxlength="@MaxLength" aria-label="@L["SearchPlaceLabel"]" placeholder="@L["SearchPlacePlaceholder"]"
+                       aria-controls="ess-place-suggestions" aria-describedby="ess-place-status"
+                       value="@Search.Text" @oninput="OnInput" @onkeydown="OnKeyDown" @ref="_input" />
+                @if (Search.Text.Length > 0)
+                {
+                    <button type="button" class="clear" @onclick="ClearAsync" aria-label="@L["ClearSearch"]" title="@L["ClearSearch"]">
+                        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round"><path d="@Icons.Close" /></svg>
+                    </button>
+                }
+            </form>
+
+            <p id="ess-place-status" class="status @(StatusIsMessage ? "is-message" : null)" role="status">@StatusText</p>
+
+            @if (_naming is { } chosen)
+            {
+                <form class="naming" @onsubmit="SaveOtherAsync">
+                    <p class="chosen"><b>@chosen.Label</b> @chosen.Detail</p>
+                    <label for="ess-place-name">@L["PlaceName"]</label>
+                    <input id="ess-place-name" type="text" maxlength="@SavedPlace.MaxNameLength" autocomplete="off"
+                           placeholder="@L["PlaceNamePlaceholder"]" @bind="_name" @bind:event="oninput" @ref="_nameInput" />
+                    <button type="submit" class="save" disabled="@string.IsNullOrWhiteSpace(_name)">@L["SavePlace"]</button>
+                    <button type="button" class="link" @onclick="() => _naming = null">@L["Cancel"]</button>
+                </form>
+            }
+            else if (Search.Suggestions.Count > 0)
+            {
+                <ul id="ess-place-suggestions" class="suggestions @(Search.Answered ? null : "is-stale")" aria-label="@L["Suggestions"]">
+                    @foreach (var suggestion in Search.Suggestions)
+                    {
+                        <li @key="@($"{suggestion.Latitude},{suggestion.Longitude},{suggestion.Label}")">
+                            <button type="button" class="suggestion" @onclick="() => PickAsync(suggestion)">
+                                <span class="ic" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
+                                         stroke-linecap="round" stroke-linejoin="round"><path d="@KindIcon(suggestion.Kind)" /></svg>
+                                </span>
+                                <span class="tx">
+                                    <b>@Highlighted(suggestion.Label)</b>
+                                    <span class="sub">@Sub(suggestion)</span>
+                                </span>
+                                @if (UserLocation is { } user)
+                                {
+                                    <span class="km">@L["DistanceApprox", Formatting.Km(Geo.DistanceKm(user, new GeoPoint(suggestion.Latitude, suggestion.Longitude)), CultureInfo.CurrentCulture)]</span>
+                                }
+                            </button>
+                        </li>
+                    }
+                </ul>
+            }
+
+            <button type="button" class="on-map" @onclick="OnPickOnMap">
+                <span class="ic" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Place" /></svg>
+                </span>
+                <span class="tx">
+                    <b>@L["PickOnMap"]</b>
+                    <span class="touch">@L["PickOnMapTouch"]</span>
+                    <span class="mouse">@L["PickOnMapMouse"]</span>
+                </span>
+            </button>
+        }
+
+        @* What was just done to a place: saved, or forgotten (with Undo). *@
+        <p class="done @(_done is null ? null : "is-shown")" role="status">
+            @if (_done is { } done)
+            {
+                @done
+                @if (_removed is not null)
+                {
+                    @(" ")
+                    <button type="button" class="link" @onclick="UndoAsync">@L["Undo"]</button>
+                }
+            }
+        </p>
+
+        <section class="yours @(Managing && !Searching ? "is-managing" : null)"
+                 aria-labelledby="@(Managing && !Searching ? "ess-places-title" : "ess-your-places")">
+            @if (!Managing || Searching)
+            {
+                <h3 id="ess-your-places">@L["SavedPlacesLabel"]</h3>
+            }
+            <ul>
+                @SavedRow(PlaceKind.Home, Places.Home, L["Home"], Icons.Home)
+                @SavedRow(PlaceKind.Work, Places.Work, L["Work"], Icons.Work)
+                @foreach (var place in Places.Places.Where(p => p.Kind == PlaceKind.Other))
+                {
+                    @if (_renaming == place.Id)
+                    {
+                        <li @key="place.Id">
+                            <form class="naming rename" @onsubmit="RenameAsync">
+                                <label for="ess-place-rename">@L["PlaceName"]</label>
+                                <input id="ess-place-rename" type="text" maxlength="@SavedPlace.MaxNameLength" autocomplete="off" data-ess-own-escape
+                                       @bind="_newName" @bind:event="oninput" @onkeydown="OnRenameKeyDown" @ref="_renameInput" />
+                                <button type="submit" class="save" disabled="@string.IsNullOrWhiteSpace(_newName)">@L["SavePlace"]</button>
+                                <button type="button" class="link" @onclick="StopRenaming">@L["Cancel"]</button>
+                            </form>
+                        </li>
+                    }
+                    else
+                    {
+                        <li @key="place.Id">
+                            <button type="button" class="row" disabled="@(!ForTrip)" @onclick="() => OnStartTrip.InvokeAsync(TripDestination.To(place))">
+                                <span class="ic" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
+                                         stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Place" /></svg>
+                                </span>
+                                <span class="tx">
+                                    <b>@place.Name</b>
+                                    <span class="sub">@AddressOf(place)</span>
+                                </span>
+                            </button>
+                            <button type="button" class="edit" @onclick="() => StartRenaming(place)" aria-label="@L["RenamePlaceLabel", place.Name]">
+                                @L["Rename"]
+                            </button>
+                            @ForgetButton(place, place.Name)
+                        </li>
+                    }
+                }
+                <li>
+                    <button type="button" class="row" aria-pressed="@(_purpose == PlacePurpose.Other ? "true" : "false")" @onclick="() => Choose(PlacePurpose.Other)">
+                        <span class="ic" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round"><path d="@Icons.Plus" /></svg>
+                        </span>
+                        <span class="tx">
+                            <b>@L["AddPlaceTitle"]</b>
+                            <span class="sub">@(_purpose == PlacePurpose.Other ? L["Choosing"] : L["AddPlaceHelp"])</span>
+                        </span>
+                    </button>
+                </li>
+            </ul>
+        </section>
+
+        <p class="attribution">@L["AddressAttribution"]</p>
+    </ChildContent>
+</Pane>
+
+@code {
+    private const int MaxLength = 100;
+
+    private ElementReference _input;
+    private ElementReference _nameInput;
+    private PlacePurpose _purpose;
+    private PlacePurpose? _shownPurpose;
+    private bool _focusSearch = true;
+    private bool _focusName;
+
+    /// <summary>A place found for <see cref="PlacePurpose.Other"/>, waiting for its name.</summary>
+    private PlaceSuggestion? _naming;
+    private string _name = "";
+
+    /// <summary>The named place being renamed, and its new name.</summary>
+    private string? _renaming;
+    private string _newName = "";
+    private ElementReference _renameInput;
+    private bool _focusRename;
+
+    /// <summary>What was just done to a place ("Saved.", "Cottage forgotten."), and the place forgotten, for Undo.</summary>
+    private string? _done;
+    private RemovedPlace? _removed;
+
+    /// <summary>Saved places whose address was looked up this time the panel showed.</summary>
+    private readonly HashSet<string> _lookedUp = [];
+    private readonly CancellationTokenSource _cts = new();
+
+    /// <summary>
+    /// What a place found is for: a trip there, or saving it as Home, Work or another place; or <see cref="PlacePurpose.Manage"/>,
+    /// the saved places' list, where it's for the one chosen to set or add.
+    /// </summary>
+    [Parameter]
+    public PlacePurpose Purpose { get; set; }
+
+    /// <summary>Where the user is, if known: suggestions near them rank higher and say how far they are.</summary>
+    [Parameter]
+    public GeoPoint? UserLocation { get; set; }
+
+    /// <summary>Where the search ranks from when the user's location isn't known: the map's centre.</summary>
+    [Parameter]
+    public GeoPoint? MapCenter { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>A trip to a place found, or to a saved place.</summary>
+    [Parameter]
+    public EventCallback<TripDestination> OnStartTrip { get; set; }
+
+    /// <summary>A place was saved from the search: back to Best near you.</summary>
+    [Parameter]
+    public EventCallback<SavedPlace> OnSaved { get; set; }
+
+    /// <summary>The place will be picked on the map: the panes close, and the map says how.</summary>
+    [Parameter]
+    public EventCallback OnPickOnMap { get; set; }
+
+    private bool ForTrip => _purpose == PlacePurpose.Destination;
+
+    /// <summary>Opened from ✎: the list of saved places, which Set, Change and Add search from, and come back to.</summary>
+    private bool Managing => Purpose == PlacePurpose.Manage;
+
+    /// <summary>The address search shows: for a trip, or a place being set or added.</summary>
+    private bool Searching => _purpose != PlacePurpose.Manage;
+
+    /// <summary>What the panel goes back to once a place is chosen, or choosing it is cancelled.</summary>
+    private PlacePurpose BasePurpose => Managing ? PlacePurpose.Manage : PlacePurpose.Destination;
+
+    private string Title => _purpose switch
+    {
+        PlacePurpose.Home => L["SetHomeTitle"],
+        PlacePurpose.Work => L["SetWorkTitle"],
+        PlacePurpose.Other => L["AddPlaceTitle"],
+        PlacePurpose.Manage => L["SavedPlacesLabel"],
+        _ => L["PlacesTitle"],
+    };
+
+    private static string Language => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr" ? "fr" : "en";
+
+    /// <summary>The message under the box is the search's state, not only a count read out.</summary>
+    private bool StatusIsMessage => Search.Searching && (Search.Error != ApiError.None || (Search.Answered && Search.Suggestions.Count == 0));
+
+    private string StatusText
+    {
+        get
+        {
+            if (!Search.Searching)
+            {
+                return "";
+            }
+
+            return Search.Error switch
+            {
+                ApiError.None when Search.Answered && Search.Suggestions.Count == 0 => L["SearchNothing", Search.Text.Trim()],
+                ApiError.None when Search.Answered => L["PlacesFound", Search.Suggestions.Count],
+                ApiError.None => "",
+                ApiError.Unavailable => ServicesStatus.Note(Services.Geocoding, L, "Search") ?? L["SearchUnavailable"],
+                ApiError.RateLimited => L["SearchRateLimited"],
+                _ => L["SearchFailed"],
+            };
+        }
+    }
+
+    /// <summary>A search refused while the index is prepared asks how far it is, and runs again once it's ready.</summary>
+    private SearchRecovery? _recovery;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Search.Changed += OnChanged;
+        Places.Changed += OnChanged;
+        Services.Changed += OnChanged;
+        _recovery = new SearchRecovery(Search, Services, () => InvokeAsync(() => Search.Type(Search.Text, UserLocation ?? MapCenter, Language)));
+        await Places.LoadAsync();
+
+        // Once they're in: opened first (a reload on ?view=places), the panel renders before they are.
+        _ = LookUpAddressesAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (_shownPurpose != Purpose)
+        {
+            (_shownPurpose, _purpose, _naming, _focusSearch) = (Purpose, Purpose, null, Purpose != PlacePurpose.Manage);
+            Settle();
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusSearch)
+        {
+            _focusSearch = false;
+            if (Searching)
+            {
+                await _input.FocusAsync();
+            }
+        }
+
+        if (_focusName)
+        {
+            _focusName = false;
+            await _nameInput.FocusAsync();
+        }
+
+        if (_focusRename)
+        {
+            _focusRename = false;
+            await _renameInput.FocusAsync();
+        }
+    }
+
+    private void OnInput(ChangeEventArgs e)
+    {
+        _naming = null;
+        Settle();
+        Search.Type(e.Value?.ToString() ?? "", UserLocation ?? MapCenter, Language);
+    }
+
+    private async Task OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && Search.Text.Length > 0)
+        {
+            await ClearAsync();
+        }
+    }
+
+    private async Task ClearAsync()
+    {
+        Search.Clear();
+        _naming = null;
+        _focusSearch = true;
+        await Task.CompletedTask;
+    }
+
+    /// <summary>Enter picks the first suggestion, once they're the text's own.</summary>
+    private Task PickFirstAsync() =>
+        Search.Answered && Search.Suggestions.Count > 0 ? PickAsync(Search.Suggestions[0]) : Task.CompletedTask;
+
+    private async Task PickAsync(PlaceSuggestion suggestion)
+    {
+        var point = new GeoPoint(suggestion.Latitude, suggestion.Longitude);
+        var address = PlaceAddresses.ShortName(suggestion);
+        switch (_purpose)
+        {
+            case PlacePurpose.Destination:
+                Search.Clear();
+                await OnStartTrip.InvokeAsync(new TripDestination(point.Latitude, point.Longitude, Address: address));
+                break;
+
+            case PlacePurpose.Home or PlacePurpose.Work:
+                var saved = await Places.SaveAsync(_purpose == PlacePurpose.Home ? PlaceKind.Home : PlaceKind.Work, point, address: address);
+                Search.Clear();
+                await SavedAsync(saved);
+                break;
+
+            default:
+                (_naming, _name, _focusName) = (suggestion, "", true);
+                break;
+        }
+    }
+
+    private async Task SaveOtherAsync()
+    {
+        if (_naming is not { } chosen || string.IsNullOrWhiteSpace(_name))
+        {
+            return;
+        }
+
+        var saved = await Places.SaveAsync(
+            PlaceKind.Other, new GeoPoint(chosen.Latitude, chosen.Longitude), _name, PlaceAddresses.ShortName(chosen));
+        (_naming, _name) = (null, "");
+        Search.Clear();
+        await SavedAsync(saved);
+    }
+
+    /// <summary>A place saved: back to the list when managing them, else back to Best near you.</summary>
+    private async Task SavedAsync(SavedPlace saved)
+    {
+        if (Managing)
+        {
+            (_purpose, _done, _removed) = (PlacePurpose.Manage, L["PlaceSaved"], null);
+            return;
+        }
+
+        await OnSaved.InvokeAsync(saved);
+    }
+
+    /// <summary>Switches what a place found is for (Set, Add a place), or back to a trip or the list when it's tapped again.</summary>
+    private void Choose(PlacePurpose purpose)
+    {
+        (_purpose, _naming, _focusSearch) = (_purpose == purpose ? BasePurpose : purpose, null, true);
+        Settle();
+    }
+
+    /// <summary>Another action: what was done before isn't news any more, and can't be undone.</summary>
+    private void Settle() => (_done, _removed, _renaming) = (null, null, null);
+
+    private void StartRenaming(SavedPlace place)
+    {
+        Settle();
+        (_renaming, _newName, _focusRename) = (place.Id, place.Name, true);
+    }
+
+    private void StopRenaming() => _renaming = null;
+
+    private void OnRenameKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape")
+        {
+            StopRenaming();
+        }
+    }
+
+    private async Task RenameAsync()
+    {
+        if (_renaming is not { } id || string.IsNullOrWhiteSpace(_newName))
+        {
+            return;
+        }
+
+        await Places.RenameAsync(id, _newName);
+        _renaming = null;
+    }
+
+    /// <summary>Forgets a place at once; Undo, in the status line, brings it back.</summary>
+    private async Task ForgetAsync(SavedPlace place, string name)
+    {
+        Settle();
+        _removed = await Places.RemoveAsync(place.Id);
+        _done = _removed is null ? null : L["PlaceForgotten", name].Value;
+    }
+
+    private async Task UndoAsync()
+    {
+        if (_removed is { } removed)
+        {
+            await Places.RestoreAsync(removed);
+        }
+
+        (_done, _removed) = (null, null);
+    }
+
+    /// <summary>Home or Work in "Your places": a trip there once it's saved (when the panel is for a trip), and Set or Change.</summary>
+    private RenderFragment SavedRow(PlaceKind kind, SavedPlace? place, string name, string icon)
+    {
+        var purpose = kind == PlaceKind.Home ? PlacePurpose.Home : PlacePurpose.Work;
+        var choosing = _purpose == purpose;
+        return @<li>
+            <button type="button" class="row" disabled="@(place is null || !ForTrip)"
+                    @onclick="() => place is null ? Task.CompletedTask : OnStartTrip.InvokeAsync(TripDestination.To(place))">
+                <span class="ic" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"><path d="@icon" /></svg>
+                </span>
+                <span class="tx">
+                    <b>@name</b>
+                    <span class="sub">@(choosing ? L["Choosing"] : place is null ? L["NotSet"] : AddressOf(place))</span>
+                </span>
+            </button>
+            <button type="button" class="edit @(choosing ? "is-on" : null)" aria-pressed="@(choosing ? "true" : "false")"
+                    aria-label="@L[choosing ? "CancelChoosingLabel" : place is null ? "SetPlaceLabel" : "ChangePlaceLabel", name]"
+                    @onclick="() => Choose(purpose)">
+                @(choosing ? L["Cancel"] : place is null ? L["SetPlace"] : L["Change"])
+            </button>
+            @if (place is not null)
+            {
+                @ForgetButton(place, name)
+            }
+        </li>;
+    }
+
+    private RenderFragment ForgetButton(SavedPlace place, string name) =>
+        @<button type="button" class="forget" @onclick="() => ForgetAsync(place, name)" aria-label="@L["ForgetPlaceLabel", name]"
+                 title="@L["ForgetPlaceLabel", name]">
+            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Trash" /></svg>
+        </button>;
+
+    private string AddressOf(SavedPlace place) =>
+        place.Address ?? string.Create(CultureInfo.CurrentCulture, $"{place.Latitude:0.0000}, {place.Longitude:0.0000}");
+
+    /// <summary>The saved places without an address get one, once each, as the panel shows them.</summary>
+    private async Task LookUpAddressesAsync()
+    {
+        foreach (var place in Places.Places.Where(p => p.Address is null && _lookedUp.Add(p.Id)).ToList())
+        {
+            try
+            {
+                if ((await Addresses.LookupAsync(place.Point, Language, _cts.Token)).Place is { } found)
+                {
+                    await Places.SetAddressAsync(place.Id, PlaceAddresses.ShortName(found));
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                return;
+            }
+        }
+    }
+
+    private string Sub(PlaceSuggestion suggestion) =>
+        suggestion.Kind == "street" && suggestion.Detail.Length > 0 ? L["StreetIn", suggestion.Detail] : suggestion.Detail;
+
+    private static string KindIcon(string kind) => kind switch
+    {
+        "address" => Icons.Building,
+        "street" => Icons.Street,
+        _ => Icons.Place,
+    };
+
+    /// <summary>The label, with the words typed in bold.</summary>
+    private RenderFragment Highlighted(string label) => builder =>
+    {
+        var at = 0;
+        foreach (var (start, length) in PlaceSearch.Highlights(label, Search.Text))
+        {
+            builder.AddContent(0, label[at..start]);
+            builder.OpenElement(1, "em");
+            builder.AddContent(2, label.Substring(start, length));
+            builder.CloseElement();
+            at = start + length;
+        }
+
+        builder.AddContent(3, label[at..]);
+    };
+
+    private void OnChanged() => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Search.Changed -= OnChanged;
+        Places.Changed -= OnChanged;
+        Services.Changed -= OnChanged;
+        _recovery?.Dispose();
+        _cts.Cancel();
+    }
+}

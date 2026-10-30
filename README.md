@@ -12,11 +12,17 @@ and shows them on a map of nearby stations.
 | `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. |
 | `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
 | `src/Essence.Contracts` | The API's response records and the release notes', shared by the API, the UI and the release tool. |
+| `src/Essence.Ranking` | Which station to fill up at: costs, savings, the pick and its rules, the search area; for trips, the route's corridor, km along it, detours and the range; the OSRM and Photon clients, the address search's labels, and Québec's boundary. No dependencies; used by the API. |
+| `src/Essence.Routing` | The routing image: OSRM with Essence's car profile, which builds and refreshes Québec's road data itself (see [Routing and address search](#routing-and-address-search)). |
+| `src/Essence.Geocoding` | The address search image: Photon, which builds and refreshes its index of Québec's places itself. |
+| `src/Essence.Supervisor` | The supervisor both of those images run: it builds their data, serves it, refreshes it, retries, and reports its progress at `:9090/status`. |
 | `src/Essence.UI` | Razor class library: the map page, the station details pane and everything behind them. Shared with a future MAUI app. |
 | `src/Essence.Web` | Blazor WebAssembly host for `Essence.UI`, served as static files by nginx. See [its README](src/Essence.Web/README.md). |
 | `tools/Essence.Release` | Run by the publish workflow: dates each release by the day it landed on `main` and writes the web app's changelog (see [Versions](#versions)). |
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. |
-| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, the release notes, translations. |
+| `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM and Photon clients against stub servers; the address search's labels and filtering; Québec's boundary at its borders. |
+| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs. |
+| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the station shown in Best near you and on the way, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations. |
 | `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
 The full design and its rationale are in [docs/PLAN.md](docs/PLAN.md).
@@ -34,9 +40,27 @@ Compose starts `postgres`, then `migrate` (exits 0 once the schema and roles are
 The map is at <http://localhost:8081>. The API listens on <http://localhost:8080>; the interactive docs are at <http://localhost:8080/scalar>.
 The web container also forwards `/api/` to the API (<http://localhost:8081/api/health>): that's the address the map uses.
 
+Road distances, Best on the way and the address search need the routing and geocoding services, in the `trip` profile:
+
+```bash
+docker compose --profile trip up -d
+```
+
+On their first start they build their data into the `routing` and `geocoding` volumes: Québec's roads (a 1.2 GB download
+from Geofabrik, then a couple of minutes and 3.2 GB of RAM) and the index of Québec's places (a 1.6 GB download of
+Photon's dump of Canada, then about 10 minutes and 3 GB of RAM). Meanwhile Best near you estimates distances, and the
+map says trips and the search will be ready soon, with how far they are; <http://localhost:8080/services> says it too.
+They refresh their data every `REFRESH_DAYS` days (30). `ROUTING_PBF_URL` and `GEOCODING_DUMP_URL` in `.env` point them
+at other copies of the downloads.
+
 ```bash
 curl localhost:8080/health
 curl "localhost:8080/stations/nearby?lat=45.5017&lon=-73.5673&radiusKm=3&fuel=Diesel"
+curl "localhost:8080/stations/best?lat=45.5017&lon=-73.5673&fuel=Regulier"
+curl "localhost:8080/trips/best?fromLat=45.5017&fromLon=-73.5673&toLat=46.8139&toLon=-71.208&fuel=Regulier&rangeKm=180"
+curl "localhost:8080/places/search?q=1000%20de%20la%20gauch&lat=45.5017&lon=-73.5673&lang=fr"
+curl "localhost:8080/places/reverse?lat=45.4988&lon=-73.5666"
+curl localhost:8080/services
 curl "localhost:8080/prices/current?fuel=Régulier&limit=5"
 curl localhost:8080/imports
 ```
@@ -119,17 +143,62 @@ In the Development environment, logs are plain text and the ingest archive goes 
 | `GET /stations?region&brand&active&q&page&pageSize` | Stations, paged. `q` searches the name, address and postal code. |
 | `GET /stations/{id}` | One station with its current prices. |
 | `GET /stations/nearby?lat&lon&radiusKm=5&fuel&limit=20` | Active stations within a radius, closest first. |
+| `GET /stations/best?lat&lon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&radiusKm=10` | Where to fill up near a point: the pick, the closest, the cheapest and a few others that save (see below). |
+| `GET /trips/best?fromLat&fromLon&toLat&toLon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&rangeKm&spareKm=30` | Where to fill up on the way to a destination: the route, where to stop, and the stations along it ranked by detour (see below). |
+| `GET /places/search?q&lat&lon&lang=fr` | Places in Québec matching what was typed, at most 5, those near `lat`,`lon` first (see below). |
+| `GET /places/reverse?lat&lon&lang=fr` | What a point in Québec is called: the nearest address, street or named place. |
+| `GET /services` | Whether trips and the address search are ready, how far their data is (`state`, `stage`, `percent`), or when a failed build tries again (`lastError`, `nextAttemptAt`). 60 a minute per client IP, apart from the rest. |
 | `GET /stations/{id}/prices?fuel&from&to` | Price history overlapping a range (default: the last 30 days). |
 | `GET /prices/current?fuel&region&brand&sort=price&includeUnavailable&limit=50` | Current prices, cheapest first. |
 | `GET /imports?limit=20` | Recent imports with their statistics and `source` (`feed` or `xlsx`). |
-| `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. |
+| `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. A routing or geocoding server that doesn't answer, or whose data is being built, makes it `Degraded`, still 200, with the build's stage and percent. |
 
-`/stations/{id}` and `/stations/nearby` send `Last-Modified`: when the latest import was fetched. The map refreshes its prices
+`/stations/best` ranks the operating stations with an available price for the fuel (Costco only with `costco=true`: it
+sells to members only) by what the fill-up costs once the drive there and back is counted: price ÷ 100 × (fill + km there
+and back × L/100 km ÷ 100), to the cent. Savings are counted against the closest station. A farther one is picked only if
+it saves at least $0.25 and its round trip takes at most `maxDetourMin` longer than the closest's; the others stay
+listed, with the reason. Distances and minutes are by road, from the routing service: the 10 nearest stations and every
+one cheaper than one of them, at most 200. When the routing service is down, or the point is more than 1 km from a road,
+they're estimated instead (`byRoad` false: straight line × 1.3, driven at 40 km/h), and a farther station must also save
+with roads twice the straight line. It looks within `radiusKm`, widened to 25 km with fewer than 5 stations, else returns
+the closest priced station at any distance. It ranks a copy of every active station and its current prices, kept in
+memory and loaded once per import. The rules are in `src/Essence.Ranking`.
+
+`/trips/best` routes from the start to the destination, then looks at the stations within `maxDetourMin` × 0.5 km of the
+route (between 1 and 8 km), at most 100: in each 10 km stretch the two closest to the route and the three cheapest (on a
+long route, as many of them as 100 allow, the closest and the cheapest of each stretch first), then the cheapest of the
+rest. Each is measured by road, start → station → destination, and its detour (what stopping adds
+to the trip) counts in its cost. The reference is the cheapest station on the way (a stop that adds at most 1 km and
+2 min), or with none, the smallest detour; the pick is the lowest cost within `maxDetourMin`, if it saves at least
+$0.25; the biggest saving is shown too when it's another station. On trips of 100 km or more, `rangeKm` (what the
+dashboard says is left) less `spareKm` says which stations the car reaches and where to stop (`stopBeforeKm`); when that
+reaches no station, `lowFuel` is set and the whole range counts, or else the nearest station. Québec only: a destination
+outside Québec's boundary (OpenStreetMap's, simplified to 20 m along the inhabited borders; `QuebecBoundary.txt`), a start
+outside its box, or either more than 1 km from a road gets a 422 that says which (`point`: `from` or `to`), and so does a
+trip with no route; 503 when the routing service is down. The start is only checked against the box: a driver just
+across the border still gets the stations on the way into Québec. Stations snap to their own road: the car profile
+leaves autoroutes out, so a station on a service road beside one gets its real detour.
+
+`/places/search` finds addresses, streets, towns and named places in an index of Québec's places from OpenStreetMap
+(Photon, in the geocoding container), within Québec's box and near `lat`,`lon` when they're given; places whose province
+isn't Québec are dropped, each place comes once (a long street's stretches in one town are one), and a business found
+only by its address comes after the address. `q` takes 3 to 100 characters; `lang` is `fr` or `en`. `/places/reverse`
+answers 422 for a point outside Québec's boundary (known without Photon), 404 when nothing with an address is within
+1 km, else the nearest address within 100 m, or the nearest street or named place. Both answer 503 when Photon is down;
+they wait 1.5 s for it, without retrying.
+
+While the routing data or the address index is built (or loaded, after a refresh), the API reads the containers'
+progress (`:9090/status`, asked every 5 seconds in the background) instead of calling them: `/stations/best`
+estimates, and `/trips/best` and `/places/*` answer 503 with `service`, `state`, `stage`, `percent`, `lastError` and
+`nextAttemptAt` in the problem, as `/services` says them. A container whose status can't be had is called as before.
+
+`/stations/{id}`, `/stations/nearby`, `/stations/best` and `/trips/best` send `Last-Modified`: when the latest import was fetched. The map refreshes its prices
 about 5 min 20 s after that time, which is when the next import should be in, and more often while that import is late. A request
 whose `If-Modified-Since` is still current gets a 304.
 
 Fuel names accept or omit accents (`Regulier` = `Régulier`). Errors are ProblemDetails. Requests are rate limited per client IP
-(`RateLimiting:PermitLimit` per `RateLimiting:WindowSeconds`, 120/60 s by default). The `X-Forwarded-For`, `-Proto` and `-Prefix`
+(`RateLimiting:PermitLimit` per `RateLimiting:WindowSeconds`, 120/60 s by default); `/places/` has a window of its own
+(`RateLimiting:Search:PermitLimit` per `RateLimiting:Search:WindowSeconds`, 60/60 s), so typing doesn't eat the rest. The `X-Forwarded-For`, `-Proto` and `-Prefix`
 headers are trusted from private networks only, where the web container that forwards `/api/` lives; that container in turn
 takes the client's address from a reverse proxy on a private network. Allowed CORS origins come from `Cors:AllowedOrigins`:
 in Compose, `CORS_ORIGIN` from `.env`. The web container needs none, since the map calls the API through its own `/api/`.
@@ -139,7 +208,7 @@ in Compose, `CORS_ORIGIN` from `.env`. The web container needs none, since the m
 On every push to `main` that changes more than Markdown files and `docs/`,
 [the publish workflow](.github/workflows/publish.yml) runs the tests, then builds the images whose inputs changed since its
 last successful push run and pushes them to the GitHub Container Registry:
-`ghcr.io/etiennex9/essence-{migrator,ingest,api,web}`, tagged `sha-<commit>`. Once all of them are pushed, `latest` moves to
+`ghcr.io/etiennex9/essence-{migrator,ingest,api,web,routing,geocoding}`, tagged `sha-<commit>`. Once all of them are pushed, `latest` moves to
 them together, so a new migrator doesn't run next to an old api. If an image fails to build, `latest` stays. If the move
 itself fails partway, use **Re-run failed jobs** on that run, but only while it's the latest run on `main`: a later run
 builds its images again and moves `latest` past them, and re-running the older one after that would move `latest` back.
@@ -147,14 +216,18 @@ On `main`, a run waits for the one in progress instead of canceling it; a push m
 manual run, so start that again afterwards. An image's inputs are read from
 its Dockerfile: the projects it copies (its own and those it references) and the shared build files such as
 `Directory.Packages.props` ([select-images.sh](.github/scripts/select-images.sh)). A manual run, or a change to the workflow
-or `.dockerignore`, builds all four. The web image is also built along with any other, and when a changelog entry
+or `.dockerignore`, builds all six. The web image is also built along with any other, and when a changelog entry
 changed: it carries the release's version and changelog ([Versions](#versions)). Pull requests build the images they
 affect, without pushing.
 
 [deploy/truenas.yaml](deploy/truenas.yaml) runs those images on TrueNAS (Apps → Discover Apps → ⋮ → Install via YAML).
 Only the web container publishes a port; a reverse proxy in front of it serves the whole app, API included, at one HTTPS address.
 Leave asset caching off on that proxy: the web app's files under `_content/` aren't fingerprinted, and a new release reaches
-open tabs only if they're revalidated ([Versions](#versions)).
+open tabs only if they're revalidated ([Versions](#versions)). The web container doesn't log `/api/stations/best`,
+`/api/stations/nearby`, `/api/trips/` and `/api/places/`, whose query strings say where users are, where they're going
+and what they typed, and logs only critical errors under `/api/` (an upstream error names the request); the routing and
+geocoding servers log no requests, and the api logs their failures without the request. A proxy in front logs
+query strings too unless told not to.
 
 ### Rolling out each push automatically
 
@@ -221,6 +294,48 @@ gets an `@autodeploy-<time>` snapshot first (the last 10 are kept).
   cron job leaves a stopped app alone. Starting it on `latest` instead would run the new migration again.
 - **To update the script**, look at what changed in `deploy/truenas-autodeploy.py`, since root runs it, then run the
   `curl` command again.
+
+### Routing and address search
+
+Road distances, Best on the way and the address search come from the `routing` container (OSRM, Québec's roads from
+Geofabrik, [src/Essence.Routing](src/Essence.Routing)) and the `geocoding` container (Photon, Québec's places from Photon's
+dump of Canada, [src/Essence.Geocoding](src/Essence.Geocoding)). Both are in [deploy/truenas.yaml](deploy/truenas.yaml):
+pasting it is all they need. Each runs a supervisor ([src/Essence.Supervisor](src/Essence.Supervisor)) that:
+
+- builds its data on its first start, into its volume, and serves it once it's built. The app reports running at once:
+  the healthcheck only asks whether the supervisor is alive, so a first build doesn't hold the autodeploy's 10-minute
+  wait. Meanwhile Best near you estimates distances, and the map says trips and the search will be ready soon, with how
+  far they are (*Trips will be ready soon: preparing Québec's road map (45 %)*), and switches them on when they are.
+- refreshes it every `REFRESH_DAYS` days (30; 0 never), when the source changed (Geofabrik's extract daily, the dump
+  weekly): it builds the new data beside the current one while the server keeps answering, then restarts the server on
+  it, which takes the server off for a few seconds, and keeps the previous data until the server answers from the new
+  one (going back to it if it doesn't within 10 minutes, a restart in between included).
+- rebuilds the data after an image bumps OSRM's or Photon's version (data built by another version may not load), or
+  changes the car profile.
+- retries a failed download or build, or new data the server doesn't start on, after 1 minute, then twice as long
+  each time, up to 6 hours, and says when (the map: *couldn't be prepared. Trying again at 2:15 p.m.*); a restart
+  throws a build in progress away, and a download resumes where it stopped. A server that keeps stopping is started
+  again, and after 5 times in a row its data is rebuilt.
+- reports what it's doing at `:9090/status`, which the api reads (`/health`, `/services`).
+
+**Storage: Docker volumes, not datasets.** The data is a cache that rebuilds itself, so it lives in the named volumes
+`routing` and `geocoding` that the YAML declares: Docker creates them in the apps pool (`ix-apps`), owned by the
+containers' user, with nothing to create or `chown` by hand. TrueNAS deletes them with the app, and leaves them out of
+its app backups; either way the containers rebuild them. The routing volume holds about 0.9 GB, 3 GB while it builds;
+the geocoding volume about 2 GB, 6 GB while it builds.
+
+**Memory:** `mem_limit: 5g` each, measured while building and serving at once: osrm-extract takes 3.2 GB (the extract is
+cut down to roads first with osmium, which gives the same routes; the whole extract took 6.6 GB) and the server 0.7 GB;
+Photon's import about 2.7 GB with its server. Serving alone takes about 0.7 GB and 0.4–1.3 GB.
+
+**By hand, if ever:** `docker exec ix-essence-routing-1 essence-routing refresh` (or `ix-essence-geocoding-1
+essence-geocoding refresh`) rebuilds now without waiting for the source to change; `docker exec ix-essence-routing-1
+curl -s localhost:9090/status` shows the status. Their logs say what they did.
+
+**The packages.** The publish workflow creates `essence-routing` and `essence-geocoding` on GHCR the first time it
+builds them. A package a workflow creates in a public repository should be public too; if one isn't, the Publish run's
+summary warns about it, and its owner makes it public once (the repository's **Packages** → the package → **Package
+settings** → **Change visibility**): the autodeploy reads digests anonymously.
 
 ## Versions
 
@@ -329,3 +444,13 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Backfill:MaxAge` | `01:10:00` | Older slots aren't requested (the server keeps the files about an hour). |
 | `Archive:Path` / `RetentionDays` | `/data/archive` / 30 | |
 | `Health:MaxImportAgeMinutes` | 15 | API `/health` threshold. |
+| `Routing:BaseUrl` | `http://routing:5000/` | The routing server (OSRM), ending with `/`. 3 s per attempt and one retry. |
+| `Routing:StatusUrl` | `http://routing:9090/` | The routing container's status server, ending with `/`. |
+| `Geocoding:BaseUrl` | `http://geocoding:2322/` | The address search (Photon), ending with `/`. 1.5 s, no retry. |
+| `Geocoding:StatusUrl` | `http://geocoding:9090/` | The geocoding container's status server, ending with `/`. |
+| `RateLimiting:PermitLimit` / `WindowSeconds` | 120 / 60 | Requests per client IP and window, the address search's aside. |
+| `RateLimiting:Search:PermitLimit` / `WindowSeconds` | 60 / 60 | `/places/` requests per client IP and window. |
+
+The routing and geocoding containers take environment variables: `REFRESH_DAYS` (30; 0 never refreshes), and
+`ROUTING_PBF_URL` (Geofabrik's `quebec-latest.osm.pbf`) or `GEOCODING_DUMP_URL` (Photon's dump of Canada), each with an
+`.md5` beside it; a copy of the extract must also send its `Last-Modified`, which tells whether it changed.

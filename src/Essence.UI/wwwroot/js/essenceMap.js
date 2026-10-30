@@ -1,12 +1,42 @@
-// The MapLibre map behind MapInterop.cs. C# decides what to show (markers arrive preformatted); this module draws it
-// and reports what the user does: map moves, marker clicks, and dismissals (a click on the map, or Escape), and when the
-// page is hidden or shown again. It also reloads the page for a new release, keeping the view (UpdateCheck.cs): here
+// The MapLibre map behind MapInterop.cs. C# decides what to show (markers and a trip's route arrive preformatted); this
+// module draws it and reports what the user does: map moves, marker clicks, a press and hold on the map, and dismissals
+// (a click on the map, or Escape), and when the page is hidden or shown again. It also reloads the page for a new release, keeping the view (UpdateCheck.cs): here
 // rather than in a module of its own, which a tab would import from the new release only when it's time to reload.
 import { Map as MapLibreMap, Marker, NavigationControl } from "../lib/maplibre-gl/maplibre-gl.mjs";
 
 const VIEWPORT_DEBOUNCE_MS = 250;
 const PANE_SETTLE_MS = 260;
 const VISIBLE_MARGIN_PX = 48;
+
+// fitBounds keeps the points this far inside the area left uncovered: a marker's pill and flag stand above its point.
+const FIT_PADDING_PX = 56;
+const FIT_TOP_PX = 130; // under the toolbar, with room for a flag
+const FIT_MAX_ZOOM = 15;
+
+// Press and hold (a long press on Android, a touch timer on iOS, which has none, the left mouse button held, or a
+// right-click) picks a destination. A finger or mouse that moves farther than this, or a second finger, is panning or
+// zooming instead.
+const HOLD_MS = 550;
+const HOLD_SLOP_PX = 10;
+
+// Android fires contextmenu around when the touch timer does: a second hold this soon after is the same one. The click
+// that ends a hold (when the finger or the button lifts, however long after) mustn't count as a click on the map, which
+// would close the pane.
+const HOLD_REPEAT_MS = 800;
+const HOLD_CLICK_MS = 700;
+
+// What a press and hold on doesn't drop a pin: a marker, or the map's own buttons.
+const NOT_HELD = ".ess-marker, .maplibregl-ctrl";
+
+// A trip's route (setRoute): GeoJSON sources and layers drawn over the roads, under the labels.
+const ROUTE_SOURCE = "ess-route";
+const BEYOND_SOURCE = "ess-route-beyond";
+const CORRIDOR_SOURCE = "ess-corridor";
+const ROUTE_LAYERS = ["ess-route-corridor", "ess-route-casing", "ess-route-line", "ess-route-beyond-casing", "ess-route-beyond"];
+
+// The corridor shows on a trip seen whole, and fades out as the map zooms in on a stretch of it.
+const CORRIDOR_FADE_FROM_ZOOM = 10;
+const CORRIDOR_GONE_AT_ZOOM = 13;
 
 // The view a reload for a new release saves, for the page it reloads into: the version before writes it and the version
 // after reads it, so it's read leniently.
@@ -72,7 +102,35 @@ export function takeSavedView() {
         fuel: typeof view.fuel === "string" ? view.fuel : null,
         stationPushed: view.stationPushed === true,
         listPushed: view.listPushed === true,
+        carsPushed: view.carsPushed === true,
+        tripPushed: view.tripPushed === true,
+        carsOverTrip: view.carsOverTrip === true,
+        placesPushed: view.placesPushed === true,
+        bestSelectedId: Number.isSafeInteger(view.bestSelectedId) ? view.bestSelectedId : null,
     };
+}
+
+function lineString(coordinates) {
+    return { type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: coordinates ?? [] } };
+}
+
+function multiPolygon(coordinates) {
+    return { type: "Feature", properties: {}, geometry: { type: "MultiPolygon", coordinates: coordinates ?? [] } };
+}
+
+function cssColor(name, fallback) {
+    return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
+}
+
+// A marker with a text label over a stem: the destination, or where the range runs out.
+function labelElement(className, text) {
+    const element = document.createElement("div");
+    element.className = className;
+    element.setAttribute("aria-hidden", "true");
+    const label = document.createElement("b");
+    label.textContent = text;
+    element.append(label, document.createElement("i"));
+    return element;
 }
 
 export function createMap(container, options, dotnet) {
@@ -96,6 +154,22 @@ export function createMap(container, options, dotnet) {
     const markers = new Map(); // id → { marker, element, key }
     let selectedId = null;
     let userMarker = null;
+
+    // The trip on the map: its route (null: none), destination, where the range runs out, and a dropped pin.
+    let route = null;
+    let destinationMarker = null;
+    let rangeEndMarker = null;
+    let pinMarker = null;
+
+    // Press and hold.
+    let holdTimer = 0;
+    let holdStart = null;
+    let heldThisPress = false;
+    let lastHoldAt = 0;
+    let swallowClickUntil = 0;
+
+    // Best near you's pick and closest, with their flags' text, and the stations listed with them (null: none fade).
+    let emphasis = { pickId: null, closestId: null, listed: null, bestFlag: "", closestFlag: "" };
     let viewportTimer = 0;
 
     // flyTo and ensureVisible calls waiting to start their move (see reload).
@@ -125,14 +199,191 @@ export function createMap(container, options, dotnet) {
     }
 
     function onMapClick(e) {
+        if (Date.now() < swallowClickUntil) {
+            swallowClickUntil = 0;
+            return;
+        }
+
         if (!e.originalEvent.target.closest?.(".ess-marker")) {
             call("OnDismiss");
         }
     }
 
+    // A press and hold at a point of the container (pixels): C# drops a pin there.
+    function held(point) {
+        const now = Date.now();
+        if (now - lastHoldAt < HOLD_REPEAT_MS) {
+            return;
+        }
+
+        lastHoldAt = now;
+        heldThisPress = true;
+        swallowClickUntil = now + HOLD_CLICK_MS;
+        const { lng, lat } = map.unproject(point);
+        call("OnMapHeld", lat, lng);
+    }
+
+    function onContextMenu(e) {
+        if (e.originalEvent.target.closest?.(NOT_HELD)) {
+            return;
+        }
+
+        e.originalEvent.preventDefault();
+        held(e.point);
+    }
+
+    function cancelHold() {
+        clearTimeout(holdTimer);
+        holdTimer = 0;
+    }
+
+    // A finger or the mouse's button down at a point of the page: held still long enough, it's a press and hold.
+    function startHold(clientX, clientY, target) {
+        cancelHold();
+        heldThisPress = false;
+        if (target.closest?.(NOT_HELD)) {
+            return;
+        }
+
+        const rect = container.getBoundingClientRect();
+        holdStart = { x: clientX, y: clientY, point: [clientX - rect.left, clientY - rect.top] };
+        holdTimer = setTimeout(() => {
+            holdTimer = 0;
+            held(holdStart.point);
+        }, HOLD_MS);
+    }
+
+    function moveHold(clientX, clientY) {
+        if (holdTimer && Math.hypot(clientX - holdStart.x, clientY - holdStart.y) > HOLD_SLOP_PX) {
+            cancelHold();
+        }
+    }
+
+    function endHold() {
+        cancelHold();
+        if (heldThisPress) {
+            heldThisPress = false;
+            swallowClickUntil = Date.now() + HOLD_CLICK_MS;
+        }
+    }
+
+    function onTouchStart(e) {
+        if (e.touches.length !== 1) {
+            cancelHold();
+            heldThisPress = false;
+            return;
+        }
+
+        startHold(e.touches[0].clientX, e.touches[0].clientY, e.target);
+    }
+
+    function onTouchMove(e) {
+        if (e.touches.length !== 1) {
+            cancelHold();
+            return;
+        }
+
+        moveHold(e.touches[0].clientX, e.touches[0].clientY);
+    }
+
+    // The mouse's left button; fingers have the touch events above, and pens their own press and hold (a right-click).
+    function onPointerDown(e) {
+        if (e.pointerType === "mouse" && e.button === 0) {
+            startHold(e.clientX, e.clientY, e.target);
+        }
+    }
+
+    function onPointerMove(e) {
+        if (e.pointerType === "mouse") {
+            moveHold(e.clientX, e.clientY);
+        }
+    }
+
+    function onPointerUp(e) {
+        if (e.pointerType === "mouse") {
+            endHold();
+        }
+    }
+
+    function removeRouteLayers() {
+        for (const id of ROUTE_LAYERS) {
+            if (map.getLayer(id)) {
+                map.removeLayer(id);
+            }
+        }
+
+        for (const id of [ROUTE_SOURCE, BEYOND_SOURCE, CORRIDOR_SOURCE]) {
+            if (map.getSource(id)) {
+                map.removeSource(id);
+            }
+        }
+    }
+
+    // The route under the style's labels, in the theme's accent; past the range, dashed grey. A new style (the dark mode
+    // switching) drops custom layers, so they're added again on each style.load; while a style is loading, adding them
+    // throws, and style.load adds them once it's in.
+    function addRouteLayers() {
+        try {
+            removeRouteLayers();
+            if (route) {
+                addRouteLayersNow();
+            }
+        } catch {
+            // Not loaded yet.
+        }
+    }
+
+    function addRouteLayersNow() {
+        // Over every road and area, under the labels drawn after them: the dark style has labels before its roads.
+        const layers = map.getStyle().layers;
+        const lastShape = layers.findLastIndex(l => l.type !== "symbol");
+        const before = layers.slice(lastShape + 1).find(l => l.type === "symbol")?.id;
+        const accent = cssColor("--ess-accent", "#185fa5");
+        const casing = cssColor("--ess-surface", "#ffffff");
+        const round = { "line-cap": "round", "line-join": "round" };
+        map.addSource(ROUTE_SOURCE, { type: "geojson", data: lineString(route.path) });
+        map.addSource(BEYOND_SOURCE, { type: "geojson", data: lineString(route.beyond) });
+        map.addSource(CORRIDOR_SOURCE, { type: "geojson", data: multiPolygon(route.corridor) });
+        // One shape, filled once: where the route comes back near itself, the tint doesn't double.
+        map.addLayer({
+            id: "ess-route-corridor", type: "fill", source: CORRIDOR_SOURCE,
+            paint: {
+                "fill-color": accent,
+                // Zoomed in on a short trip, the corridor would tint the whole map: it fades out by then.
+                "fill-opacity": ["interpolate", ["linear"], ["zoom"], CORRIDOR_FADE_FROM_ZOOM, 0.12, CORRIDOR_GONE_AT_ZOOM, 0],
+            },
+        }, before);
+        map.addLayer({ id: "ess-route-casing", type: "line", source: ROUTE_SOURCE, layout: round, paint: { "line-color": casing, "line-width": 8 } }, before);
+        map.addLayer({ id: "ess-route-line", type: "line", source: ROUTE_SOURCE, layout: round, paint: { "line-color": accent, "line-width": 5 } }, before);
+        map.addLayer({
+            id: "ess-route-beyond-casing", type: "line", source: BEYOND_SOURCE, layout: round,
+            paint: { "line-color": casing, "line-width": 8 },
+        }, before);
+        map.addLayer({
+            id: "ess-route-beyond", type: "line", source: BEYOND_SOURCE, layout: { "line-join": "round" },
+            paint: { "line-color": "#9a978e", "line-width": 5, "line-dasharray": [1.4, 1] },
+        }, before);
+    }
+
+
+    // Shows, moves or (lat null) removes one of the trip's markers.
+    function placeMarker(existing, lat, lon, create) {
+        if (lat === null || lat === undefined) {
+            existing?.remove();
+            return null;
+        }
+
+        const marker = existing ?? create();
+        return marker.setLngLat([lon, lat]).addTo(map);
+    }
+
     function onKeyDown(e) {
-        // Esc in a modal dialog (About) closes that dialog only, not the pane behind it.
-        if (e.key === "Escape" && !document.querySelector("dialog:modal")) {
+        // Esc in a modal dialog (About) closes that dialog only, not the pane behind it; in the address search with text
+        // typed, it clears the text (PlacesPanel), and the next one closes the pane; in a field that handles it itself
+        // (renaming a place), it's that field's. An open menu or info bubble in the pane's header takes it first:
+        // essencePopup.js stops it at the window, so it never gets here.
+        if (e.key === "Escape" && !document.querySelector("dialog:modal") && !(e.target.matches?.("input[type=search]") && e.target.value)
+            && !e.target.matches?.("[data-ess-own-escape]")) {
             call("OnDismiss");
         }
     }
@@ -146,13 +397,13 @@ export function createMap(container, options, dotnet) {
         call("OnVisibilityChanged", document.visibilityState === "visible");
     }
 
-    // The part of the map not covered by the details pane (a side panel or a bottom sheet), in container pixels.
-    // Called after the pane's entrance transition (PANE_SETTLE_MS) so its final position is measured.
-    function uncoveredArea() {
+    // The part of the map not covered by the details pane (a side panel or a bottom sheet), in container pixels; the whole
+    // map without besidePane. Called after the pane's entrance transition (PANE_SETTLE_MS) so its final position is measured.
+    function uncoveredArea(besidePane = true) {
         const area = container.getBoundingClientRect();
         let right = area.width;
         let bottom = area.height;
-        const pane = document.querySelector("[data-ess-pane]");
+        const pane = besidePane ? document.querySelector("[data-ess-pane]") : null;
         if (pane) {
             const rect = pane.getBoundingClientRect();
             if (rect.top > area.top + area.height / 3) {
@@ -165,11 +416,25 @@ export function createMap(container, options, dotnet) {
         return { width: area.width, height: area.height, right, bottom };
     }
 
+    function applyEmphasis(element, id) {
+        const best = id === emphasis.pickId;
+        const closest = !best && id === emphasis.closestId;
+        element.classList.toggle("is-best", best);
+        element.classList.toggle("is-closest", closest);
+        element.classList.toggle("is-dimmed", emphasis.listed !== null && !emphasis.listed.has(id) && id !== selectedId);
+        if (best || closest) {
+            element.dataset.flag = best ? emphasis.bestFlag : emphasis.closestFlag;
+        } else {
+            delete element.dataset.flag;
+        }
+    }
+
     function renderMarker(element, model) {
         element.dataset.tone = model.tone;
         element.classList.toggle("is-unavailable", model.unavailable);
         element.classList.toggle("is-favorite", model.favorite);
         element.classList.toggle("is-selected", model.id === selectedId);
+        applyEmphasis(element, model.id);
         element.style.zIndex = String(model.z + 1);
         element.setAttribute("aria-label", model.label);
         element.title = model.label;
@@ -212,7 +477,19 @@ export function createMap(container, options, dotnet) {
     map.on("moveend", reportViewport);
     map.on("zoom", updateCompact);
     map.on("click", onMapClick);
-    document.addEventListener("keydown", onKeyDown);
+    map.on("contextmenu", onContextMenu);
+    map.on("movestart", cancelHold);
+    map.on("style.load", addRouteLayers);
+    container.addEventListener("touchstart", onTouchStart, { passive: true });
+    container.addEventListener("touchmove", onTouchMove, { passive: true });
+    container.addEventListener("touchend", endHold);
+    container.addEventListener("touchcancel", endHold);
+    container.addEventListener("pointerdown", onPointerDown);
+    container.addEventListener("pointermove", onPointerMove);
+    container.addEventListener("pointerup", onPointerUp);
+    container.addEventListener("pointercancel", onPointerUp);
+    // Captured, so it sees the search box's text before Blazor's own handler (which may be registered first) clears it.
+    document.addEventListener("keydown", onKeyDown, true);
     darkScheme.addEventListener("change", onSchemeChange);
     document.addEventListener("visibilitychange", onVisibilityChange);
     updateCompact();
@@ -261,7 +538,54 @@ export function createMap(container, options, dotnet) {
             selectedId = id ?? null;
             for (const [markerId, entry] of markers) {
                 entry.element.classList.toggle("is-selected", markerId === selectedId);
+                applyEmphasis(entry.element, markerId);
             }
+        },
+
+        // Best near you: the pick and the closest stand out, flagged with bestFlag and closestFlag; with listedIds, the
+        // markers not in it fade. Null ids clear it.
+        setEmphasis(pickId, closestId, listedIds, bestFlag, closestFlag) {
+            const listed = listedIds ? new Set(listedIds) : null;
+            emphasis = { pickId: pickId ?? null, closestId: closestId ?? null, listed, bestFlag, closestFlag };
+            for (const [id, entry] of markers) {
+                applyEmphasis(entry.element, id);
+            }
+        },
+
+        // A trip's route, [lon, lat] pairs: the part the car reaches, and the part past its range (dashed; null when none),
+        // with the corridor stations were looked for in (GeoJSON MultiPolygon coordinates, TripCorridor).
+        setRoute(path, beyond, corridor) {
+            route = { path, beyond, corridor };
+            addRouteLayers();
+        },
+
+        clearRoute() {
+            route = null;
+            addRouteLayers();
+        },
+
+        // The trip's destination, labelled; a null lat removes it.
+        setDestination(lat, lon, label) {
+            destinationMarker?.remove();
+            destinationMarker = placeMarker(null, lat, lon,
+                () => new Marker({ element: labelElement("ess-dest", label), anchor: "bottom" }));
+        },
+
+        // Where the range runs out along the route, labelled; a null lat removes it.
+        setRangeEnd(lat, lon, label) {
+            rangeEndMarker?.remove();
+            rangeEndMarker = placeMarker(null, lat, lon,
+                () => new Marker({ element: labelElement("ess-range-end", label), anchor: "bottom" }));
+        },
+
+        // The pin a press and hold dropped; a null lat removes it.
+        setPin(lat, lon) {
+            pinMarker = placeMarker(pinMarker, lat, lon, () => {
+                const element = document.createElement("div");
+                element.className = "ess-pin";
+                element.setAttribute("aria-hidden", "true");
+                return new Marker({ element, anchor: "bottom" });
+            });
         },
 
         showUserLocation(lat, lon) {
@@ -296,8 +620,30 @@ export function createMap(container, options, dotnet) {
             }, besidePane ? PANE_SETTLE_MS : 0);
         },
 
-        // Pans just enough that the point isn't under the details pane.
-        ensureVisible(lat, lon) {
+        // Shows the box (degrees), with besidePane in the area the pane leaves uncovered, once the pane is in place.
+        fitBounds(west, south, east, north, besidePane) {
+            pendingMoves++;
+            setTimeout(() => {
+                pendingMoves--;
+                const { width, height, right, bottom } = uncoveredArea(besidePane);
+                let padding = {
+                    top: FIT_TOP_PX,
+                    left: FIT_PADDING_PX,
+                    right: width - right + FIT_PADDING_PX,
+                    bottom: height - bottom + FIT_PADDING_PX,
+                };
+                if (width - padding.left - padding.right < FIT_PADDING_PX || height - padding.top - padding.bottom < FIT_PADDING_PX) {
+                    // Too little left beside the pane (a short window): MapLibre wouldn't move at all.
+                    padding = FIT_PADDING_PX / 2;
+                }
+
+                map.fitBounds([[west, south], [east, north]], { padding, maxZoom: FIT_MAX_ZOOM, animate: !reducedMotion.matches });
+            }, besidePane ? PANE_SETTLE_MS : 0);
+        },
+
+        // Pans just enough that the point isn't under the details pane: once it's in place, unless it already is
+        // (waitForPane false, for a station chosen in the pane open).
+        ensureVisible(lat, lon, waitForPane = true) {
             pendingMoves++;
             setTimeout(() => {
                 pendingMoves--;
@@ -308,7 +654,7 @@ export function createMap(container, options, dotnet) {
                 if (!inside) {
                     map.panBy([point.x - right / 2, point.y - bottom / 2]);
                 }
-            }, PANE_SETTLE_MS);
+            }, waitForPane ? PANE_SETTLE_MS : 0);
         },
 
         // Reloads the page. With saveView, the page it reloads into opens on this view, with the page's own `state` (C#'s
@@ -335,7 +681,16 @@ export function createMap(container, options, dotnet) {
 
         dispose() {
             clearTimeout(viewportTimer);
-            document.removeEventListener("keydown", onKeyDown);
+            cancelHold();
+            container.removeEventListener("touchstart", onTouchStart);
+            container.removeEventListener("touchmove", onTouchMove);
+            container.removeEventListener("touchend", endHold);
+            container.removeEventListener("touchcancel", endHold);
+            container.removeEventListener("pointerdown", onPointerDown);
+            container.removeEventListener("pointermove", onPointerMove);
+            container.removeEventListener("pointerup", onPointerUp);
+            container.removeEventListener("pointercancel", onPointerUp);
+            document.removeEventListener("keydown", onKeyDown, true);
             darkScheme.removeEventListener("change", onSchemeChange);
             document.removeEventListener("visibilitychange", onVisibilityChange);
             map.remove();

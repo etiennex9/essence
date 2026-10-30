@@ -2,7 +2,7 @@
 #
 # Before pasting, replace:
 #   - every CHANGE_ME_..._PASSWORD (each appears twice). Use letters and digits only: they go into connection strings.
-#   - POOL in the two host paths, and create both first:
+#   - POOL in the host paths, and create them first:
 #     - postgres: its own dataset with the Generic preset (POSIX permissions), owned by 999:999, mode 700. Postgres won't
 #       start in a folder that inherits NFSv4 ACLs (the Apps preset).
 #     - data: owned by 1654:1654 (ingest), which creates the archive subfolder in it. NFSv4 ACLs are fine here.
@@ -12,6 +12,9 @@
 # The images come from the GitHub Container Registry, published by .github/workflows/publish.yml on every push to main.
 # TrueNAS offers Update once a day when one changed. To roll out each push within about 10 minutes instead, run
 # deploy/truenas-autodeploy.py from a cron job (README → Deploy).
+#
+# Routing and the address search keep their data in the named volumes at the end, which Docker creates (in the apps
+# pool's ix-apps dataset) and which they fill themselves: rebuildable caches, deleted with the app.
 
 services:
   postgres:
@@ -80,6 +83,50 @@ services:
         condition: service_completed_successfully
     restart: unless-stopped
 
+  # Road distances for Best near you, and Best on the way. No published port: only the api calls it, on 5000, and reads
+  # its progress on 9090. The api runs without it: it estimates distances, and trips say they'll be ready soon. It builds
+  # Québec's road data on its first start (a 1.2 GB download from Geofabrik, then a few minutes), refreshes it every
+  # REFRESH_DAYS days when the extract changed (0: never), and keeps serving the current data meanwhile.
+  routing:
+    image: ghcr.io/etiennex9/essence-routing:latest
+    environment:
+      REFRESH_DAYS: "30"
+    volumes:
+      - routing:/data
+    # Building while serving: 3.2 GB for osrm-extract, 0.7 GB for the server, and room for the files' cache.
+    mem_limit: 5g
+    # Healthy while its supervisor runs, whether it builds, serves or waits to try again: a first build doesn't hold the
+    # app in Deploying.
+    healthcheck:
+      test: ["CMD", "essence-routing", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    restart: unless-stopped
+
+  # Address search for Best on the way: Photon, with Québec's places from OpenStreetMap. No published port: the api calls
+  # it on 2322 and reads its progress on 9090, and runs without it (the search says it'll be ready soon; pins still
+  # work). It builds its index on its first start (a 1.6 GB download, then about 10 minutes), refreshes it every
+  # REFRESH_DAYS days when the dump changed, and keeps serving meanwhile. Photon logs no requests.
+  geocoding:
+    image: ghcr.io/etiennex9/essence-geocoding:latest
+    environment:
+      REFRESH_DAYS: "30"
+    volumes:
+      - geocoding:/data
+    # Building while serving: about 2.7 GB for the import and the server's 1 GB heap, and room for the files' cache.
+    mem_limit: 5g
+    healthcheck:
+      test: ["CMD", "essence-geocoding", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+      start_interval: 5s
+    restart: unless-stopped
+
   web:
     image: ghcr.io/etiennex9/essence-web:latest
     ports:
@@ -93,3 +140,8 @@ services:
       start_period: 60s
       start_interval: 2s
     restart: unless-stopped
+
+# The routing data and the address index: built by their containers, rebuilt when lost.
+volumes:
+  routing:
+  geocoding:

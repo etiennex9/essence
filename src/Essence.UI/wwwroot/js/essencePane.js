@@ -1,5 +1,6 @@
 // The bottom sheet behind Pane.razor on narrow screens. Dragging its header (or the bar above it) resizes it between its
 // default size and an expanded one, or slides it away to close it. Wide screens show a side panel, which doesn't drag.
+// Either one's body also scrolls up to an element on request (reveal).
 
 const SNAP_MS = 200;
 const DRAG_SLOP_PX = 4; // movement before a press on the header counts as a drag
@@ -7,6 +8,7 @@ const DISMISS_SHARE = 0.4; // pulled down past this share of the default height:
 const FLICK_PX_PER_MS = 0.5; // a release faster than this goes the way it was thrown
 const VELOCITY_WINDOW_MS = 100;
 const STUCK_RESET_MS = 1000;
+const REVEAL_MARGIN_PX = 8; // room left above an element scrolled up to
 
 const narrow = window.matchMedia("(max-width: 767px)");
 const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -101,7 +103,9 @@ export function attachSheet(pane, dotnet) {
     }
 
     function onPointerDown(e) {
-        if (!narrow.matches || e.button !== 0 || !e.target.closest("header, .handle") || e.target.closest("button, a, input")) {
+        // Not from a control, nor from a menu or bubble open in the header (essencePopup.js), which scrolls or selects.
+        if (!narrow.matches || e.button !== 0 || !e.target.closest("header, .handle")
+            || e.target.closest("button, a, input, [data-ess-popup]")) {
             return;
         }
 
@@ -201,4 +205,19 @@ export function attachSheet(pane, dotnet) {
             narrow.removeEventListener("change", onWidthChange);
         },
     };
+}
+
+// Scrolls the pane's body up to an element above what it shows (the hero, once a station far down a list is chosen),
+// smoothly unless motion is reduced: the sheet's on phones, the side panel's under a long trip's every station. Only the
+// body scrolls, not the page.
+export function reveal(element) {
+    const body = element?.closest(".body");
+    if (!body) {
+        return;
+    }
+
+    const delta = element.getBoundingClientRect().top - body.getBoundingClientRect().top;
+    if (delta < 0) {
+        body.scrollTo({ top: body.scrollTop + delta - REVEAL_MARGIN_PX, behavior: reducedMotion.matches ? "auto" : "smooth" });
+    }
 }

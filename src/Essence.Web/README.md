@@ -1,7 +1,8 @@
 # Essence.Web
 
 A single page: a fullscreen map that zooms to the device's location and shows nearby stations with the current price of the
-selected fuel. Clicking a station opens its details: current prices and their recent history.
+selected fuel. Clicking a station opens its details: current prices and their recent history. The fuel pump says which
+station is worth going to near you, or on the way to a destination.
 
 It's a standalone Blazor WebAssembly app. The page itself lives in the `Essence.UI` Razor class library, so a MAUI Blazor Hybrid
 app can host the same components later (see [Android](#android) below). The browser calls `Essence.Api` directly.
@@ -12,24 +13,31 @@ app can host the same components later (see [Android](#android) below). The brow
 |---|---|
 | Map | [MapLibre GL JS](https://maplibre.org/) 6.11.2 (BSD-3), vendored in `Essence.UI/wwwroot/lib/maplibre-gl/`. Tiles and styles from [OpenFreeMap](https://openfreemap.org/) (OpenStreetMap data, no API key). |
 | Map ↔ C# | `Essence.UI/wwwroot/js/essenceMap.js` owns the map and the marker DOM; `Services/MapInterop.cs` drives it and receives moves, clicks and dismissals. |
-| Page | `Pages/MapPage.razor`: fuel selector, locate button, status, data loading, `?station=` navigation. |
+| Page | `Pages/MapPage.razor`: fuel selector, toolbar, status, data loading, `?station=` and `?view=` navigation. It locates the user on load, or shows Montréal. |
 | Loading | `Services/StationViewport.cs`: on each move, `/stations/nearby` around the map center (radius to the corners, max 50 km and 100 stations; nothing below zoom 9), merged into a cache per fuel. |
 | Markers | Callout pills (brand badge and price). Prices are tinted by tertile among the stations in view, the cheapest draws on top, and below zoom 12 markers shrink to brand-colored dots. Styles are in `wwwroot/css/essence.css`. |
 | Details | `Components/StationDetails.razor` in `Pane.razor` (side panel from 768 px, bottom sheet below) and `PriceHistoryChart.razor` (stepped lines in plain SVG). |
 | Favorites | The star in a station's details saves it on the device (`Services/FavoriteStations.cs`, through `IPreferenceStore`: `localStorage` here). The toolbar's star opens `Components/FavoritesPanel.razor`: the favorites, cheapest first for the selected fuel, each with a toggle to compare it, and *Compare all*. |
 | Comparison | *Compare* in a station's details, or beside a favorite, adds it to the comparison (`Services/ComparedStations.cs`, also saved on the device, up to 8 stations: one per palette color, kept when others leave). The toolbar's chart button, with the count, opens `Components/ComparisonPanel.razor`: one price line per station for the selected fuel, and the stations cheapest first, each removable; *Clear the comparison* empties it. |
+| Best near you | The toolbar's fuel pump locates the user again and opens `Components/BestPanel.razor`: the station worth going to once the gas burned there and back is counted, the closest, best value and cheapest, a few others that save, and what it was worked out for. The ranking is the API's (`/stations/best`); `Services/BestNearYou.cs` keeps the latest answer for the location, fuel and car, and refreshes it on its own timer when the next prices should be in. On the map, the pick and the closest are flagged and the stations not listed fade (`setEmphasis` in `essenceMap.js`); ranked stations outside the viewport's fetch are drawn too, and the map fits the user, the pick and the closest beside the pane. On phones, a chip under the toolbar shows the pick while no pane is open. Without a location, or with an approximate one, it can rank from the map's centre. |
+| Best on the way | A destination turns Best near you into trip mode (`?view=trip`, same `BestPanel.razor`): the route on the map (dashed past where the range runs out, with the corridor stations were looked for in), where to stop, the pick with *Go via · Google Maps* (the station as a waypoint), and every station on the way. The ranking is the API's (`/trips/best`); `Services/TripState.cs` keeps the open trip and its plan in `sessionStorage` (`ISessionStore`), read on every load, so a tab Android discards while Google Maps navigates comes back to it. A trip is planned once, from where the user is; *Refresh* plans it again from there. On trips of 100 km or more, the range chip asks once for what the dashboard says is left, kept per car with its time. |
+| Places | "Going somewhere?" in Best near you: Home, Work and other places saved on the device (`Services/SavedPlaces.cs`, `IPreferenceStore`, each with its address), one tap from a trip. The box opens the address search (`Components/PlacesPanel.razor`, `?view=places`, pushed over Best near you): from 3 characters, 300 ms after the last keystroke, the API's `/places/search` (`Services/PlaceSearch.cs`, which cancels the search on its way and keeps answers by what was typed); a place found starts a trip there, or sets Home, Work or another place. A press and hold on the map (a right-click on desktops) drops a pin, whose card (`Components/DroppedPin.razor`) shows its address (`/places/reverse`, `Services/PlaceAddresses.cs`) and offers Best on the way there or saving it, or says it's outside Québec; *Use the map centre as destination* does the same from the keyboard. Without the address search, pins show their coordinates and the rest works. On phones, the chip under the toolbar also offers *To Work*. |
+| My cars | The car chip in Best near you's header opens `Components/MyCarsPanel.razor`: the cars set up on this device, each with its fuel, usual fill, consumption, Costco membership, spare km and longest detour (`Services/CarProfiles.cs`, in `IPreferenceStore`: no accounts). Until one is set up, a typical car (40 L at 8.5 L/100 km) on the map's fuel is used. Picking a car switches the map to its fuel, and the map's fuel updates the car being driven. |
 | History requests | Each listed or compared station costs one `/stations/{id}/prices` request (all fuels, so switching fuel is free), kept 2 minutes by `Services/HistoryCache.cs`. |
 | Text | `Resources/Strings.resx` (English) and `Strings.fr.resx`. The language follows the browser. Fuel names stay as the Régie publishes them. |
 | About | The button in the bottom-left corner opens `Components/AboutDialog.razor`, a native modal `<dialog>` (`wwwroot/js/essenceDialog.js`): the version and the changelog, a month at a time as it scrolls (`Services/ReleaseNotes.cs`). The files are under `release/`, written at build time ([Versions](../../README.md#versions)). |
 | Updates | `Services/UpdateCheck.cs` reads `release/release.json` again, every 10 minutes and when the page is shown, and compares its commit with the one the tab started with. Another release shows `Components/UpdatePrompt.razor`, an offer to reload, while the page is in use; the page reloads by itself once it's been out of sight for a minute, or as it's brought back from that. `essenceMap.js` saves the view, the user's dot, the fuel and the history flags in `sessionStorage`, so the reload reopens as the page was. |
 
 Opening a station adds `?station=<id>` to the URL, so Back closes the pane and the link can be shared; a link opened cold
-centers the map on that station. The favorites add `?view=favorites` and the comparison `?view=compare`; a station opened
-from them stacks on top, so Back returns to the list.
+centers the map on that station. The favorites add `?view=favorites`, the comparison `?view=compare` and Best near you
+`?view=best`; a station opened from them stacks on top, so Back returns to the list. My cars, `?view=cars`, stacks on top of
+Best near you or of a trip the same way, and so does a trip, `?view=trip`, on top of Best near you. The URL holds no
+coordinates: a `?view=trip` link opened in another tab shows Best near you.
 
 ## Run it
 
-With the back end running (`docker compose up -d postgres migrate ingest api` from the repository root):
+With the back end running (`docker compose up -d postgres migrate ingest api` from the repository root, and for trips the
+routing and geocoding services: [Run it](../../README.md#run-it)):
 
 ```bash
 dotnet watch --project src/Essence.Web

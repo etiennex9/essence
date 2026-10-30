@@ -8,7 +8,8 @@ public static class ServiceCollectionExtensions
 {
     /// <summary>
     /// Registers what the map page needs. The device services default to the browser ones; a host with better ones
-    /// (e.g. native geolocation in MAUI) registers its own <see cref="IDeviceLocation"/> or <see cref="IPreferenceStore"/> first,
+    /// (e.g. native geolocation in MAUI) registers its own <see cref="IDeviceLocation"/>, <see cref="IPreferenceStore"/> or
+    /// <see cref="ISessionStore"/> first,
     /// and likewise its own <see cref="IReleaseNotesSource"/> (release notes bundled with the app).
     /// </summary>
     public static IServiceCollection AddEssenceUI(this IServiceCollection services, EssenceUIOptions options)
@@ -23,9 +24,17 @@ public static class ServiceCollectionExtensions
         services.AddScoped<HistoryCache>();
         services.AddScoped<FavoriteStations>();
         services.AddScoped<ComparedStations>();
+        services.AddScoped<CarProfiles>();
+        services.AddScoped<BestNearYou>();
+        services.AddScoped<SavedPlaces>();
+        services.AddScoped<TripState>();
+        services.AddScoped<PlaceSearch>();
+        services.AddScoped<PlaceAddresses>();
+        services.AddScoped<ServicesStatus>();
         services.TryAddScoped<BrowserDevice>();
         services.TryAddScoped<IDeviceLocation>(sp => sp.GetRequiredService<BrowserDevice>());
         services.TryAddScoped<IPreferenceStore>(sp => sp.GetRequiredService<BrowserDevice>());
+        services.TryAddScoped<ISessionStore>(sp => sp.GetRequiredService<BrowserDevice>().Session);
         if (options.ReleaseNotesUrl is { } notesUrl)
         {
             var notesBaseUrl = notesUrl.AbsoluteUri.EndsWith('/') ? notesUrl : new Uri(notesUrl.AbsoluteUri + "/");

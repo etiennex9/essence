@@ -1,0 +1,956 @@
+/* ---- The header's popups (essencePopup.js places and closes them) ---- */
+
+/* The car being driven, before the info button: it opens the car menu. Narrow, so the title keeps room at 390 px. */
+.car-pop {
+    position: relative;
+    flex: none;
+    align-self: center;
+    display: flex;
+    max-width: 40%;
+    margin-right: -6px;
+}
+
+.car {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    max-width: 100%;
+    min-width: 0;
+    height: 34px;
+    padding: 0 10px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 999px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 600 12.5px/1 var(--ess-font);
+    cursor: pointer;
+}
+
+/* A 44 px target, without making the header taller. */
+.car::after {
+    content: "";
+    position: absolute;
+    inset: -5px 0;
+}
+
+.car:hover {
+    background: var(--ess-hover);
+}
+
+.car svg {
+    flex: none;
+}
+
+.car span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.car[aria-expanded="true"] {
+    border-color: var(--ess-accent);
+    background: var(--ess-hover);
+}
+
+.car .chevron {
+    transition: transform 150ms;
+}
+
+.car[aria-expanded="true"] .chevron {
+    transform: rotate(180deg);
+}
+
+/* The info button sits against Close, as icon buttons do. */
+.info-pop {
+    position: relative;
+    flex: none;
+    align-self: flex-start;
+    margin-right: -10px;
+}
+
+.info-pop .icon-button[aria-expanded="true"] {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+/* Under its button, its right edge on the button's; above it when there's no room below (data-side). No taller than the
+   room on that side (--popup-room, essencePopup.js): the rest scrolls. On phones the header drags the sheet and takes no
+   text selection: not in here. */
+.popup {
+    position: absolute;
+    z-index: 5;
+    top: calc(100% + 6px);
+    right: 0;
+    box-sizing: border-box;
+    max-height: var(--popup-room, none);
+    overflow-y: auto;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 12px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    box-shadow: var(--ess-shadow-lg);
+    text-align: left;
+    cursor: auto;
+}
+
+.popup[data-side="above"] {
+    top: auto;
+    bottom: calc(100% + 6px);
+}
+
+/* The cars, then My cars. Many cars scroll. */
+.menu {
+    min-width: 210px;
+    max-width: min(300px, calc(100vw - 24px));
+    max-height: min(60vh, 420px, var(--popup-room, 100vh));
+    padding: 6px;
+    overscroll-behavior: contain;
+    touch-action: pan-y;
+}
+
+.item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: var(--ess-text);
+    font: 500 14px/1.2 var(--ess-font);
+    text-align: left;
+    cursor: pointer;
+}
+
+.item:hover,
+.item:focus-visible {
+    background: var(--ess-hover);
+}
+
+.item svg {
+    flex: none;
+}
+
+.item span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.item .check {
+    visibility: hidden;
+    color: var(--ess-accent);
+}
+
+.item[aria-checked="true"] {
+    font-weight: 600;
+}
+
+.item[aria-checked="true"] .check {
+    visibility: visible;
+}
+
+.sep {
+    height: 0.5px;
+    margin: 6px 4px;
+    background: var(--ess-border);
+}
+
+/* What it was worked out for. Pane's shared styles stop at the body: the link has its own. */
+.info {
+    width: min(290px, calc(100vw - 24px));
+    padding: 10px 12px;
+    font: 400 12.5px/1.45 var(--ess-font);
+    user-select: text;
+    -webkit-user-select: text;
+}
+
+.info p {
+    margin: 0;
+}
+
+.info p + p {
+    margin-top: 6px;
+}
+
+.info .link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 36px;
+    margin-top: 2px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ess-accent);
+    font: 500 12.5px var(--ess-font);
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .car .chevron {
+        transition: none;
+    }
+}
+
+/* ---- The pane's body ---- */
+
+.choices {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.choices .secondary {
+    flex: 1 1 140px;
+}
+
+.result.is-loading {
+    opacity: 0.55;
+    transition: opacity 150ms;
+}
+
+/* Which station a tile or row put on top: for screen readers only. */
+.announce {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+}
+
+/* Ranked from the map's centre, or from an approximate location. */
+.origin {
+    margin: 0 0 10px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--ess-text-muted);
+}
+
+/* ---- The pick ---- */
+
+.hero {
+    padding: 12px 14px 14px;
+    border-radius: 14px;
+    border: 0.5px solid var(--ess-border);
+    background: var(--ess-selected);
+}
+
+.top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.logo {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    overflow: hidden;
+    background: var(--logo-bg);
+    color: var(--logo-fg);
+    font: 600 15px/1 var(--ess-font);
+}
+
+.logo.is-wide {
+    font-size: 13px;
+}
+
+.logo.small {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
+}
+
+.logo.small.is-wide {
+    font-size: 10px;
+}
+
+.logo img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #fff;
+}
+
+.who {
+    flex: 1;
+    min-width: 0;
+}
+
+.hero .who h3 {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--ess-text);
+}
+
+.who p {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--ess-text-muted);
+    overflow-wrap: anywhere;
+}
+
+.big {
+    flex: none;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+}
+
+.big small {
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--ess-text-muted);
+}
+
+.saves {
+    margin: 10px 0 2px;
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--ess-good);
+}
+
+.saves.is-neutral {
+    font-size: 17px;
+    color: var(--ess-text);
+}
+
+/* A station chosen that wouldn't be picked: past the longest detour, not sure by road, or past the range. */
+.saves.is-blocked {
+    font-size: 17px;
+    color: var(--ess-warning-text);
+}
+
+.why {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--ess-text-muted);
+}
+
+.top + .why {
+    margin-top: 10px;
+}
+
+.actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.go {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 46px;
+    padding: 0 12px;
+    border-radius: 10px;
+    background: var(--ess-accent);
+    color: var(--ess-on-accent);
+    font: 600 15px/1.2 var(--ess-font);
+    text-decoration: none;
+}
+
+.go:hover {
+    filter: brightness(1.08);
+}
+
+.secondary {
+    flex: none;
+    min-height: 46px;
+    padding: 0 16px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 10px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 600 14px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+.secondary:hover {
+    background: var(--ess-hover);
+}
+
+/* Costco: members only. */
+.tag {
+    flex: none;
+    padding: 3px 5px;
+    border-radius: 4px;
+    background: var(--ess-warning-bg);
+    color: var(--ess-warning-text);
+    font: 600 10px/1 var(--ess-font);
+}
+
+/* ---- Closest, best value, cheapest: each puts its station on top, pressed while it's there ---- */
+
+.tiles {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.tile {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
+    min-width: 0;
+    min-height: 44px;
+    padding: 8px 9px;
+    border: 0.5px solid var(--ess-border);
+    border-radius: 10px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.tile:hover {
+    background: var(--ess-hover);
+}
+
+.tile.is-on {
+    padding: 7px 8px;
+    border: 1.5px solid var(--ess-accent);
+    background: var(--ess-selected);
+}
+
+.tile .label {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: var(--ess-text-muted);
+}
+
+.tile .name {
+    max-width: 100%;
+    font-size: 13px;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tile .sub {
+    font-size: 11px;
+    color: var(--ess-text-muted);
+}
+
+/* ---- Also worth it ---- */
+
+.body h3.others-title {
+    margin: 16px 0 2px;
+    font-size: 12px;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+.others {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.others li + li {
+    border-top: 0.5px solid var(--ess-border);
+}
+
+.row {
+    width: 100%;
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas: "logo name price" "logo address saves";
+    align-items: baseline;
+    gap: 2px 10px;
+    min-height: 44px;
+    padding: 9px 8px;
+    border: 0;
+    border-radius: 8px;
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.row:hover {
+    background: var(--ess-hover);
+}
+
+/* The station on top, in "Also worth it" or on the way: outlined like a tile chosen, without the lines above and under it. */
+.row.is-on {
+    background: var(--ess-selected);
+    box-shadow: inset 0 0 0 1.5px var(--ess-accent);
+}
+
+.others li:has(> .row.is-on),
+.others li:has(> .row.is-on) + li,
+.on-way li:has(> .row.is-on),
+.on-way li:has(> .row.is-on) + li {
+    border-top-color: transparent;
+}
+
+.row .logo {
+    grid-area: logo;
+    align-self: center;
+}
+
+.row .name {
+    grid-area: name;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.row .address {
+    grid-area: address;
+    min-width: 0;
+    font-size: 12px;
+    color: var(--ess-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.row .price {
+    grid-area: price;
+    justify-self: end;
+    font-size: 16px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.row-saves {
+    grid-area: saves;
+    justify-self: end;
+    font-size: 11px;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--ess-good);
+}
+
+.row-saves.is-blocked {
+    color: var(--ess-warning-text);
+}
+
+.tile .note {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--ess-warning-text);
+}
+
+/* ---- Going somewhere? ---- */
+
+.where {
+    margin: 0 0 12px;
+}
+
+/* The saved places, under the box. */
+.where-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin-top: 6px;
+}
+
+/* Opens the address search (PlacesPanel). */
+.wbox {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    background: var(--ess-hover);
+    color: var(--ess-text-muted);
+    font: 500 14px/1.2 var(--ess-font);
+    text-align: left;
+    border: 0;
+    cursor: pointer;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.wbox:hover {
+    color: var(--ess-text);
+}
+
+.wbox svg {
+    flex: none;
+}
+
+.place {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 44px;
+    max-width: 100%;
+    padding: 0 11px;
+    box-sizing: border-box;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 10px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 600 13px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+.place:hover {
+    background: var(--ess-hover);
+}
+
+.place span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Home or Work, not saved yet: a tap opens the address search to set it. */
+.place.is-unset {
+    border-style: dashed;
+    color: var(--ess-text-muted);
+}
+
+/* ✎: Your places. Only an icon, so a square 44 px target. */
+.place.manage {
+    justify-content: center;
+    min-width: 44px;
+    padding: 0;
+    color: var(--ess-text-muted);
+}
+
+.place.manage:hover {
+    color: var(--ess-text);
+}
+
+.where-off {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--ess-hover);
+    font-size: 12.5px;
+    line-height: 1.35;
+    color: var(--ess-text-muted);
+}
+
+/* ---- Best on the way ---- */
+
+.trip-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 46px;
+    padding: 0 4px 0 12px;
+    border-radius: 10px;
+    border: 0.5px solid color-mix(in srgb, var(--ess-accent) 30%, transparent);
+    background: var(--ess-selected);
+    color: var(--ess-accent);
+}
+
+.trip-bar svg {
+    flex: none;
+}
+
+.trip-bar .tx {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    color: var(--ess-text);
+}
+
+.trip-bar b {
+    font-size: 14px;
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.trip-bar .tx span {
+    font-size: 12px;
+    color: var(--ess-text-muted);
+}
+
+/* Plan again from here (⟳), and end the trip (✕). */
+.bar-button {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-right: -2px;
+    border: 0;
+    border-radius: 50%;
+    background: transparent;
+    color: var(--ess-text-muted);
+    cursor: pointer;
+}
+
+.bar-button + .bar-button {
+    margin-left: -8px;
+}
+
+.bar-button:hover {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+.refresh[aria-disabled="true"] {
+    cursor: progress;
+}
+
+.refresh.is-busy svg {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(-360deg);
+    }
+}
+
+/* Under reduced motion, planning dims it instead. */
+@media (prefers-reduced-motion: reduce) {
+    .refresh.is-busy svg {
+        animation: none;
+    }
+
+    .refresh.is-busy {
+        opacity: 0.45;
+    }
+}
+
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.chip {
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 999px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 500 12px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+/* A 44 px target, without making the row taller. */
+button.chip {
+    position: relative;
+}
+
+button.chip::after {
+    content: "";
+    position: absolute;
+    inset: -4px 0;
+}
+
+.chip:hover {
+    background: var(--ess-hover);
+}
+
+.chip.is-range {
+    border-color: var(--ess-accent);
+    color: var(--ess-accent);
+    font-weight: 600;
+}
+
+.chip.is-range.is-unset {
+    border-style: dashed;
+}
+
+.chip.is-quiet {
+    border-style: dashed;
+    color: var(--ess-text-muted);
+    cursor: default;
+}
+
+.chip.is-quiet:hover {
+    background: var(--ess-surface);
+}
+
+.range-edit {
+    margin-top: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+    background: var(--ess-hover);
+}
+
+.range-edit p {
+    margin: 0 0 8px;
+    font-size: 13px;
+    line-height: 1.4;
+}
+
+.range-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+
+.range-row label {
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.number {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.number input {
+    width: 88px;
+    min-height: 44px;
+    box-sizing: border-box;
+    padding: 0 8px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 8px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    font: 500 15px var(--ess-font);
+    text-align: right;
+}
+
+.number .unit {
+    font-size: 13px;
+    color: var(--ess-text-muted);
+}
+
+.save {
+    min-height: 44px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 10px;
+    background: var(--ess-accent);
+    color: var(--ess-on-accent);
+    font: 600 14px var(--ess-font);
+    cursor: pointer;
+}
+
+/* Where to stop, or why not. */
+.need {
+    margin: 8px 0 0;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: var(--ess-warning-bg);
+    color: var(--ess-warning-text);
+    font-size: 12.5px;
+    line-height: 1.35;
+}
+
+.need.is-fine {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+.need b {
+    font-weight: 600;
+}
+
+.result > .need + .hero,
+.result > .chips + .hero,
+.result > .range-edit + .hero {
+    margin-top: 8px;
+}
+
+.more {
+    display: block;
+    min-height: 44px;
+    margin: 6px auto 0;
+    padding: 0 10px;
+    border: 0;
+    background: none;
+    color: var(--ess-accent);
+    font: 600 13px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+/* Every station on the way, in order along the route. */
+.on-way {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.on-way li + li {
+    border-top: 0.5px solid var(--ess-border);
+}
+
+.on-way .row {
+    grid-template-columns: 52px auto 1fr auto;
+    grid-template-areas: "km logo name price" "km logo address saves";
+}
+
+.on-way .km {
+    grid-area: km;
+    align-self: center;
+    display: flex;
+    flex-direction: column;
+    font-size: 13px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.on-way .km small {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: var(--ess-text-muted);
+}
+
+.on-way li.is-out {
+    opacity: 0.6;
+}
+
+.on-way li.is-out:has(> .row.is-on) {
+    opacity: 1;
+}
+
+.row-saves.is-neutral {
+    color: var(--ess-text-muted);
+}
+
+.row-saves.is-out {
+    color: var(--ess-warning-text);
+}

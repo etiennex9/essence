@@ -1,0 +1,262 @@
+@implements IDisposable
+@inject SavedPlaces Places
+@inject PlaceAddresses Addresses
+@inject ServicesStatus Services
+@inject IStringLocalizer<Strings> L
+
+@* The card for a pin dropped by a press and hold on the map (a long press, the mouse's button held, or a right-click): its
+   address, Best near it or on the way there, or save it as Home, Work, or a place with a name. Past Québec's border it says
+   so, and offers none of them. While the address search is down, the pin has no address: its coordinates show, and the
+   rest works. *@
+<section class="pin-card" role="dialog" aria-labelledby="ess-pin-title" tabindex="-1" @ref="_element">
+    <div class="top">
+        @* Read out when the address comes, or that the pin is outside Québec. *@
+        <span class="tx" aria-live="polite">
+            <span class="kicker">@Kicker</span>
+            <b id="ess-pin-title" class="@(_lookup is null ? "is-pending" : null)">@Title</b>
+            @if (Sub is { Length: > 0 } sub)
+            {
+                <span class="sub">@sub</span>
+            }
+        </span>
+        <button type="button" class="icon-btn" @onclick="OnClose" aria-label="@L["RemovePin"]" title="@L["RemovePin"]">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round"><path d="@Icons.Close" /></svg>
+        </button>
+    </div>
+
+    @* Past the border, there's nothing to plan or save. *@
+    @if (!Outside)
+    {
+        <div class="group" role="group" aria-labelledby="ess-pin-best">
+            <span id="ess-pin-best" class="caption">@L["BestStation"]</span>
+            <div class="pair">
+                <button type="button" class="secondary" @onclick="BestNearAsync">
+                    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Pump" /></svg>
+                    @L["NearHere"]
+                </button>
+                @if (!TripsUnavailable)
+                {
+                    <button type="button" class="primary" @onclick="TripAsync">
+                        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Pump" /></svg>
+                        @L["OnTheWayHere"]
+                    </button>
+                }
+            </div>
+            @if (TripsUnavailable)
+            {
+                <p class="note" role="status">
+                    @(ServicesStatus.Note(Services.Routing, L, "Trips") ?? L["TripsUnavailableShort"])
+                </p>
+            }
+        </div>
+
+        @if (_saved is { } saved)
+        {
+            <p class="note" role="status">@L["SavedAs", NameOf(saved)]</p>
+        }
+        else if (_naming)
+        {
+            <form class="naming" @onsubmit="SaveOtherAsync">
+                <label for="ess-pin-name">@L["PlaceName"]</label>
+                <input id="ess-pin-name" type="text" maxlength="@SavedPlace.MaxNameLength" autocomplete="off" placeholder="@L["PlaceNamePlaceholder"]"
+                       @bind="_name" @bind:event="oninput" @ref="_nameInput" />
+                <button type="submit" class="save" disabled="@string.IsNullOrWhiteSpace(_name)">@L["SavePlace"]</button>
+                <button type="button" class="link" @onclick="() => _naming = false">@L["Cancel"]</button>
+            </form>
+        }
+        else
+        {
+            <div class="group" role="group" aria-labelledby="ess-pin-save">
+                <span id="ess-pin-save" class="caption">@L["SaveAsCaption"]</span>
+                <div class="saves">
+                    <button type="button" @onclick="() => SaveAsync(PlaceKind.Home)" aria-label="@L["SaveAs", L["Home"]]">
+                        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Home" /></svg>
+                        @L["Home"]
+                    </button>
+                    <button type="button" @onclick="() => SaveAsync(PlaceKind.Work)" aria-label="@L["SaveAs", L["Work"]]">
+                        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Work" /></svg>
+                        @L["Work"]
+                    </button>
+                    <button type="button" @onclick="StartNaming" aria-label="@L["SavePlaceLabel"]">
+                        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round"><path d="@Icons.Plus" /></svg>
+                        @L["OtherPlace"]
+                    </button>
+                </div>
+            </div>
+        }
+    }
+</section>
+
+@code {
+    private ElementReference _element;
+    private ElementReference _nameInput;
+    private GeoPoint? _shown;
+    private SavedPlace? _saved;
+    private bool _naming;
+    private bool _focusName;
+    private bool _focusCard;
+    private string _name = "";
+
+    /// <summary>What the address search says of the pin; null while it's asked.</summary>
+    private PlaceLookup? _lookup;
+    private CancellationTokenSource? _lookupCts;
+
+    [Parameter, EditorRequired]
+    public GeoPoint Point { get; set; }
+
+    /// <summary>Where the user is, if known: the card says how far the pin is.</summary>
+    [Parameter]
+    public GeoPoint? UserLocation { get; set; }
+
+    /// <summary>Trips can't be planned now: the pin can still be saved.</summary>
+    [Parameter]
+    public bool TripsUnavailable { get; set; }
+
+    /// <summary>The pin removed (its Close button).</summary>
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    /// <summary>Best on the way to the pin, or to the place it was just saved as.</summary>
+    [Parameter]
+    public EventCallback<TripDestination> OnTrip { get; set; }
+
+    /// <summary>Best near you, ranked from the pin ("Near here").</summary>
+    [Parameter]
+    public EventCallback<BestOrigin> OnBestNear { get; set; }
+
+    private double? DistanceKm => UserLocation is { } user ? Geo.DistanceKm(user, Point) : null;
+
+    private string Coordinates => string.Create(CultureInfo.CurrentCulture, $"{Point.Latitude:0.0000}, {Point.Longitude:0.0000}");
+
+    private bool Outside => _lookup?.OutsideQuebec == true;
+
+    /// <summary>"Dropped pin · ≈ 11 km from you".</summary>
+    private string Kicker =>
+        DistanceKm is { } km ? $"{L["DroppedPin"]} · {L["FromYou", L["DistanceApprox", Formatting.Km(km, CultureInfo.CurrentCulture)]]}" : L["DroppedPin"];
+
+    /// <summary>The address, or what's known instead: being found, outside Québec, or the coordinates.</summary>
+    private string Title => _lookup switch
+    {
+        null => L["FindingAddress"],
+        { OutsideQuebec: true } => L["OutsideQuebec"],
+        { Place: { } place } => place.Label,
+        _ => Coordinates,
+    };
+
+    private string? Sub => _lookup switch
+    {
+        null => Coordinates,
+        { OutsideQuebec: true } => L["OutsideQuebecWhy"],
+        { Place: { } place } => place.Detail,
+        _ => null,
+    };
+
+    /// <summary>The pin's address, short, to keep with the place saved or the trip; null when it isn't known.</summary>
+    private string? Address => _lookup?.Place is { } place ? PlaceAddresses.ShortName(place) : null;
+
+    private static string Language => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr" ? "fr" : "en";
+
+    protected override void OnInitialized()
+    {
+        Services.Changed += OnServicesChanged;
+    }
+
+    private void OnServicesChanged() => InvokeAsync(StateHasChanged);
+
+    protected override void OnParametersSet()
+    {
+        if (_shown != Point)
+        {
+            // Another pin: the card starts over, and takes the focus, so the keyboard's path leads here.
+            (_shown, _saved, _naming, _name, _focusCard, _lookup) = (Point, null, false, "", true, null);
+            _ = LookUpAsync(Point);
+        }
+    }
+
+    /// <summary>Asks what the pin is called; a newer pin cancels the question for the older one.</summary>
+    private async Task LookUpAsync(GeoPoint point)
+    {
+        _lookupCts?.Cancel();
+        var cts = _lookupCts = new CancellationTokenSource();
+        PlaceLookup lookup;
+        try
+        {
+            lookup = await Addresses.LookupAsync(point, Language, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+
+        if (cts.IsCancellationRequested || point != Point)
+        {
+            return;
+        }
+
+        _lookup = lookup;
+
+        // Saved before the address came: it gets it now.
+        if (_saved is { Address: null } saved && Address is { } address)
+        {
+            await Places.SetAddressAsync(saved.Id, address);
+        }
+
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (_focusCard)
+        {
+            _focusCard = false;
+            await _element.FocusAsync();
+        }
+
+        if (_focusName)
+        {
+            _focusName = false;
+            await _nameInput.FocusAsync();
+        }
+    }
+
+    private Task TripAsync() =>
+        OnTrip.InvokeAsync(_saved is { } saved
+            ? TripDestination.To(saved) with { Address = saved.Address ?? Address }
+            : new TripDestination(Point.Latitude, Point.Longitude, Address: Address));
+
+    private Task BestNearAsync() => OnBestNear.InvokeAsync(new BestOrigin(Point, OriginKind.Pin, Label: Address));
+
+    private async Task SaveAsync(PlaceKind kind) => _saved = await Places.SaveAsync(kind, Point, address: Address);
+
+    private void StartNaming() => (_naming, _focusName) = (true, true);
+
+    private async Task SaveOtherAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            return;
+        }
+
+        _naming = false;
+        _saved = await Places.SaveAsync(PlaceKind.Other, Point, _name, Address);
+    }
+
+    private string NameOf(SavedPlace place) => place.Kind switch
+    {
+        PlaceKind.Home => L["Home"],
+        PlaceKind.Work => L["Work"],
+        _ => place.Name,
+    };
+
+    public void Dispose()
+    {
+        _lookupCts?.Cancel();
+        Services.Changed -= OnServicesChanged;
+    }
+}

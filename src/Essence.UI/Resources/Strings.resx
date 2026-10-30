@@ -18,9 +18,6 @@
   <data name="Locating" xml:space="preserve">
     <value>Finding your location…</value>
   </data>
-  <data name="LocateMe" xml:space="preserve">
-    <value>Show my location</value>
-  </data>
   <data name="ZoomIn" xml:space="preserve">
     <value>Zoom in to see stations</value>
   </data>
@@ -215,5 +212,593 @@
   </data>
   <data name="Reload" xml:space="preserve">
     <value>Reload</value>
+  </data>
+  <data name="BestNearYou" xml:space="preserve">
+    <value>Best near you</value>
+  </data>
+  <data name="BestChipVsClosest" xml:space="preserve">
+    <value>vs the closest</value>
+  </data>
+  <data name="CarMenuLabel" xml:space="preserve">
+    <value>Car: {0}</value>
+  </data>
+  <data name="Saves" xml:space="preserve">
+    <value>Saves {0}</value>
+  </data>
+  <data name="AboutTheSame" xml:space="preserve">
+    <value>About the same</value>
+  </data>
+  <data name="ClosestStation" xml:space="preserve">
+    <value>The closest station</value>
+  </data>
+  <data name="BestWhy" xml:space="preserve">
+    <value>on {0} L, after the {1} there and back, compared with {2}, the closest station ({3}, {4}).</value>
+  </data>
+  <data name="BestWhyNothingSaves" xml:space="preserve">
+    <value>No other station saves {0} or more on {1} L once the drive is counted.</value>
+  </data>
+  <data name="BestWhyDetour" xml:space="preserve">
+    <value>Those that save more are past your longest detour: {0} min more than the closest, there and back.</value>
+  </data>
+  <data name="BestWhyUncertain" xml:space="preserve">
+    <value>Farther stations might save more, but distances are estimated, and by road they might not.</value>
+  </data>
+  <data name="BestWhyOnly" xml:space="preserve">
+    <value>No other station near here has a price for {0}.</value>
+  </data>
+  <data name="BestWhyPastDetour" xml:space="preserve">
+    <value>That’s past your longest detour: its round trip takes over {0} min longer than the closest’s.</value>
+  </data>
+  <data name="BestWhyNotSure" xml:space="preserve">
+    <value>Distances are estimated, though, and by road it might not save.</value>
+  </data>
+  <data name="WhyReference" xml:space="preserve">
+    <value>Savings are counted against it: {0}, the best value, saves {1} on {2} L.</value>
+  </data>
+  <data name="HeroCostsMore" xml:space="preserve">
+    <value>Costs {0} more</value>
+  </data>
+  <data name="StationShownLabel" xml:space="preserve">
+    <value>Station shown above</value>
+  </data>
+  <data name="ShownStation" xml:space="preserve">
+    <value>Shown above: {0}.</value>
+  </data>
+  <data name="Members" xml:space="preserve">
+    <value>Members</value>
+  </data>
+  <data name="GoGoogleMaps" xml:space="preserve">
+    <value>Go · Google Maps</value>
+  </data>
+  <data name="Details" xml:space="preserve">
+    <value>Details</value>
+  </data>
+  <data name="Closest" xml:space="preserve">
+    <value>Closest</value>
+  </data>
+  <data name="BestValue" xml:space="preserve">
+    <value>Best value</value>
+  </data>
+  <data name="Cheapest" xml:space="preserve">
+    <value>Cheapest</value>
+  </data>
+  <data name="SameAsBest" xml:space="preserve">
+    <value>Same as best value</value>
+  </data>
+  <data name="SameAsClosest" xml:space="preserve">
+    <value>Same as closest</value>
+  </data>
+  <data name="AlsoWorthIt" xml:space="preserve">
+    <value>Also worth it</value>
+  </data>
+  <data name="SavesOverDetour" xml:space="preserve">
+    <value>Saves {0} · over {1} min</value>
+  </data>
+  <data name="SavesUncertain" xml:space="preserve">
+    <value>Saves {0} · not sure by road</value>
+  </data>
+  <data name="FooterWithin" xml:space="preserve">
+    <value>Stations within {0} km.</value>
+  </data>
+  <data name="FooterWidened" xml:space="preserve">
+    <value>Stations within {0} km: there are few closer.</value>
+  </data>
+  <data name="FooterCar" xml:space="preserve">
+    <value>For {0} L at {1} L/100 km ({2}).</value>
+  </data>
+  <data name="FooterTypicalCar" xml:space="preserve">
+    <value>For a typical car: {0} L at {1} L/100 km.</value>
+  </data>
+  <data name="FooterCostco" xml:space="preserve">
+    <value>Costco is included because you’re a member.</value>
+  </data>
+  <data name="FooterEstimated" xml:space="preserve">
+    <value>Distances (≈) are estimated from the straight line.</value>
+  </data>
+  <data name="Change" xml:space="preserve">
+    <value>Change</value>
+  </data>
+  <data name="SetUpYourCar" xml:space="preserve">
+    <value>Set up your car…</value>
+  </data>
+  <data name="TypicalCar" xml:space="preserve">
+    <value>My car (typical)</value>
+  </data>
+  <data name="ManageCars" xml:space="preserve">
+    <value>Manage cars…</value>
+  </data>
+  <data name="HowItsWorkedOut" xml:space="preserve">
+    <value>How it’s worked out</value>
+  </data>
+  <data name="DistanceApprox" xml:space="preserve">
+    <value>≈ {0} km</value>
+  </data>
+  <data name="DistanceByRoad" xml:space="preserve">
+    <value>{0} km</value>
+  </data>
+  <data name="BestNeedsLocation" xml:space="preserve">
+    <value>Best near you needs to know where you are.</value>
+  </data>
+  <data name="UseMapCenter" xml:space="preserve">
+    <value>Use the map’s centre</value>
+  </data>
+  <data name="UseMyLocation" xml:space="preserve">
+    <value>Use my location</value>
+  </data>
+  <data name="BestApproximate" xml:space="preserve">
+    <value>Your location is approximate (within about {0} km).</value>
+  </data>
+  <data name="BestAtMapCenter" xml:space="preserve">
+    <value>Ranked from the centre of the map.</value>
+  </data>
+  <data name="BestFailed" xml:space="preserve">
+    <value>Couldn’t find the best station.</value>
+  </data>
+  <data name="BestRateLimited" xml:space="preserve">
+    <value>Too many requests. Try again in a moment.</value>
+  </data>
+  <data name="BestNoPrices" xml:space="preserve">
+    <value>No station has a price for {0} right now.</value>
+  </data>
+  <data name="BestNothingWithin" xml:space="preserve">
+    <value>No price within {0} km. The closest station with one:</value>
+  </data>
+  <data name="MarkerBest" xml:space="preserve">
+    <value>{0}, best value</value>
+  </data>
+  <data name="MarkerClosest" xml:space="preserve">
+    <value>{0}, closest</value>
+  </data>
+  <data name="MyCars" xml:space="preserve">
+    <value>My cars</value>
+  </data>
+  <data name="MyCarsHelp" xml:space="preserve">
+    <value>Saved on this device, one per car.</value>
+  </data>
+  <data name="MyCar" xml:space="preserve">
+    <value>My car</value>
+  </data>
+  <data name="NewCar" xml:space="preserve">
+    <value>Car {0}</value>
+  </data>
+  <data name="Add" xml:space="preserve">
+    <value>Add</value>
+  </data>
+  <data name="AddCar" xml:space="preserve">
+    <value>Add a car</value>
+  </data>
+  <data name="Car" xml:space="preserve">
+    <value>Car</value>
+  </data>
+  <data name="ThisCar" xml:space="preserve">
+    <value>This car</value>
+  </data>
+  <data name="CarName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="CarFuelHelp" xml:space="preserve">
+    <value>Picking this car switches the map to it.</value>
+  </data>
+  <data name="UsualFill" xml:space="preserve">
+    <value>Usual fill</value>
+  </data>
+  <data name="UsualFillHelp" xml:space="preserve">
+    <value>What you buy at a stop. Savings are worked out on this.</value>
+  </data>
+  <data name="Consumption" xml:space="preserve">
+    <value>Consumption</value>
+  </data>
+  <data name="ConsumptionHelp" xml:space="preserve">
+    <value>Your trip computer’s average.</value>
+  </data>
+  <data name="CarStations" xml:space="preserve">
+    <value>Stations</value>
+  </data>
+  <data name="CostcoMember" xml:space="preserve">
+    <value>I’m a Costco member</value>
+  </data>
+  <data name="CostcoMemberHelp" xml:space="preserve">
+    <value>Off: Costco is left out.</value>
+  </data>
+  <data name="LongestDetour" xml:space="preserve">
+    <value>Longest detour</value>
+  </data>
+  <data name="LongestDetourHelp" xml:space="preserve">
+    <value>How much longer than the closest a station may take, there and back, to be picked.</value>
+  </data>
+  <data name="Trips" xml:space="preserve">
+    <value>Trips</value>
+  </data>
+  <data name="KeepSpare" xml:space="preserve">
+    <value>Keep spare</value>
+  </data>
+  <data name="KeepSpareHelp" xml:space="preserve">
+    <value>The range you type is never used to the last km.</value>
+  </data>
+  <data name="DeleteCar" xml:space="preserve">
+    <value>Delete this car</value>
+  </data>
+  <data name="Done" xml:space="preserve">
+    <value>Done</value>
+  </data>
+  <data name="BestChipKicker" xml:space="preserve">
+    <value>Best near you</value>
+  </data>
+  <data name="BestChipSaves" xml:space="preserve">
+    <value>Saves {0}</value>
+  </data>
+  <data name="BestOnTheWay" xml:space="preserve">
+    <value>Best on the way</value>
+  </data>
+  <data name="TripToHome" xml:space="preserve">
+    <value>To Home</value>
+  </data>
+  <data name="TripToWork" xml:space="preserve">
+    <value>To Work</value>
+  </data>
+  <data name="TripToPlace" xml:space="preserve">
+    <value>To {0}</value>
+  </data>
+  <data name="TripToPin" xml:space="preserve">
+    <value>To the dropped pin</value>
+  </data>
+  <data name="EndTrip" xml:space="preserve">
+    <value>Back to stations near you</value>
+  </data>
+  <data name="RangeChip" xml:space="preserve">
+    <value>Range {0} km · {1}</value>
+  </data>
+  <data name="RangeChipLabel" xml:space="preserve">
+    <value>Change the range: {0} km, typed {1}</value>
+  </data>
+  <data name="RangeAdd" xml:space="preserve">
+    <value>Add your range</value>
+  </data>
+  <data name="DetourChip" xml:space="preserve">
+    <value>Detour ≤ {0} min</value>
+  </data>
+  <data name="DetourChipLabel" xml:space="preserve">
+    <value>Longest detour: {0} min. Change</value>
+  </data>
+  <data name="ShortTrip" xml:space="preserve">
+    <value>Short trip: no range check</value>
+  </data>
+  <data name="RangeAsk" xml:space="preserve">
+    <value>A long trip: type the range your dashboard shows, to know where to stop.</value>
+  </data>
+  <data name="RangeLabel" xml:space="preserve">
+    <value>Range</value>
+  </data>
+  <data name="Save" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="Cancel" xml:space="preserve">
+    <value>Cancel</value>
+  </data>
+  <data name="StopBefore" xml:space="preserve">
+    <value>Stop before km {0}:</value>
+  </data>
+  <data name="StopBeforeWhy" xml:space="preserve">
+    <value>your {0} km of range, keeping {1} km spare.</value>
+  </data>
+  <data name="NoStopNeeded" xml:space="preserve">
+    <value>No stop needed:</value>
+  </data>
+  <data name="NoStopNeededWhy" xml:space="preserve">
+    <value>your {0} km of range covers the trip, keeping {1} km spare.</value>
+  </data>
+  <data name="LowFuel" xml:space="preserve">
+    <value>Low fuel:</value>
+  </data>
+  <data name="LowFuelWhy" xml:space="preserve">
+    <value>with {0} km of range, no station is within your {1} km spare. Here’s the best you can still reach.</value>
+  </data>
+  <data name="NoReachableStation" xml:space="preserve">
+    <value>No station you can reach on this route.</value>
+  </data>
+  <data name="KmAlong" xml:space="preserve">
+    <value>km {0}</value>
+  </data>
+  <data name="DetourMinutesKm" xml:space="preserve">
+    <value>+{0} min · {1} detour</value>
+  </data>
+  <data name="OnYourWay" xml:space="preserve">
+    <value>On your way</value>
+  </data>
+  <data name="NoDetour" xml:space="preserve">
+    <value>No detour</value>
+  </data>
+  <data name="SmallestDetour" xml:space="preserve">
+    <value>Smallest detour</value>
+  </data>
+  <data name="BiggestSaving" xml:space="preserve">
+    <value>Biggest saving</value>
+  </data>
+  <data name="TripWhy" xml:space="preserve">
+    <value>on {0} L, detour included, compared with {1}, on your way at km {2} ({3}).</value>
+  </data>
+  <data name="TripWhySmallestDetour" xml:space="preserve">
+    <value>on {0} L, detour included, compared with {1}, the smallest detour (km {2}, {3}).</value>
+  </data>
+  <data name="TripWhyNothingSaves" xml:space="preserve">
+    <value>No other station you can reach saves {0} or more on {1} L, detour included.</value>
+  </data>
+  <data name="TripWhyDetour" xml:space="preserve">
+    <value>Those that save more take longer than your longest detour, {0} min.</value>
+  </data>
+  <data name="TripWhyOnly" xml:space="preserve">
+    <value>It’s the only station on the way with a price for {0}.</value>
+  </data>
+  <data name="TripWhyPastDetour" xml:space="preserve">
+    <value>That’s past your longest detour, {0} min.</value>
+  </data>
+  <data name="TripWhyPastRange" xml:space="preserve">
+    <value>It’s {0} away by road, past the {1} km you can count on.</value>
+  </data>
+  <data name="OverMinutes" xml:space="preserve">
+    <value>Over {0} min</value>
+  </data>
+  <data name="GoViaGoogleMaps" xml:space="preserve">
+    <value>Go via · Google Maps</value>
+  </data>
+  <data name="AllStationsOnTheWay" xml:space="preserve">
+    <value>All {0} stations on the way</value>
+  </data>
+  <data name="FewerStations" xml:space="preserve">
+    <value>Fewer stations</value>
+  </data>
+  <data name="StationsOnTheWay" xml:space="preserve">
+    <value>Stations on the way</value>
+  </data>
+  <data name="PastYourRange" xml:space="preserve">
+    <value>Past your range</value>
+  </data>
+  <data name="CostsMore" xml:space="preserve">
+    <value>{0} more</value>
+  </data>
+  <data name="TripPlannedAt" xml:space="preserve">
+    <value>Planned at {0} from where you were.</value>
+  </data>
+  <data name="TripFromMapCenter" xml:space="preserve">
+    <value>Planned from a point on the map.</value>
+  </data>
+  <data name="PlanAgain" xml:space="preserve">
+    <value>Plan again from here</value>
+  </data>
+  <data name="ForgetPlace" xml:space="preserve">
+    <value>Forget this place</value>
+  </data>
+  <data name="TripUnavailable" xml:space="preserve">
+    <value>Trips aren’t available right now: the routing service doesn’t answer. Try again in a few minutes.</value>
+  </data>
+  <data name="TripNoRoad" xml:space="preserve">
+    <value>No road near this point. Pick a destination on a road in Québec.</value>
+  </data>
+  <data name="TripFailed" xml:space="preserve">
+    <value>Couldn’t plan this trip.</value>
+  </data>
+  <data name="TripRateLimited" xml:space="preserve">
+    <value>Too many requests. Try again in a moment.</value>
+  </data>
+  <data name="RangeEndsAt" xml:space="preserve">
+    <value>Range ends · km {0}</value>
+  </data>
+  <data name="MarkerNoDetour" xml:space="preserve">
+    <value>{0}, no detour</value>
+  </data>
+  <data name="MarkerSmallestDetour" xml:space="preserve">
+    <value>{0}, smallest detour</value>
+  </data>
+  <data name="GoingSomewhere" xml:space="preserve">
+    <value>Going somewhere?</value>
+  </data>
+  <data name="TripsUnavailableShort" xml:space="preserve">
+    <value>Trips aren’t available right now.</value>
+  </data>
+  <data name="Home" xml:space="preserve">
+    <value>Home</value>
+  </data>
+  <data name="Work" xml:space="preserve">
+    <value>Work</value>
+  </data>
+  <data name="SavedPlacesLabel" xml:space="preserve">
+    <value>Your places</value>
+  </data>
+  <data name="DroppedPin" xml:space="preserve">
+    <value>Dropped pin</value>
+  </data>
+  <data name="FromYou" xml:space="preserve">
+    <value>{0} from you</value>
+  </data>
+  <data name="RemovePin" xml:space="preserve">
+    <value>Remove the pin</value>
+  </data>
+  <data name="SaveAs" xml:space="preserve">
+    <value>Save as {0}</value>
+  </data>
+  <data name="SavePlace" xml:space="preserve">
+    <value>Save</value>
+  </data>
+  <data name="SavePlaceLabel" xml:space="preserve">
+    <value>Save this place under a name</value>
+  </data>
+  <data name="PlaceName" xml:space="preserve">
+    <value>Name</value>
+  </data>
+  <data name="PlaceNamePlaceholder" xml:space="preserve">
+    <value>Cottage, gym…</value>
+  </data>
+  <data name="SavedAs" xml:space="preserve">
+    <value>Saved as {0}.</value>
+  </data>
+  <data name="DetourMinutesShort" xml:space="preserve">
+    <value>+{0} min</value>
+  </data>
+  <data name="PlacesTitle" xml:space="preserve">
+    <value>Where to?</value>
+  </data>
+  <data name="SetHomeTitle" xml:space="preserve">
+    <value>Set Home</value>
+  </data>
+  <data name="SetWorkTitle" xml:space="preserve">
+    <value>Set Work</value>
+  </data>
+  <data name="AddPlaceTitle" xml:space="preserve">
+    <value>Add a place</value>
+  </data>
+  <data name="AddPlaceHelp" xml:space="preserve">
+    <value>Cottage, school, the gym…</value>
+  </data>
+  <data name="SearchPlaceLabel" xml:space="preserve">
+    <value>Search an address or a place</value>
+  </data>
+  <data name="SearchPlacePlaceholder" xml:space="preserve">
+    <value>Address, street, town or place</value>
+  </data>
+  <data name="ClearSearch" xml:space="preserve">
+    <value>Clear</value>
+  </data>
+  <data name="Suggestions" xml:space="preserve">
+    <value>Suggestions</value>
+  </data>
+  <data name="PlacesFound" xml:space="preserve">
+    <value>Places found: {0}</value>
+  </data>
+  <data name="SearchNothing" xml:space="preserve">
+    <value>No address in Québec matches “{0}”.</value>
+  </data>
+  <data name="SearchUnavailable" xml:space="preserve">
+    <value>Address search isn’t available right now. Pick the place on the map instead: press and hold it, or right-click it.</value>
+  </data>
+  <data name="SearchRateLimited" xml:space="preserve">
+    <value>Too many searches in a row. Wait a moment, then type again.</value>
+  </data>
+  <data name="SearchFailed" xml:space="preserve">
+    <value>The search didn’t answer. Type again to retry.</value>
+  </data>
+  <data name="StreetIn" xml:space="preserve">
+    <value>Street · {0}</value>
+  </data>
+  <data name="PickOnMap" xml:space="preserve">
+    <value>Pick it on the map</value>
+  </data>
+  <data name="PickOnMapTouch" xml:space="preserve">
+    <value>Or press and hold anywhere on the map, any time.</value>
+  </data>
+  <data name="PickOnMapMouse" xml:space="preserve">
+    <value>Or press and hold (or right-click) anywhere on the map, any time.</value>
+  </data>
+  <data name="PickOnMapNotice" xml:space="preserve">
+    <value>Press and hold the map where it is, or right-click it.</value>
+  </data>
+  <data name="NotSet" xml:space="preserve">
+    <value>Not set</value>
+  </data>
+  <data name="Choosing" xml:space="preserve">
+    <value>Choosing…</value>
+  </data>
+  <data name="SetPlace" xml:space="preserve">
+    <value>Set</value>
+  </data>
+  <data name="SetPlaceLabel" xml:space="preserve">
+    <value>Set {0}’s address</value>
+  </data>
+  <data name="ForgetPlaceLabel" xml:space="preserve">
+    <value>Forget {0}</value>
+  </data>
+  <data name="AddressAttribution" xml:space="preserve">
+    <value>Addresses in Québec, from OpenStreetMap. Your places are saved on this device only.</value>
+  </data>
+  <data name="FindingAddress" xml:space="preserve">
+    <value>Finding the address…</value>
+  </data>
+  <data name="OutsideQuebec" xml:space="preserve">
+    <value>Outside Québec</value>
+  </data>
+  <data name="OutsideQuebecWhy" xml:space="preserve">
+    <value>Trips and places stay in Québec.</value>
+  </data>
+  <data name="ChangePlaceLabel" xml:space="preserve">
+    <value>Change {0}’s address</value>
+  </data>
+  <data name="CancelChoosingLabel" xml:space="preserve">
+    <value>Cancel choosing {0}’s address</value>
+  </data>
+  <data name="TripsPreparing" xml:space="preserve">
+    <value>Trips will be ready soon: preparing Québec’s road map ({0} %).</value>
+  </data>
+  <data name="TripsPreparingSoon" xml:space="preserve">
+    <value>Trips will be ready soon: preparing Québec’s road map.</value>
+  </data>
+  <data name="SearchPreparing" xml:space="preserve">
+    <value>Address search will be ready soon: preparing Québec’s addresses ({0} %). Meanwhile, pick the place on the map: press and hold it, or right-click it.</value>
+  </data>
+  <data name="SearchPreparingSoon" xml:space="preserve">
+    <value>Address search will be ready soon: preparing Québec’s addresses. Meanwhile, pick the place on the map: press and hold it, or right-click it.</value>
+  </data>
+  <data name="TripsRetrying" xml:space="preserve">
+    <value>Trips aren’t available right now: Québec’s road map couldn’t be prepared. Trying again at {0}.</value>
+  </data>
+  <data name="SearchRetrying" xml:space="preserve">
+    <value>Address search isn’t available right now: Québec’s addresses couldn’t be prepared. Trying again at {0}. Meanwhile, pick the place on the map: press and hold it, or right-click it.</value>
+  </data>
+  <data name="ManagePlacesLabel" xml:space="preserve">
+    <value>Manage your places</value>
+  </data>
+  <data name="Rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="RenamePlaceLabel" xml:space="preserve">
+    <value>Rename {0}</value>
+  </data>
+  <data name="PlaceForgotten" xml:space="preserve">
+    <value>{0} forgotten.</value>
+  </data>
+  <data name="Undo" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="PlaceSaved" xml:space="preserve">
+    <value>Saved.</value>
+  </data>
+  <data name="BestStation" xml:space="preserve">
+    <value>Best station</value>
+  </data>
+  <data name="NearHere" xml:space="preserve">
+    <value>Near here</value>
+  </data>
+  <data name="OnTheWayHere" xml:space="preserve">
+    <value>On the way here</value>
+  </data>
+  <data name="SaveAsCaption" xml:space="preserve">
+    <value>Save as</value>
+  </data>
+  <data name="OtherPlace" xml:space="preserve">
+    <value>Other…</value>
+  </data>
+  <data name="BestFromPin" xml:space="preserve">
+    <value>Ranked from {0}.</value>
+  </data>
+  <data name="BestFromDroppedPin" xml:space="preserve">
+    <value>Ranked from the dropped pin.</value>
   </data>
 </root>

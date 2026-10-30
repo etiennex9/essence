@@ -26,3 +26,22 @@ internal sealed class MemoryPreferences : IPreferenceStore
         return ValueTask.CompletedTask;
     }
 }
+
+internal sealed class MemorySession : ISessionStore
+{
+    private readonly Dictionary<string, string> _values = [];
+
+    public ValueTask<string?> GetAsync(string key) => ValueTask.FromResult(_values.GetValueOrDefault(key));
+
+    public ValueTask SetAsync(string key, string value)
+    {
+        _values[key] = value;
+        return ValueTask.CompletedTask;
+    }
+
+    public ValueTask RemoveAsync(string key)
+    {
+        _values.Remove(key);
+        return ValueTask.CompletedTask;
+    }
+}

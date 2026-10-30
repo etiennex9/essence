@@ -1,4 +1,4 @@
-// Device services for BrowserDevice.cs: geolocation and localStorage.
+// Device services for BrowserDevice.cs: geolocation, localStorage and sessionStorage.
 
 export function getPosition(timeoutMs) {
     return new Promise(resolve => {
@@ -28,5 +28,31 @@ export function setItem(key, value) {
         localStorage.setItem(key, value);
     } catch {
         // Not saved; the default applies next time.
+    }
+}
+
+// The tab's own storage: an open trip, which must outlive Android discarding the tab while Google Maps navigates. Blocked
+// storage loses it, like the preferences.
+export function getSessionItem(key) {
+    try {
+        return sessionStorage.getItem(key);
+    } catch {
+        return null;
+    }
+}
+
+export function setSessionItem(key, value) {
+    try {
+        sessionStorage.setItem(key, value);
+    } catch {
+        // Not kept; a restored tab opens without it.
+    }
+}
+
+export function removeSessionItem(key) {
+    try {
+        sessionStorage.removeItem(key);
+    } catch {
+        // Nothing was kept.
     }
 }
