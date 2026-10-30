@@ -140,4 +140,77 @@ public class SavedPlacesTests
         Assert.Null(blank.Address);
         Assert.Equal(SavedPlace.MaxAddressLength, long_.Address!.Length);
     }
+
+    [Fact]
+    public async Task A_named_place_can_be_renamed()
+    {
+        var places = new SavedPlaces(_preferences);
+        var cottage = await places.SaveAsync(PlaceKind.Other, House, "Cottage");
+        var home = await places.SaveAsync(PlaceKind.Home, Office);
+        var changes = 0;
+        places.Changed += () => changes++;
+
+        await places.RenameAsync(cottage.Id, $"  Garderie {new string('x', 50)}");
+        await places.RenameAsync(cottage.Id, "   ");
+        await places.RenameAsync(home.Id, "Castle");
+        await places.RenameAsync("missing", "Nowhere");
+
+        var reloaded = new SavedPlaces(_preferences);
+        await reloaded.LoadAsync();
+        var renamed = reloaded.Places.Single(p => p.Id == cottage.Id);
+        Assert.StartsWith("Garderie x", renamed.Name);
+        Assert.Equal(SavedPlace.MaxNameLength, renamed.Name.Length);
+        Assert.Equal("", reloaded.Home!.Name);
+        Assert.Equal(1, changes);
+    }
+
+    [Fact]
+    public async Task A_forgotten_place_comes_back_where_it_was()
+    {
+        var places = new SavedPlaces(_preferences);
+        await places.SaveAsync(PlaceKind.Other, House, "Gym");
+        var cottage = await places.SaveAsync(PlaceKind.Other, House, "Cottage", "1 Chemin du Lac");
+        await places.SaveAsync(PlaceKind.Other, House, "School");
+
+        var removed = await places.RemoveAsync(cottage.Id);
+        await places.RestoreAsync(removed!);
+        await places.RestoreAsync(removed!);
+
+        var reloaded = new SavedPlaces(_preferences);
+        await reloaded.LoadAsync();
+        Assert.Equal(["Gym", "Cottage", "School"], reloaded.Places.Select(p => p.Name));
+        Assert.Equal(cottage, reloaded.Places[1]);
+        Assert.Null(await places.RemoveAsync("missing"));
+    }
+
+    [Fact]
+    public async Task A_home_brought_back_replaces_the_one_saved_since()
+    {
+        var places = new SavedPlaces(_preferences);
+        var home = await places.SaveAsync(PlaceKind.Home, House);
+        var removed = await places.RemoveAsync(home.Id);
+        await places.SaveAsync(PlaceKind.Home, Office);
+
+        await places.RestoreAsync(removed!);
+
+        Assert.Equal(home, Assert.Single(places.Places));
+    }
+
+    [Fact]
+    public async Task A_place_brought_back_past_the_limit_makes_the_oldest_go()
+    {
+        var places = new SavedPlaces(_preferences);
+        var first = await places.SaveAsync(PlaceKind.Other, Office, "Place 0");
+        var removed = await places.RemoveAsync(first.Id);
+        for (var i = 1; i <= SavedPlaces.MaxPlaces; i++)
+        {
+            await places.SaveAsync(PlaceKind.Other, Office, $"Place {i}");
+        }
+
+        await places.RestoreAsync(removed!);
+
+        Assert.Equal(SavedPlaces.MaxPlaces, places.Places.Count);
+        Assert.Equal("Place 0", places.Places[0].Name);
+        Assert.DoesNotContain(places.Places, p => p.Name == "Place 1");
+    }
 }

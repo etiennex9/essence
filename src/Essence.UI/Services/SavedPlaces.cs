@@ -27,6 +27,9 @@ public sealed record SavedPlace(string Id, PlaceKind Kind, string Name, double L
     public GeoPoint Point => new(Latitude, Longitude);
 }
 
+/// <summary>A place just forgotten, and where it was among the others: enough to undo it.</summary>
+public sealed record RemovedPlace(SavedPlace Place, int Index);
+
 /// <summary>
 /// The places saved on this device (Home, Work, and others the user named), kept through <see cref="IPreferenceStore"/>,
 /// so a trip there is one tap. There's one Home and one Work: saving another replaces it.
@@ -90,14 +93,62 @@ public sealed class SavedPlaces(IPreferenceStore preferences)
         Changed?.Invoke();
     }
 
-    public async Task RemoveAsync(string id)
+    /// <summary>A named place's new name; Home and Work have none, and a blank name keeps the old one.</summary>
+    public async Task RenameAsync(string id, string name)
     {
         await LoadAsync();
-        if (_places.RemoveAll(p => p.Id == id) == 0)
+        var index = _places.FindIndex(p => p.Id == id && p.Kind == PlaceKind.Other);
+        if (index < 0 || Trim(name) is not { Length: > 0 } trimmed || _places[index].Name == trimmed)
         {
             return;
         }
 
+        _places[index] = _places[index] with { Name = trimmed };
+        await WriteAsync();
+        Changed?.Invoke();
+    }
+
+    /// <summary>Forgets a place; what's returned puts it back (<see cref="RestoreAsync"/>), or null when it wasn't saved.</summary>
+    public async Task<RemovedPlace?> RemoveAsync(string id)
+    {
+        await LoadAsync();
+        var index = _places.FindIndex(p => p.Id == id);
+        if (index < 0)
+        {
+            return null;
+        }
+
+        var removed = new RemovedPlace(_places[index], index);
+        _places.RemoveAt(index);
+        await WriteAsync();
+        Changed?.Invoke();
+        return removed;
+    }
+
+    /// <summary>
+    /// Undoes <see cref="RemoveAsync"/>: the place comes back where it was. A Home or Work saved since is replaced by it, as
+    /// saving does, and past <see cref="MaxPlaces"/> the oldest other place goes. Nothing happens if it's still saved.
+    /// </summary>
+    public async Task RestoreAsync(RemovedPlace removed)
+    {
+        await LoadAsync();
+        var place = removed.Place;
+        if (_places.Exists(p => p.Id == place.Id))
+        {
+            return;
+        }
+
+        var index = removed.Index;
+        var replaced = place.Kind != PlaceKind.Other
+            ? _places.FindIndex(p => p.Kind == place.Kind)
+            : _places.Count >= MaxPlaces ? _places.FindIndex(p => p.Kind == PlaceKind.Other) : -1;
+        if (replaced >= 0)
+        {
+            _places.RemoveAt(replaced);
+            index -= replaced < index ? 1 : 0;
+        }
+
+        _places.Insert(Math.Clamp(index, 0, _places.Count), place);
         await WriteAsync();
         Changed?.Invoke();
     }
