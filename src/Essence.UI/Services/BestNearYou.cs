@@ -2,14 +2,33 @@ using Essence.Contracts;
 
 namespace Essence.UI.Services;
 
-/// <summary>Where Best near you ranks from: the device's location, or the map's centre when the user picks it instead.</summary>
-/// <param name="AccuracyMeters">How far off the device's location may be; null for the map's centre.</param>
-public sealed record BestOrigin(GeoPoint Point, bool IsMapCenter = false, double? AccuracyMeters = null)
+/// <summary>Where Best near you ranks from.</summary>
+public enum OriginKind
+{
+    /// <summary>The device's location.</summary>
+    Device,
+
+    /// <summary>The map's centre, picked when the location is off or approximate.</summary>
+    MapCenter,
+
+    /// <summary>A pin dropped on the map ("Near here" on its card).</summary>
+    Pin,
+}
+
+/// <summary>Where Best near you ranks from: the device's location, or a point the user picks instead.</summary>
+/// <param name="AccuracyMeters">How far off the device's location may be; null for a point picked.</param>
+/// <param name="Label">A pin's address, short; null for the others, or while the pin's isn't known.</param>
+public sealed record BestOrigin(GeoPoint Point, OriginKind Kind = OriginKind.Device, double? AccuracyMeters = null, string? Label = null)
 {
     /// <summary>A location less accurate than this (a desktop's, from its network) is said to be approximate.</summary>
     public const double ApproximateBeyondMeters = 1000;
 
-    public bool IsApproximate => !IsMapCenter && AccuracyMeters > ApproximateBeyondMeters;
+    public bool IsMapCenter => Kind == OriginKind.MapCenter;
+
+    /// <summary>A point the user picked rather than where they are: the map's centre, or a pin.</summary>
+    public bool IsChosen => Kind != OriginKind.Device;
+
+    public bool IsApproximate => Kind == OriginKind.Device && AccuracyMeters > ApproximateBeyondMeters;
 }
 
 /// <summary>

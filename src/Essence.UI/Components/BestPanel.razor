@@ -329,12 +329,12 @@
             {
                 var otherPlaces = Places.Places.Where(p => p.Kind == PlaceKind.Other).ToList();
                 <div class="where">
+                    <button type="button" class="wbox" @onclick="() => OnSearchPlaces.InvokeAsync(PlacePurpose.Destination)">
+                        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round"><path d="@Icons.Search" /></svg>
+                        @L["GoingSomewhere"]
+                    </button>
                     <div class="where-row" role="group" aria-label="@L["SavedPlacesLabel"]">
-                        <button type="button" class="wbox" @onclick="() => OnSearchPlaces.InvokeAsync(PlacePurpose.Destination)">
-                            <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round"><path d="@Icons.Search" /></svg>
-                            @L["GoingSomewhere"]
-                        </button>
                         @PlaceButton(PlaceKind.Home, Places.Home, L["Home"], Icons.Home)
                         @PlaceButton(PlaceKind.Work, Places.Work, L["Work"], Icons.Work)
                         @foreach (var place in otherPlaces)
@@ -345,13 +345,12 @@
                                 <span>@place.Name</span>
                             </button>
                         }
+                        <button type="button" class="place manage" @onclick="() => OnSearchPlaces.InvokeAsync(PlacePurpose.Manage)"
+                                aria-label="@L["ManagePlacesLabel"]" title="@L["ManagePlacesLabel"]">
+                            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Pencil" /></svg>
+                        </button>
                     </div>
-                    <p class="where-help">
-                        <span class="touch">@L["GoingSomewhereTouch"]</span>
-                        <span class="mouse">@L["GoingSomewhereMouse"]</span>
-                        @(" ")
-                        <button type="button" class="link" @onclick="OnDropPinAtCenter">@L["UseMapCenterAsDestination"]</button>
-                    </p>
                 </div>
             }
 
@@ -394,10 +393,11 @@
             else
             {
                 <div class="result @(Best.Loading ? "is-loading" : null)" aria-busy="@(Best.Loading ? "true" : "false")">
-                    @if (origin.IsMapCenter)
+                    @if (origin.IsChosen)
                     {
                         <p class="origin">
-                            @L["BestAtMapCenter"]
+                            @(origin.Kind != OriginKind.Pin ? L["BestAtMapCenter"]
+                                : origin.Label is { } label ? L["BestFromPin", label] : L["BestFromDroppedPin"])
                             @(" ")
                             <button type="button" class="link" @onclick="OnLocate">@L["UseMyLocation"]</button>
                         </p>
@@ -615,13 +615,12 @@
     [Parameter]
     public EventCallback OnRefreshTrip { get; set; }
 
-    /// <summary>The address search: for a trip ("Going somewhere?"), or to set Home or Work (tapped before they're saved).</summary>
+    /// <summary>
+    /// The address search: for a trip ("Going somewhere?"), to set Home or Work (tapped before they're saved), or to manage
+    /// the saved places (✎).
+    /// </summary>
     [Parameter]
     public EventCallback<PlacePurpose> OnSearchPlaces { get; set; }
-
-    /// <summary>Drops a pin at the map's centre: the keyboard's way to pick a destination.</summary>
-    [Parameter]
-    public EventCallback OnDropPinAtCenter { get; set; }
 
     private string CarName => Cars.IsTypical || string.IsNullOrWhiteSpace(Cars.Active.Name) ? L["MyCar"] : Cars.Active.Name;
 

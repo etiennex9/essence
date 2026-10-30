@@ -580,7 +580,7 @@
     <value>Planifié à {0} d’où vous étiez.</value>
   </data>
   <data name="TripFromMapCenter" xml:space="preserve">
-    <value>Planifié à partir du centre de la carte.</value>
+    <value>Planifié à partir d’un point sur la carte.</value>
   </data>
   <data name="PlanAgain" xml:space="preserve">
     <value>Recalculer à partir d’ici</value>
@@ -612,15 +612,6 @@
   <data name="GoingSomewhere" xml:space="preserve">
     <value>Vous allez quelque part?</value>
   </data>
-  <data name="GoingSomewhereTouch" xml:space="preserve">
-    <value>Maintenez le doigt sur la carte là où vous allez.</value>
-  </data>
-  <data name="GoingSomewhereMouse" xml:space="preserve">
-    <value>Faites un clic droit sur la carte là où vous allez.</value>
-  </data>
-  <data name="UseMapCenterAsDestination" xml:space="preserve">
-    <value>Utiliser le centre de la carte comme destination</value>
-  </data>
   <data name="TripsUnavailableShort" xml:space="preserve">
     <value>Les trajets ne sont pas disponibles en ce moment.</value>
   </data>
@@ -641,9 +632,6 @@
   </data>
   <data name="RemovePin" xml:space="preserve">
     <value>Retirer l’épingle</value>
-  </data>
-  <data name="BestOnTheWayHere" xml:space="preserve">
-    <value>Meilleur choix en chemin vers ici</value>
   </data>
   <data name="SaveAs" xml:space="preserve">
     <value>Enregistrer comme {0}</value>
@@ -718,7 +706,7 @@
     <value>Ou maintenez le doigt n’importe où sur la carte, en tout temps.</value>
   </data>
   <data name="PickOnMapMouse" xml:space="preserve">
-    <value>Ou faites un clic droit n’importe où sur la carte, en tout temps.</value>
+    <value>Ou maintenez le bouton enfoncé (ou faites un clic droit) n’importe où sur la carte, en tout temps.</value>
   </data>
   <data name="PickOnMapNotice" xml:space="preserve">
     <value>Maintenez le doigt sur la carte à cet endroit, ou faites un clic droit.</value>
@@ -773,5 +761,44 @@
   </data>
   <data name="SearchRetrying" xml:space="preserve">
     <value>La recherche d’adresses n’est pas disponible pour l’instant : les adresses du Québec n’ont pas pu être préparées. Nouvel essai à {0}. D’ici là, choisissez le lieu sur la carte : maintenez le doigt dessus ou faites un clic droit.</value>
+  </data>
+  <data name="ManagePlacesLabel" xml:space="preserve">
+    <value>Gérer vos lieux</value>
+  </data>
+  <data name="Rename" xml:space="preserve">
+    <value>Renommer</value>
+  </data>
+  <data name="RenamePlaceLabel" xml:space="preserve">
+    <value>Renommer {0}</value>
+  </data>
+  <data name="PlaceForgotten" xml:space="preserve">
+    <value>Lieu oublié : {0}.</value>
+  </data>
+  <data name="Undo" xml:space="preserve">
+    <value>Annuler</value>
+  </data>
+  <data name="PlaceSaved" xml:space="preserve">
+    <value>Enregistré.</value>
+  </data>
+  <data name="BestStation" xml:space="preserve">
+    <value>Meilleur choix</value>
+  </data>
+  <data name="NearHere" xml:space="preserve">
+    <value>Près d’ici</value>
+  </data>
+  <data name="OnTheWayHere" xml:space="preserve">
+    <value>En chemin vers ici</value>
+  </data>
+  <data name="SaveAsCaption" xml:space="preserve">
+    <value>Enregistrer comme</value>
+  </data>
+  <data name="OtherPlace" xml:space="preserve">
+    <value>Autre…</value>
+  </data>
+  <data name="BestFromPin" xml:space="preserve">
+    <value>Classées à partir de {0}.</value>
+  </data>
+  <data name="BestFromDroppedPin" xml:space="preserve">
+    <value>Classées à partir de l’épingle.</value>
   </data>
 </root>

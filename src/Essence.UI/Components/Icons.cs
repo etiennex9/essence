@@ -44,6 +44,12 @@ internal static class Icons
     /// <summary>Two arrows going round: plan the trip again.</summary>
     public const string Refresh = "M20 12a8 8 0 0 0-15.52-2.74M4 4v5h5M4 12a8 8 0 0 0 15.52 2.74M20 20v-5h-5";
 
+    /// <summary>A pencil (Feather's, MIT): manage the saved places.</summary>
+    public const string Pencil = "M17 3a2.83 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z";
+
+    /// <summary>A bin (Feather's, MIT): forget a saved place.</summary>
+    public const string Trash = "M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6";
+
     /// <summary>A gear (Feather's, MIT): manage the cars.</summary>
     public const string Settings =
         "M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"

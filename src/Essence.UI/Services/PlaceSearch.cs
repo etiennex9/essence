@@ -222,4 +222,7 @@ public enum PlacePurpose
 
     /// <summary>Another saved place, named once it's found.</summary>
     Other,
+
+    /// <summary>Managing the saved places: their list, with the search shown once an address is needed.</summary>
+    Manage,
 }

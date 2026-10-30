@@ -124,7 +124,7 @@
                    OnStationSelected="ShowSelectedAsync" OnOpenCars="ShowCars"
                    OnLocate="() => LocateAsync(moveMap: false, fallBackToMontreal: false)" OnUseMapCenter="UseMapCenterAsync"
                    OnStartTrip="StartTripAsync" OnEndTrip="EndTripAsync" OnRefreshTrip="RefreshTripAsync"
-                   OnDropPinAtCenter="DropPinAtCenterAsync" OnSearchPlaces="ShowPlaces" />
+                   OnSearchPlaces="ShowPlaces" />
     }
     else if (View == CarsView)
     {
@@ -139,7 +139,7 @@
     @if (_pin is { } pin)
     {
         <DroppedPin Point="pin" UserLocation="_userLocation" TripsUnavailable="TripsUnavailable" OnClose="ClearPinAsync"
-                    OnTrip="StartTripAsync" />
+                    OnTrip="StartTripAsync" OnBestNear="BestNearPinAsync" />
     }
 
     <AboutDialog @ref="_about" />
@@ -245,6 +245,9 @@
     /// <summary>A press and hold dropped a pin here: its card shows.</summary>
     private GeoPoint? _pin;
 
+    /// <summary>The pin the map shows (<see cref="MapPin"/>), set again only when it changes.</summary>
+    private GeoPoint? _mapPin;
+
     /// <summary>What the map draws of the trip (<see cref="RenderTripAsync"/>), drawn again only when it changes.</summary>
     private (TripPlan? Plan, TripDestination? Destination) _drawnTrip;
 
@@ -305,7 +308,7 @@
 
     /// <summary>The pick the phone chip shows: once the user is located, while no pane is open.</summary>
     private RankedStation? ChipPick =>
-        Station is null && !ListOpen && Best.Origin is { IsMapCenter: false } && Best.ResultQuery?.Fuel == _fuel ? Best.Result?.Pick : null;
+        Station is null && !ListOpen && Best.Origin is { IsChosen: false } && Best.ResultQuery?.Fuel == _fuel ? Best.Result?.Pick : null;
 
     private string ComparisonLabel => Comparison.Count > 0 ? L["ComparisonCount", Comparison.Count] : L["Comparison"];
 
@@ -413,6 +416,7 @@
         if (_map is not null)
         {
             await SyncSelectedAsync();
+            await SyncPinAsync();
             await RenderMarkersAsync();
             await RenderTripAsync();
             await FitToBestAsync();
@@ -812,6 +816,24 @@
             : null;
     }
 
+    /// <summary>
+    /// The pin on the map: one just dropped, with its card; else the one Best near you ranks from ("Near here"), while its
+    /// pane is open.
+    /// </summary>
+    private GeoPoint? MapPin => _pin ?? (BestOpen && Best.Origin is { Kind: OriginKind.Pin } origin ? origin.Point : null);
+
+    private async Task SyncPinAsync()
+    {
+        var pin = MapPin;
+        if (!_mapReady || pin == _mapPin)
+        {
+            return;
+        }
+
+        _mapPin = pin;
+        await _map!.SetPinAsync(pin);
+    }
+
     /// <summary>Rings <see cref="MapSelected"/> on the map, when it changed.</summary>
     private async Task SyncSelectedAsync()
     {
@@ -1006,44 +1028,60 @@
     public async Task OnMapHeldAsync(double latitude, double longitude)
     {
         _pin = new GeoPoint(latitude, longitude);
-        await _map!.SetPinAsync(_pin);
+        await SyncPinAsync();
         StateHasChanged();
     }
-
-    /// <summary>The keyboard's way to a destination: a pin at the map's centre.</summary>
-    private Task DropPinAtCenterAsync() =>
-        _viewport is { } viewport ? OnMapHeldAsync(viewport.CenterLat, viewport.CenterLon) : Task.CompletedTask;
 
     private async Task ClearPinAsync()
     {
         _pin = null;
-        if (_map is not null)
+        await SyncPinAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>
+    /// "Near here" on a pin's card: Best near you ranks from the pin, without asking for the location, and the pin stays on
+    /// the map while it does. From a trip, it's Best near you again with the trip kept, as the trip's Back does.
+    /// </summary>
+    private async Task BestNearPinAsync(BestOrigin origin)
+    {
+        _pin = null;
+        var ranking = Best.SetOriginAsync(origin);
+        if (View == TripView)
         {
-            await _map.SetPinAsync(null);
+            await CloseTripAsync();
+        }
+        else if (View != BestView || Station is not null)
+        {
+            await ShowListAsync(BestView);
         }
 
+        await ranking;
+        await SyncPinAsync();
         StateHasChanged();
     }
 
     /// <summary>
     /// Opens Best on the way to a destination, planned from where the user is now: the location is asked for again (the
     /// one known may be hours old), and without it, the trip starts where Best near you ranks from, or the map's centre. A
-    /// user who had Best near you rank from the map's centre starts there, without being asked again.
+    /// user who had Best near you rank from the map's centre or a pin starts there, without being asked again.
     /// </summary>
     private async Task StartTripAsync(TripDestination destination)
     {
         // A trip the user starts is fitted, even if a release reload kept the view of the pane it started from.
         _keepView = false;
-        if (Best.Origin is not { IsMapCenter: true })
+        if (Best.Origin is not { IsChosen: true })
         {
             await LocateAsync(moveMap: false, fallBackToMontreal: false);
         }
 
         var (origin, fromMapCenter) = Best.Origin is { IsMapCenter: true } && _viewport is { } center
             ? (center.Center, true)
+            : Best.Origin is { Kind: OriginKind.Pin } pin
+            ? (pin.Point, true)
             : _locationProblem is null && _userLocation is { } here
             ? (here, false)
-            : Best.Origin is { } known ? (known.Point, known.IsMapCenter)
+            : Best.Origin is { } known ? (known.Point, known.IsChosen)
             : _viewport is { } viewport ? (viewport.Center, true)
             : (default, false);
         if (origin == default)
@@ -1250,7 +1288,7 @@
     {
         if (_viewport is { } viewport)
         {
-            await Best.SetOriginAsync(new BestOrigin(viewport.Center, IsMapCenter: true));
+            await Best.SetOriginAsync(new BestOrigin(viewport.Center, OriginKind.MapCenter));
         }
     }
 
@@ -1485,6 +1523,7 @@
         }
 
         await SyncSelectedAsync();
+        await SyncPinAsync();
         await RenderMarkersAsync();
         await FitToBestAsync();
         StateHasChanged();

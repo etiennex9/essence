@@ -4,9 +4,10 @@
 @inject ServicesStatus Services
 @inject IStringLocalizer<Strings> L
 
-@* The card for a pin dropped by a press and hold on the map (or at its centre, from the keyboard): its address, Best on the
-   way there, or save it as Home, Work, or a place with a name. Past Québec's border it says so, and offers neither. While
-   the address search is down, the pin has no address: its coordinates show, and the rest works. *@
+@* The card for a pin dropped by a press and hold on the map (a long press, the mouse's button held, or a right-click): its
+   address, Best near it or on the way there, or save it as Home, Work, or a place with a name. Past Québec's border it says
+   so, and offers none of them. While the address search is down, the pin has no address: its coordinates show, and the
+   rest works. *@
 <section class="pin-card" role="dialog" aria-labelledby="ess-pin-title" tabindex="-1" @ref="_element">
     <div class="top">
         @* Read out when the address comes, or that the pin is outside Québec. *@
@@ -27,20 +28,30 @@
     @* Past the border, there's nothing to plan or save. *@
     @if (!Outside)
     {
-        @if (TripsUnavailable)
-        {
-            <p class="note" role="status">
-                @(ServicesStatus.Note(Services.Routing, L, "Trips") ?? L["TripsUnavailableShort"])
-            </p>
-        }
-        else
-        {
-            <button type="button" class="primary" @onclick="TripAsync">
-                <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                     stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Pump" /></svg>
-                @L["BestOnTheWayHere"]
-            </button>
-        }
+        <div class="group" role="group" aria-labelledby="ess-pin-best">
+            <span id="ess-pin-best" class="caption">@L["BestStation"]</span>
+            <div class="pair">
+                <button type="button" class="secondary" @onclick="BestNearAsync">
+                    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Pump" /></svg>
+                    @L["NearHere"]
+                </button>
+                @if (!TripsUnavailable)
+                {
+                    <button type="button" class="primary" @onclick="TripAsync">
+                        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Pump" /></svg>
+                        @L["OnTheWayHere"]
+                    </button>
+                }
+            </div>
+            @if (TripsUnavailable)
+            {
+                <p class="note" role="status">
+                    @(ServicesStatus.Note(Services.Routing, L, "Trips") ?? L["TripsUnavailableShort"])
+                </p>
+            }
+        </div>
 
         @if (_saved is { } saved)
         {
@@ -58,22 +69,25 @@
         }
         else
         {
-            <div class="saves">
-                <button type="button" @onclick="() => SaveAsync(PlaceKind.Home)" aria-label="@L["SaveAs", L["Home"]]">
-                    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Home" /></svg>
-                    @L["Home"]
-                </button>
-                <button type="button" @onclick="() => SaveAsync(PlaceKind.Work)" aria-label="@L["SaveAs", L["Work"]]">
-                    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Work" /></svg>
-                    @L["Work"]
-                </button>
-                <button type="button" @onclick="StartNaming" aria-label="@L["SavePlaceLabel"]">
-                    <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                         stroke-linecap="round"><path d="@Icons.Plus" /></svg>
-                    @L["SavePlace"]
-                </button>
+            <div class="group" role="group" aria-labelledby="ess-pin-save">
+                <span id="ess-pin-save" class="caption">@L["SaveAsCaption"]</span>
+                <div class="saves">
+                    <button type="button" @onclick="() => SaveAsync(PlaceKind.Home)" aria-label="@L["SaveAs", L["Home"]]">
+                        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Home" /></svg>
+                        @L["Home"]
+                    </button>
+                    <button type="button" @onclick="() => SaveAsync(PlaceKind.Work)" aria-label="@L["SaveAs", L["Work"]]">
+                        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Work" /></svg>
+                        @L["Work"]
+                    </button>
+                    <button type="button" @onclick="StartNaming" aria-label="@L["SavePlaceLabel"]">
+                        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                             stroke-linecap="round"><path d="@Icons.Plus" /></svg>
+                        @L["OtherPlace"]
+                    </button>
+                </div>
             </div>
         }
     }
@@ -111,6 +125,10 @@
     /// <summary>Best on the way to the pin, or to the place it was just saved as.</summary>
     [Parameter]
     public EventCallback<TripDestination> OnTrip { get; set; }
+
+    /// <summary>Best near you, ranked from the pin ("Near here").</summary>
+    [Parameter]
+    public EventCallback<BestOrigin> OnBestNear { get; set; }
 
     private double? DistanceKm => UserLocation is { } user ? Geo.DistanceKm(user, Point) : null;
 
@@ -211,6 +229,8 @@
         OnTrip.InvokeAsync(_saved is { } saved
             ? TripDestination.To(saved) with { Address = saved.Address ?? Address }
             : new TripDestination(Point.Latitude, Point.Longitude, Address: Address));
+
+    private Task BestNearAsync() => OnBestNear.InvokeAsync(new BestOrigin(Point, OriginKind.Pin, Label: Address));
 
     private async Task SaveAsync(PlaceKind kind) => _saved = await Places.SaveAsync(kind, Point, address: Address);
 

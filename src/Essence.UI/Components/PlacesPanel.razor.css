@@ -201,6 +201,24 @@
     margin-top: 16px;
 }
 
+/* Opened from ✎: the list is the panel, under its title. */
+.yours.is-managing {
+    margin-top: 0;
+}
+
+/* Saved, or forgotten with Undo; kept in the page empty, so it's read out when it says something. */
+.done.is-shown {
+    margin: 10px 0 0;
+    font-size: 13px;
+    color: var(--ess-text-muted);
+}
+
+.done .link {
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: underline;
+}
+
 .yours h3 {
     margin: 0 0 4px;
     font-size: 12px;
@@ -267,13 +285,44 @@
     color: var(--ess-accent);
 }
 
-/* A place found for "Add a place", waiting for its name. */
+/* Forget: a bin, a 44 px target. */
+.forget {
+    flex: none;
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    margin-right: -10px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: var(--ess-text-muted);
+    cursor: pointer;
+}
+
+.forget:hover {
+    background: var(--ess-hover);
+    color: var(--ess-text);
+}
+
+/* A place found for "Add a place", waiting for its name; or a place being renamed, in its row. */
 .naming {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px;
     margin-top: 12px;
+}
+
+.naming.rename {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 6px 0;
+}
+
+.rename label {
+    flex-basis: 100%;
 }
 
 .chosen {

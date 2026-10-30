@@ -106,31 +106,71 @@
     color: var(--ess-text);
 }
 
-.primary {
+.group {
+    margin-top: 12px;
+}
+
+/* "Best station", "Save as": what the buttons under them do. */
+.caption {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: var(--ess-text-muted);
+}
+
+/* Near here and On the way here, side by side; one under the other only when they can't fit. */
+.pair {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.primary,
+.secondary {
+    flex: 1 1 130px;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    width: 100%;
+    gap: 7px;
     min-height: 48px;
-    margin-top: 12px;
-    border: 0;
+    padding: 0 10px;
     border-radius: 10px;
+    font: 600 14px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+.primary svg,
+.secondary svg {
+    flex: none;
+}
+
+.primary {
+    border: 0;
     background: var(--ess-accent);
     color: var(--ess-on-accent);
-    font: 600 15px/1.2 var(--ess-font);
-    cursor: pointer;
 }
 
 .primary:hover {
     filter: brightness(1.08);
 }
 
+.secondary {
+    border: 1px solid var(--ess-accent);
+    background: var(--ess-surface);
+    color: var(--ess-accent);
+}
+
+.secondary:hover {
+    background: var(--ess-hover);
+}
+
 .saves {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 6px;
-    margin-top: 8px;
 }
 
 .saves button {

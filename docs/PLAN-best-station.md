@@ -267,7 +267,8 @@ returns to the pane; a release reload reopens the pane.
    iOS, cancelled by movement over ~10 px, a second finger or a map move; ignored on markers; the next click swallowed so
    the hold doesn't dismiss the pane; `-webkit-touch-callout: none` on the map. `OnMapHeld(lat, lon)` to C#
    (`IMapListener.OnMapHeldAsync`). The dropped-pin card: Best on the way here, Save as Home, Work, or another place.
-   Without Photon the label is "Dropped pin" and the distance. Keyboard path: "Use the map centre as destination".
+   Without Photon the label is "Dropped pin" and the distance. Keyboard path: "Use the map centre as destination" (later
+   removed: the address search is the keyboard's way to a destination; see "Going somewhere? and your places").
 9. **`SavedPlaces`** (Home, Work, others) and the Home/Work chips in the pane's "Going somewhere?" bar, so the commute is
    one tap from the pane. The phone chip also offers "To Work" once Work is saved.
 10. **Changelog** `best-on-the-way.json`, `saved-places.json`, `road-distances.json`; **README**: API table, Deploy,
@@ -542,6 +543,23 @@ the footnotes in an ⓘ, Refresh as an icon, and the car as a real menu.
   (arrows, Home, End, wrapping; Tab moves on), and closes it on Escape, a tap outside or the focus leaving. It listens
   on the window in the capture phase, so Escape and a tap on the map close only the popup: the click a tap outside ends
   with is dropped, so a tap on another control only closes it too. The sheet doesn't drag from a popup.
+
+## Owner's review: Going somewhere? and your places
+After using it, the owner asked for less in the pane and more on the pin's card:
+- **The box** takes the pane's width; the saved places wrap under it, then ✎. The hint under them (press and hold, or
+  right-click) and "Use the map centre as destination" are gone. The gesture is explained where a place is picked
+  ("Pick it on the map"), and the address search is the keyboard's way to a destination.
+- **Press and hold with a mouse:** the left button held 550 ms without moving drops the pin too (pointer events, mouse
+  only; touches keep their timer, pens their own press and hold, which is a right-click). Right-click still works.
+- **Your places (✎)** is the address-search pane opened on its list (`PlacePurpose.Manage`): no search until Set, Change
+  or Add needs one, then back to the list with "Saved.". Every place has Forget (a bin), Home and Work also
+  Set/Change, the others Rename (inline; Escape cancels it there, `data-ess-own-escape`). Forget is immediate, with Undo
+  in the status line until the next action (`SavedPlaces.RemoveAsync` returns where the place was, `RestoreAsync` puts it
+  back). The same actions show under the trip search.
+- **The pin's card:** captions say what its buttons do: "Best station" over **Near here** (new) and **On the way
+  here**, "Save as" over Home, Work and ＋ Other…. Near here ranks Best near you from the pin (`OriginKind.Pin`, with its
+  address): the card closes, the pin stays on the map while the pane is open, the pane says "Ranked from 65 Rue …" with
+  Use my location, and a trip planned from there starts at the pin ("Planned from a point on the map.").
 
 ## Phase 4 (optional): fuel level from the car (OBD2)
 **Before starting:** the owner tests both cars with an OBDLink CX in a terminal app:

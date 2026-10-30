@@ -580,7 +580,7 @@
     <value>Planned at {0} from where you were.</value>
   </data>
   <data name="TripFromMapCenter" xml:space="preserve">
-    <value>Planned from the map’s centre.</value>
+    <value>Planned from a point on the map.</value>
   </data>
   <data name="PlanAgain" xml:space="preserve">
     <value>Plan again from here</value>
@@ -612,15 +612,6 @@
   <data name="GoingSomewhere" xml:space="preserve">
     <value>Going somewhere?</value>
   </data>
-  <data name="GoingSomewhereTouch" xml:space="preserve">
-    <value>Press and hold the map where you’re going.</value>
-  </data>
-  <data name="GoingSomewhereMouse" xml:space="preserve">
-    <value>Right-click the map where you’re going.</value>
-  </data>
-  <data name="UseMapCenterAsDestination" xml:space="preserve">
-    <value>Use the map centre as destination</value>
-  </data>
   <data name="TripsUnavailableShort" xml:space="preserve">
     <value>Trips aren’t available right now.</value>
   </data>
@@ -641,9 +632,6 @@
   </data>
   <data name="RemovePin" xml:space="preserve">
     <value>Remove the pin</value>
-  </data>
-  <data name="BestOnTheWayHere" xml:space="preserve">
-    <value>Best on the way here</value>
   </data>
   <data name="SaveAs" xml:space="preserve">
     <value>Save as {0}</value>
@@ -718,7 +706,7 @@
     <value>Or press and hold anywhere on the map, any time.</value>
   </data>
   <data name="PickOnMapMouse" xml:space="preserve">
-    <value>Or right-click anywhere on the map, any time.</value>
+    <value>Or press and hold (or right-click) anywhere on the map, any time.</value>
   </data>
   <data name="PickOnMapNotice" xml:space="preserve">
     <value>Press and hold the map where it is, or right-click it.</value>
@@ -773,5 +761,44 @@
   </data>
   <data name="SearchRetrying" xml:space="preserve">
     <value>Address search isn’t available right now: Québec’s addresses couldn’t be prepared. Trying again at {0}. Meanwhile, pick the place on the map: press and hold it, or right-click it.</value>
+  </data>
+  <data name="ManagePlacesLabel" xml:space="preserve">
+    <value>Manage your places</value>
+  </data>
+  <data name="Rename" xml:space="preserve">
+    <value>Rename</value>
+  </data>
+  <data name="RenamePlaceLabel" xml:space="preserve">
+    <value>Rename {0}</value>
+  </data>
+  <data name="PlaceForgotten" xml:space="preserve">
+    <value>{0} forgotten.</value>
+  </data>
+  <data name="Undo" xml:space="preserve">
+    <value>Undo</value>
+  </data>
+  <data name="PlaceSaved" xml:space="preserve">
+    <value>Saved.</value>
+  </data>
+  <data name="BestStation" xml:space="preserve">
+    <value>Best station</value>
+  </data>
+  <data name="NearHere" xml:space="preserve">
+    <value>Near here</value>
+  </data>
+  <data name="OnTheWayHere" xml:space="preserve">
+    <value>On the way here</value>
+  </data>
+  <data name="SaveAsCaption" xml:space="preserve">
+    <value>Save as</value>
+  </data>
+  <data name="OtherPlace" xml:space="preserve">
+    <value>Other…</value>
+  </data>
+  <data name="BestFromPin" xml:space="preserve">
+    <value>Ranked from {0}.</value>
+  </data>
+  <data name="BestFromDroppedPin" xml:space="preserve">
+    <value>Ranked from the dropped pin.</value>
   </data>
 </root>

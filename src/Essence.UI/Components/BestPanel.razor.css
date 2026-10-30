@@ -564,18 +564,18 @@
     margin: 0 0 12px;
 }
 
-/* Home and Work go under the box when it would be too narrow to read (French, small phones). */
+/* The saved places, under the box. */
 .where-row {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 6px;
+    margin-top: 6px;
 }
 
 /* Opens the address search (PlacesPanel). */
 .wbox {
-    flex: 1 1 180px;
-    min-width: 0;
+    width: 100%;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -635,31 +635,16 @@
     color: var(--ess-text-muted);
 }
 
-.where-help {
-    margin: 6px 0 0;
-    font-size: 12px;
-    line-height: 1.45;
+/* ✎: Your places. Only an icon, so a square 44 px target. */
+.place.manage {
+    justify-content: center;
+    min-width: 44px;
+    padding: 0;
     color: var(--ess-text-muted);
 }
 
-.where-help .link {
-    font-size: 12px;
-    text-decoration: underline;
-}
-
-/* A press and hold is how fingers pick a place, a right-click how mice do. */
-.where-help .mouse {
-    display: none;
-}
-
-@media (hover: hover) and (pointer: fine) {
-    .where-help .touch {
-        display: none;
-    }
-
-    .where-help .mouse {
-        display: inline;
-    }
+.place.manage:hover {
+    color: var(--ess-text);
 }
 
 .where-off {

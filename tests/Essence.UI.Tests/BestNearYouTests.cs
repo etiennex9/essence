@@ -199,11 +199,27 @@ public class BestNearYouTests
     }
 
     [Theory]
-    [InlineData(false, 1500.0, true)]
-    [InlineData(false, 1000.0, false)]
-    [InlineData(true, null, false)]
-    public void Only_an_inaccurate_device_location_is_approximate(bool mapCenter, double? accuracy, bool approximate) =>
-        Assert.Equal(approximate, new BestOrigin(new GeoPoint(45.5, -73.6), mapCenter, accuracy).IsApproximate);
+    [InlineData(OriginKind.Device, 1500.0, true)]
+    [InlineData(OriginKind.Device, 1000.0, false)]
+    [InlineData(OriginKind.MapCenter, null, false)]
+    [InlineData(OriginKind.Pin, 1500.0, false)]
+    public void Only_an_inaccurate_device_location_is_approximate(OriginKind kind, double? accuracy, bool approximate) =>
+        Assert.Equal(approximate, new BestOrigin(new GeoPoint(45.5, -73.6), kind, accuracy).IsApproximate);
+
+    [Fact]
+    public async Task A_pin_ranks_from_the_pin_until_the_location_comes_back()
+    {
+        await _best.SetOriginAsync(new BestOrigin(new GeoPoint(45.6418, -73.8410), OriginKind.Pin, Label: "65 Rue Péladeau"));
+
+        Assert.Contains("lat=45.6418&lon=-73.841&", Assert.Single(_requests).Query);
+        Assert.True(_best.Origin!.IsChosen);
+
+        await _best.SetOriginAsync(Montreal);
+
+        Assert.Equal(2, _requests.Count);
+        Assert.Contains("lat=45.5017&lon=-73.5673&", _requests[1].Query);
+        Assert.False(_best.Origin!.IsChosen);
+    }
 
     private static string Ranked(long id, string savesDollars) => $$"""
         {"id":{{id}},"name":null,"brand":"Shell","address":"{{id}} rue Principale","latitude":45.5,"longitude":-73.56,"priceCents":166.9,
