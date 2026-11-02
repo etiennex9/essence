@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Redeploys a TrueNAS custom app when an image it runs from ghcr.io has a new digest under the same tag.
+"""Redeploys a TrueNAS custom app when an image it runs has a new digest under the same tag.
 
 TrueNAS checks for image updates once a day, then waits for a click on Update. Run this instead from a TrueNAS cron job,
 as root, every 5 minutes (README → Deploy has the setup):
 
     python3 /mnt/POOL/scripts/truenas-autodeploy.py essence --snapshot POOL/apps/essence/postgres
 
-For each of the app's containers whose image comes from ghcr.io, it compares the digest the tag points to now with the
-image the container runs. When one differs, it checks again every 2 minutes until two checks agree, so that it pulls a
-whole release even while the publish workflow is still moving tags. Then it snapshots --snapshot's dataset (keeping its
-last 10 snapshots), runs app.pull_images with redeploy (what Update does: pull every image, then stop and start the whole
-app), waits for the app to report RUNNING (every health check passing), and checks that no container restarted in the 2
-minutes after. It prints nothing while the app is up to date or ghcr.io or Docker can't be reached, a few lines when it
-redeploys, and the reason on stderr when it fails, so the cron job's emails say what happened.
+For each of the app's containers, it compares the digest the image's tag points to now in its registry (Docker Hub for
+postgres:18, ghcr.io, or any other registry that hands out anonymous tokens) with the image the container runs. Images
+pinned by digest never move, and are left alone. When one differs, it checks again every 2 minutes until two checks
+agree, so that it pulls a whole release even while the publish workflow is still moving tags. Then it snapshots
+--snapshot's dataset (keeping its last 10 snapshots), runs app.pull_images with redeploy (what Update does: pull every
+image, then stop and start the whole app), waits for the app to report RUNNING (every health check passing), and checks
+that no container restarted in the 2 minutes after. It prints nothing while the app is up to date or a registry or Docker
+can't be reached, a few lines when it redeploys, and the reason on stderr when it fails, so the cron job's emails say
+what happened.
 
 A set of digests is tried once: after a failure it waits for the next publish. If the pull failed, the app still runs
 the old images; delete .autodeploy-<app>.json next to this script to retry them. If the redeploy or the app failed, the
@@ -25,10 +27,12 @@ import argparse
 import fcntl
 import http.client
 import json
+import re
 import subprocess
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,7 +54,7 @@ STABLE_SECONDS = 120  # after RUNNING, for every container to stay up without a 
 
 
 class Unavailable(Exception):
-    """ghcr.io or Docker can't be reached right now: the next run tries again."""
+    """A registry or Docker can't be reached right now: the next run tries again."""
 
 
 def run(*args):
@@ -60,25 +64,62 @@ def run(*args):
     return result.stdout
 
 
+def parse_reference(ref):
+    """(registry, repository, tag) of an image reference, as Docker reads it: postgres:18 is on Docker Hub, as
+    library/postgres; ghcr.io/owner/name:tag on ghcr.io. A reference without a tag means latest."""
+    first, _, rest = ref.partition("/")
+    if rest and ("." in first or ":" in first or first == "localhost"):
+        registry, path = first, rest
+    else:
+        registry, path = "docker.io", ref
+    if ":" in path.rpartition("/")[2]:
+        path, _, tag = path.rpartition(":")
+    else:
+        tag = "latest"
+    if registry in ("docker.io", "index.docker.io"):
+        registry = "registry-1.docker.io"
+        if "/" not in path:
+            path = f"library/{path}"  # official images
+    return registry, path, tag
+
+
+def manifest_digest(url, headers):
+    # HEAD, which Docker Hub doesn't count as a pull.
+    request = urllib.request.Request(url, method="HEAD", headers={"Accept": ACCEPT, **headers})
+    with urllib.request.urlopen(request, timeout=30) as response:
+        return response.headers["Docker-Content-Digest"]
+
+
 def remote_digest(ref):
-    """The digest ghcr.io serves now for ref (ghcr.io/<owner>/<name>:<tag>). Anonymous: the package must be public."""
-    repository, _, tag = ref.removeprefix("ghcr.io/").partition(":")
+    """The digest ref's tag points to now in its registry. Anonymous: the image must be public."""
+    registry, repository, tag = parse_reference(ref)
+    url = f"https://{registry}/v2/{repository}/manifests/{tag}"
     try:
-        with urllib.request.urlopen(f"https://ghcr.io/token?scope=repository:{repository}:pull", timeout=30) as response:
-            token = json.load(response)["token"]
-        request = urllib.request.Request(
-            f"https://ghcr.io/v2/{repository}/manifests/{tag or 'latest'}", method="HEAD",
-            headers={"Authorization": f"Bearer {token}", "Accept": ACCEPT})
-        with urllib.request.urlopen(request, timeout=30) as response:
-            digest = response.headers["Docker-Content-Digest"]
+        try:
+            digest = manifest_digest(url, {})
+        except urllib.error.HTTPError as e:
+            if e.code != 401:
+                raise
+            # The challenge says where to get an anonymous token: Bearer realm="…",service="…",scope="…".
+            challenge = dict(re.findall(r'(\w+)="([^"]*)"', e.headers.get("WWW-Authenticate", "")))
+            if "realm" not in challenge:
+                sys.exit(f"{ref}: {registry} wants a login, which this script doesn't do")
+            params = {"scope": f"repository:{repository}:pull"} | {
+                key: value for key, value in challenge.items() if key in ("service", "scope")}
+            realm = challenge["realm"]
+            token_url = f"{realm}{'&' if '?' in realm else '?'}{urllib.parse.urlencode(params)}"
+            with urllib.request.urlopen(token_url, timeout=30) as response:
+                body = json.load(response)
+            token = body.get("token") or body["access_token"]
+            digest = manifest_digest(url, {"Authorization": f"Bearer {token}"})
     except urllib.error.HTTPError as e:
-        if e.code in (401, 403, 404):  # the package went private, or the package or tag is gone
-            sys.exit(f"{ref}: ghcr.io answered {e.code} for {e.url}")
-        raise Unavailable(f"ghcr.io answered {e.code} for {e.url}") from e
-    except (OSError, ValueError, KeyError, TypeError, http.client.HTTPException) as e:
-        raise Unavailable(f"can't reach ghcr.io: {e!r}") from e
+        if e.code in (401, 403, 404):  # the image went private, or the image or tag is gone
+            sys.exit(f"{ref}: {registry} answered {e.code} for {e.url}")
+        raise Unavailable(f"{registry} answered {e.code} for {e.url}") from e
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, http.client.HTTPException) as e:
+        raise Unavailable(f"can't reach {registry}: {e!r}") from e
     if not digest:
-        raise Unavailable(f"ghcr.io sent no digest for {ref}")
+        raise Unavailable(f"{registry} sent no digest for {ref}")
     return digest
 
 
@@ -96,13 +137,12 @@ def containers(app):
 
 
 def stale_images(app):
-    """{ref: digest on ghcr.io} for each of the app's ghcr.io images whose containers run another digest."""
+    """{ref: digest in its registry} for each of the app's images whose containers run another digest."""
     ids = containers(app)
     stale = {}
     for line in (docker("inspect", "--format", "{{.Config.Image}} {{.Image}}", *ids).splitlines() if ids else []):
         ref, image_id = line.split()
-        # Other registries (postgres from Docker Hub) and images pinned by digest are left to TrueNAS.
-        if not ref.startswith("ghcr.io/") or "@" in ref or ref in stale:
+        if "@" in ref or ref in stale:  # pinned by digest, or seen already
             continue
         image = subprocess.run(["docker", "image", "inspect", "--format", "{{json .RepoDigests}}", image_id],
                                capture_output=True, text=True)

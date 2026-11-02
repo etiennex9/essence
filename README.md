@@ -232,8 +232,9 @@ query strings too unless told not to.
 ### Rolling out each push automatically
 
 TrueNAS checks for new images once a day and waits for a click on **Update**. Instead, a cron job on the NAS can run
-[truenas-autodeploy.py](deploy/truenas-autodeploy.py) every 5 minutes: when a `latest` tag on GHCR points to a newer image
-than the app runs, it waits until the whole release is published, snapshots the database's dataset, then pulls and
+[truenas-autodeploy.py](deploy/truenas-autodeploy.py) every 5 minutes: when a tag the app uses points to a newer image than
+the app runs (`latest` on GHCR, or `postgres:18` on Docker Hub), it waits until the whole release is published, snapshots
+the database's dataset, then pulls and
 redeploys the app (what **Update** does), waits for it to report running, and checks that no container keeps restarting.
 Nothing reaches the NAS from outside and no API key is involved. Written for TrueNAS 25.10, for
 the app installed as `essence` from [deploy/truenas.yaml](deploy/truenas.yaml); replace `POOL` with your pool's name.
@@ -282,10 +283,14 @@ gets an `@autodeploy-<time>` snapshot first (the last 10 are kept).
   images; to retry, `rm /mnt/POOL/scripts/.autodeploy-essence.json`. If migrate failed, or the app wasn't running 10
   minutes later, or a container restarted in the 2 minutes after, the app already has the new images: fix the cause and
   **Stop**, then **Start** the app in **Apps**, or push a fix.
+- **PostgreSQL** is rolled out the same way when Docker Hub moves `postgres:18`: PostgreSQL 18's minor releases and
+  rebuilds of its image, never 19, since the tag decides how far an image moves. The script checks Docker Hub with HEAD
+  requests, which don't count against its pull limits.
 - **To hold an image back**, set it to `:sha-<commit>` in the app's YAML (**Apps → essence → Edit**). A sha tag doesn't
   move, so the script leaves it alone until you set it back to `:latest`. Only the images a push rebuilt get its sha tag:
   pick one listed on the image's package page (the repository's **Packages**). Holding `web` back also keeps the version
-  and changelog it shows. To pause everything, disable the cron job.
+  and changelog it shows. To hold PostgreSQL at a minor version, use its tag, e.g. `postgres:18.1`; to fix the image
+  itself, pin its digest (`postgres:18@sha256:…`). To pause everything, disable the cron job.
 - **Migrations only go forward**, so rolling back the images doesn't undo one. Stop the app. Roll the postgres dataset back
   to the `@autodeploy-` snapshot taken before the bad rollout: **Datasets** → the dataset → **Data Protection** → **View
   Snapshots** → that snapshot's row → **Rollback**. If newer snapshots exist, the default choice is refused: choose
