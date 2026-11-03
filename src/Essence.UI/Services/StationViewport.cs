@@ -1,3 +1,4 @@
+using System.Globalization;
 using Essence.Contracts;
 
 namespace Essence.UI.Services;
@@ -54,14 +55,27 @@ public sealed class StationViewport(int maxCached = StationViewport.DefaultMaxCa
 
     public static bool ShouldFetch(Viewport viewport) => viewport.Zoom >= MinFetchZoom;
 
-    /// <summary>Distance from the center to the farthest corner, rounded up to 100 m and capped at the API's maximum.</summary>
+    /// <summary>
+    /// Distance from the center to the farthest corner, rounded up to 100 m and capped at the API's maximum. The center is
+    /// that of the part of the map a pane leaves uncovered, off the middle of the view while one is open.
+    /// </summary>
     public static double FetchRadiusKm(Viewport viewport)
     {
-        var corner = Math.Max(
-            Geo.DistanceKm(viewport.Center, new GeoPoint(viewport.North, viewport.East)),
-            Geo.DistanceKm(viewport.Center, new GeoPoint(viewport.South, viewport.West)));
+        GeoPoint[] corners =
+        [
+            new(viewport.North, viewport.West), new(viewport.North, viewport.East),
+            new(viewport.South, viewport.West), new(viewport.South, viewport.East),
+        ];
+        var corner = corners.Max(c => Geo.DistanceKm(viewport.Center, c));
         return Math.Clamp(Math.Ceiling(corner * 10) / 10, 0.1, MaxRadiusKm);
     }
+
+    /// <summary>
+    /// What a fetch for this view is known by, to skip the same one again: the fuel and the view's edges, not its center,
+    /// which a pane opening or changing size moves without changing what the map shows.
+    /// </summary>
+    public static string FetchKey(string fuel, Viewport viewport) => string.Create(
+        CultureInfo.InvariantCulture, $"{fuel}|{viewport.West:0.0000}|{viewport.South:0.0000}|{viewport.East:0.0000}|{viewport.North:0.0000}");
 
     /// <summary>Adds or refreshes stations. Past the cache size, the ones farthest from <paramref name="center"/> are dropped.</summary>
     public void Merge(IEnumerable<NearbyStation> stations, GeoPoint center)

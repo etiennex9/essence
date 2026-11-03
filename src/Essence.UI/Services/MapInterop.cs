@@ -62,8 +62,11 @@ public interface IMapListener
 
     Task OnMarkerClickedAsync(long id);
 
-    /// <summary>A click on the map itself (not on a marker), or Escape.</summary>
+    /// <summary>Escape.</summary>
     Task OnDismissAsync();
+
+    /// <summary>A click on the map itself, not on a marker.</summary>
+    Task OnMapClickedAsync();
 
     /// <summary>The page was hidden (another tab, the app in the background) or shown again.</summary>
     Task OnVisibilityChangedAsync(bool visible);
@@ -134,18 +137,32 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
     /// <summary>The pin a press and hold dropped; null removes it.</summary>
     public ValueTask SetPinAsync(GeoPoint? point) => InvokeAsync("setPin", point?.Latitude, point?.Longitude);
 
-    /// <param name="besidePane">Ends with the point in the middle of the area the details pane leaves uncovered.</param>
-    public ValueTask FlyToAsync(GeoPoint point, double zoom, bool besidePane = false) =>
-        InvokeAsync("flyTo", point.Latitude, point.Longitude, zoom, besidePane);
+    /// <summary>Ends with the point in the middle of the part of the map the panes leave uncovered.</summary>
+    /// <param name="waitForPane">Waits for a pane opening to be in place first.</param>
+    public ValueTask FlyToAsync(GeoPoint point, double zoom, bool waitForPane = false) =>
+        InvokeAsync("flyTo", point.Latitude, point.Longitude, zoom, waitForPane);
 
-    /// <summary>Shows a box; with <paramref name="besidePane"/>, in the area the pane leaves uncovered.</summary>
-    public ValueTask FitBoundsAsync(double west, double south, double east, double north, bool besidePane) =>
-        InvokeAsync("fitBounds", west, south, east, north, besidePane);
+    /// <summary>Shows a box in the part of the map the panes leave uncovered.</summary>
+    /// <param name="waitForPane">Waits for a pane opening to be in place first.</param>
+    public ValueTask FitBoundsAsync(double west, double south, double east, double north, bool waitForPane) =>
+        InvokeAsync("fitBounds", west, south, east, north, waitForPane);
 
     /// <summary>Pans just enough to bring a point out from under the details pane.</summary>
     /// <param name="waitForPane">Waits for a pane opening to be in place first; a pane already open needn't be waited for.</param>
     public ValueTask EnsureVisibleAsync(GeoPoint point, bool waitForPane = true) =>
         InvokeAsync("ensureVisible", point.Latitude, point.Longitude, waitForPane);
+
+    /// <summary>
+    /// A click on the map, on phones: the sheet open shrinks to its header, and true says the click was the sheet's (one
+    /// already shrunk stays). False on wide screens or with no sheet open.
+    /// </summary>
+    public async Task<bool> CollapsePaneAsync() => _map is not null && await _map.InvokeAsync<bool>("collapsePane");
+
+    /// <summary>
+    /// The page shows something else (another station, list or trip): the map's last automatic move isn't made again when a
+    /// pane changes size, as it is until the map is moved by hand.
+    /// </summary>
+    public ValueTask ForgetAutoMoveAsync() => InvokeAsync("forgetAutoMove");
 
     [JSInvokable]
     public Task OnViewportChanged(Viewport viewport) => _listener?.OnViewportChangedAsync(viewport) ?? Task.CompletedTask;
@@ -155,6 +172,9 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 
     [JSInvokable]
     public Task OnDismiss() => _listener?.OnDismissAsync() ?? Task.CompletedTask;
+
+    [JSInvokable]
+    public Task OnMapClicked() => _listener?.OnMapClickedAsync() ?? Task.CompletedTask;
 
     [JSInvokable]
     public Task OnVisibilityChanged(bool visible) => _listener?.OnVisibilityChangedAsync(visible) ?? Task.CompletedTask;

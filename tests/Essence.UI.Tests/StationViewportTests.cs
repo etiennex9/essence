@@ -19,6 +19,24 @@ public class StationViewportTests
     }
 
     [Fact]
+    public void Fetch_radius_reaches_the_farthest_corner_off_center()
+    {
+        // The center of the part a side panel leaves uncovered, toward the north-west: the south-east corner is the farthest.
+        var view = Montreal with { CenterLat = 45.515, CenterLon = -73.585 };
+        var southEast = Geo.DistanceKm(view.Center, new GeoPoint(view.South, view.East));
+        Assert.True(StationViewport.FetchRadiusKm(view) >= southEast);
+    }
+
+    [Fact]
+    public void Fetch_key_ignores_the_center()
+    {
+        var key = StationViewport.FetchKey("Régulier", Montreal);
+        Assert.Equal(key, StationViewport.FetchKey("Régulier", Montreal with { CenterLat = 45.51, CenterLon = -73.58 }));
+        Assert.NotEqual(key, StationViewport.FetchKey("Régulier", Montreal with { North = 45.53 }));
+        Assert.NotEqual(key, StationViewport.FetchKey("Diesel", Montreal));
+    }
+
+    [Fact]
     public void Fetch_radius_is_capped_at_the_api_maximum()
     {
         var province = new Viewport(47, -72, -80, 44, -64, 50, 6);

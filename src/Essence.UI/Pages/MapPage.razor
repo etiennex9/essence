@@ -96,7 +96,8 @@
         }
     </div>
 
-    @* Alone in the bottom-left corner (the map's own controls are bottom-right), under a bottom sheet while one is open. *@
+    @* Alone in the bottom-left corner (the map's own controls are bottom-right): above a bottom sheet shrunk to its header,
+       under any other. *@
     <button type="button" class="tool about" @onclick="() => _about!.ShowAsync()" aria-label="@L["About"]" title="@L["About"]">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round"><path d="@Icons.Info" /></svg>
@@ -105,7 +106,7 @@
     @* The details open over a list (?view=…&station=…): closing them goes back to it. *@
     @if (Station is { } stationId)
     {
-        <StationDetails StationId="stationId" Fuel="@_fuel" UserLocation="_userLocation" DataAsOf="_dataAsOf" OnClose="CloseDetailsAsync"
+        <StationDetails @ref="_details" StationId="stationId" Fuel="@_fuel" UserLocation="_userLocation" DataAsOf="_dataAsOf" OnClose="CloseDetailsAsync"
                         OnLoaded="OnStationLoadedAsync" />
     }
     else if (View == FavoritesView)
@@ -177,6 +178,7 @@
     private MapInterop? _map;
     private AboutDialog? _about;
     private BestPanel? _bestPanel;
+    private StationDetails? _details;
     private ElementReference _mapElement;
     private string _fuel = Fuels.Default;
     private Viewport? _viewport;
@@ -257,6 +259,9 @@
 
     /// <summary>A cold load with <c>?station=</c> centers on that station once it's loaded, instead of on the user.</summary>
     private bool _centerOnStation;
+
+    /// <summary>What the page showed when the map last moved for it: once it shows something else, that move is forgotten.</summary>
+    private (string? View, long? Station) _autoMoveFor;
     private StationDetail? _pendingStation;
 
     /// <summary>What the map was last fitted to for Best near you: where from, the pick and the closest.</summary>
@@ -412,6 +417,17 @@
             Navigation.NavigateTo(Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["view"] = BestView, ["station"] = null }),
                 replace: true);
             return;
+        }
+
+        // A pane changing size makes the map's last move again, for what it was made for only: what a link opened cold shows
+        // too, before the map is there.
+        if ((View, Station) != _autoMoveFor)
+        {
+            _autoMoveFor = (View, Station);
+            if (_map is not null)
+            {
+                await _map.ForgetAutoMoveAsync();
+            }
         }
 
         if (_map is not null)
@@ -603,7 +619,7 @@
 
         var fuel = _fuel;
         var radiusKm = StationViewport.FetchRadiusKm(viewport);
-        var key = string.Create(CultureInfo.InvariantCulture, $"{fuel}|{viewport.CenterLat:0.0000}|{viewport.CenterLon:0.0000}|{radiusKm}");
+        var key = StationViewport.FetchKey(fuel, viewport);
         if (!background && _lastFetch is { } last && last.Key == key && DateTimeOffset.UtcNow - last.At < FetchFreshness)
         {
             return;
@@ -962,7 +978,7 @@
         points.AddRange(best.Stations.Where(s => s.Id == best.ClosestId).Select(s => new GeoPoint(s.Latitude, s.Longitude)));
         await _map!.FitBoundsAsync(
             points.Min(p => p.Longitude), points.Min(p => p.Latitude), points.Max(p => p.Longitude), points.Max(p => p.Latitude),
-            besidePane: true);
+            waitForPane: true);
     }
 
     /// <summary>
@@ -1022,7 +1038,7 @@
         }
 
         await _map!.FitBoundsAsync(
-            plan.Path.Min(p => p[0]), plan.Path.Min(p => p[1]), plan.Path.Max(p => p[0]), plan.Path.Max(p => p[1]), besidePane: true);
+            plan.Path.Min(p => p[0]), plan.Path.Min(p => p[1]), plan.Path.Max(p => p[0]), plan.Path.Max(p => p[1]), waitForPane: true);
     }
 
     /// <summary>A press and hold on the map: a pin drops there, with its card.</summary>
@@ -1186,6 +1202,11 @@
             _centerOnStation = false;
             Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", id), replace: replace);
         }
+        else if (_details is not null)
+        {
+            // Its details are open already: shrunk to their header, they come back, and the station out from under them.
+            await _details.ShowAgainAsync();
+        }
     }
 
     /// <summary>A station picked in a list: its details open over it, and the map flies to it.</summary>
@@ -1208,8 +1229,22 @@
     }
 
     /// <summary>
-    /// Closes what's on top: the dropped pin's card, the details, My cars or the address search, the trip (back to Best near
-    /// you), else the list.
+    /// A click on the map: on phones, the sheet open shrinks to its header so the map shows, and stays so; otherwise, or with
+    /// a pin dropped, what's on top closes as on Escape.
+    /// </summary>
+    public async Task OnMapClickedAsync()
+    {
+        if (_pin is null && _map is not null && await _map.CollapsePaneAsync())
+        {
+            return;
+        }
+
+        await OnDismissAsync();
+    }
+
+    /// <summary>
+    /// Escape, or a click on the map no sheet takes: closes what's on top, the dropped pin's card, the details, My cars or the
+    /// address search, the trip (back to Best near you), else the list.
     /// </summary>
     public Task OnDismissAsync() =>
         _pin is not null ? ClearPinAsync()
@@ -1426,7 +1461,7 @@
         if (_centerOnStation)
         {
             _centerOnStation = false;
-            await _map!.FlyToAsync(point, StationZoom, besidePane: true);
+            await _map!.FlyToAsync(point, StationZoom, waitForPane: true);
         }
         else
         {

@@ -5,7 +5,7 @@
 @inject ComparedStations Comparison
 @inject IStringLocalizer<Strings> L
 
-<Pane TitleId="ess-details-title" OnClose="OnClose">
+<Pane @ref="_pane" TitleId="ess-details-title" OnClose="OnClose">
     <Header>
         <span class="logo @(_brand.Monogram.Length > 1 ? "is-wide" : null)" style="--logo-bg: @_brand.Background; --logo-fg: @_brand.Foreground">
             @if (_brand.LogoUrl is { } logoUrl)
@@ -144,6 +144,7 @@
 </Pane>
 
 @code {
+    private Pane? _pane;
     private CancellationTokenSource? _stationCts;
     private CancellationTokenSource? _historyCts;
     private long _loadedId;
@@ -175,7 +176,10 @@
     [Parameter]
     public EventCallback OnClose { get; set; }
 
-    /// <summary>Raised with the station once it's loaded, so the map can bring it into view.</summary>
+    /// <summary>
+    /// Raised with the station once it's loaded, so the map can bring it into view; again when its marker is tapped while the
+    /// pane is open (<see cref="ShowAgainAsync"/>).
+    /// </summary>
     [Parameter]
     public EventCallback<StationDetail> OnLoaded { get; set; }
 
@@ -197,7 +201,14 @@
     {
         if (StationId != _loadedId)
         {
+            // Another station, tapped on the map: a sheet shrunk to its header comes back to show it.
+            var another = _loadedId != 0;
             _loadedId = StationId;
+            if (another && _pane is not null)
+            {
+                await _pane.RestoreAsync();
+            }
+
             await LoadAsync();
         }
         else if (_station is not null && DataAsOf > _shownDataAsOf)
@@ -332,6 +343,23 @@
     }
 
     private void OnListsChanged() => InvokeAsync(StateHasChanged);
+
+    /// <summary>
+    /// The station's marker tapped while its details are open: a sheet shrunk to its header comes back, and the map brings
+    /// the station out from under it (<see cref="OnLoaded"/>, once the station is loaded).
+    /// </summary>
+    public async Task ShowAgainAsync()
+    {
+        if (_pane is not null)
+        {
+            await _pane.RestoreAsync();
+        }
+
+        if (_station is not null)
+        {
+            await OnLoaded.InvokeAsync(_station);
+        }
+    }
 
     public void Dispose()
     {

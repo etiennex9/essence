@@ -1,12 +1,18 @@
 // The MapLibre map behind MapInterop.cs. C# decides what to show (markers and a trip's route arrive preformatted); this
-// module draws it and reports what the user does: map moves, marker clicks, a press and hold on the map, and dismissals
-// (a click on the map, or Escape), and when the page is hidden or shown again. It also reloads the page for a new release, keeping the view (UpdateCheck.cs): here
+// module draws it and reports what the user does: map moves, marker clicks, a press and hold on the map, a click on the
+// map (which shrinks a phone's sheet, or closes what's open), Escape, and when the page is hidden or shown again. It keeps
+// the part of the map a pane covers as the map's padding, so its center, and what the page centers or fits, are in the
+// part left uncovered. It also reloads the page for a new release, keeping the view (UpdateCheck.cs): here
 // rather than in a module of its own, which a tab would import from the new release only when it's time to reload.
 import { Map as MapLibreMap, Marker, NavigationControl } from "../lib/maplibre-gl/maplibre-gl.mjs";
+import { collapseSheets, paneCover, PANE_CHANGE_EVENT } from "./essencePane.js";
 
 const VIEWPORT_DEBOUNCE_MS = 250;
 const PANE_SETTLE_MS = 260;
 const VISIBLE_MARGIN_PX = 48;
+
+// A pane never counts as covering more of the map than its size less this: the part left is where things are centered.
+const MIN_VISIBLE_PX = 160;
 
 // fitBounds keeps the points this far inside the area left uncovered: a marker's pill and flag stand above its point.
 const FIT_PADDING_PX = 56;
@@ -21,7 +27,7 @@ const HOLD_SLOP_PX = 10;
 
 // Android fires contextmenu around when the touch timer does: a second hold this soon after is the same one. The click
 // that ends a hold (when the finger or the button lifts, however long after) mustn't count as a click on the map, which
-// would close the pane.
+// would shrink or close the pane.
 const HOLD_REPEAT_MS = 800;
 const HOLD_CLICK_MS = 700;
 
@@ -43,7 +49,6 @@ const CORRIDOR_GONE_AT_ZOOM = 13;
 const RELOAD_KEY = "essence.reload";
 
 const darkScheme = window.matchMedia("(prefers-color-scheme: dark)");
-const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
 function ensureStylesheet() {
     if (document.querySelector("link[data-maplibre-css]")) {
@@ -172,8 +177,21 @@ export function createMap(container, options, dotnet) {
     let emphasis = { pickId: null, closestId: null, listed: null, bestFlag: "", closestFlag: "" };
     let viewportTimer = 0;
 
-    // flyTo and ensureVisible calls waiting to start their move (see reload).
+    // flyTo, fitBounds and ensureVisible calls waiting to start their move (see reload).
     let pendingMoves = 0;
+
+    // The last of those moves, made again in the part left uncovered when a pane opens, closes or changes size, until the
+    // user moves the map (null). A move asked for before the page showed something else (forgetAutoMove: another
+    // generation) isn't kept.
+    let lastAuto = null;
+    let autoGeneration = 0;
+
+    // The padding follows the panes at the next frame, or once a finger or the mouse's button that's down is lifted.
+    let syncFrame = 0;
+    let syncDeferred = false;
+    let fingersDown = 0;
+    let mouseDown = false;
+    let userMoving = false; // the map moves for a gesture of the user's, or glides after one
 
     const call = (method, ...args) => dotnet.invokeMethodAsync(method, ...args).catch(e => console.error(e));
 
@@ -205,7 +223,7 @@ export function createMap(container, options, dotnet) {
         }
 
         if (!e.originalEvent.target.closest?.(".ess-marker")) {
-            call("OnDismiss");
+            call("OnMapClicked");
         }
     }
 
@@ -218,6 +236,7 @@ export function createMap(container, options, dotnet) {
 
         lastHoldAt = now;
         heldThisPress = true;
+        lastAuto = null;
         swallowClickUntil = now + HOLD_CLICK_MS;
         const { lng, lat } = map.unproject(point);
         call("OnMapHeld", lat, lng);
@@ -277,6 +296,15 @@ export function createMap(container, options, dotnet) {
         startHold(e.touches[0].clientX, e.touches[0].clientY, e.target);
     }
 
+    // The fingers on the map, not on a pane or the toolbar: the padding waits for them to lift. Counted from the document, as
+    // a finger lifted off the map may end elsewhere; one whose element is gone from the page no longer counts.
+    function countFingers(e) {
+        fingersDown = [...e.touches].filter(t => container.contains(t.target)).length;
+        if (fingersDown === 0) {
+            flushDeferred();
+        }
+    }
+
     function onTouchMove(e) {
         if (e.touches.length !== 1) {
             cancelHold();
@@ -288,7 +316,12 @@ export function createMap(container, options, dotnet) {
 
     // The mouse's left button; fingers have the touch events above, and pens their own press and hold (a right-click).
     function onPointerDown(e) {
-        if (e.pointerType === "mouse" && e.button === 0) {
+        if (e.pointerType !== "mouse") {
+            return;
+        }
+
+        mouseDown = true;
+        if (e.button === 0) {
             startHold(e.clientX, e.clientY, e.target);
         }
     }
@@ -303,6 +336,34 @@ export function createMap(container, options, dotnet) {
         if (e.pointerType === "mouse") {
             endHold();
         }
+    }
+
+    // On the window: the button may be lifted anywhere.
+    function onWindowPointerUp(e) {
+        if (e.pointerType === "mouse" && mouseDown) {
+            mouseDown = false;
+            flushDeferred();
+        }
+    }
+
+    // A gesture of the user's: the page's last move isn't made again.
+    function onMoveStart(e) {
+        cancelHold();
+        if (e.originalEvent) {
+            lastAuto = null;
+            userMoving = true;
+        }
+    }
+
+    function onMoveEnd() {
+        userMoving = false;
+        flushDeferred();
+    }
+
+    const userGesture = () => fingersDown > 0 || mouseDown || userMoving;
+
+    function forgetAutoMove() {
+        lastAuto = null;
     }
 
     function removeRouteLayers() {
@@ -397,23 +458,148 @@ export function createMap(container, options, dotnet) {
         call("OnVisibilityChanged", document.visibilityState === "visible");
     }
 
-    // The part of the map not covered by the details pane (a side panel or a bottom sheet), in container pixels; the whole
-    // map without besidePane. Called after the pane's entrance transition (PANE_SETTLE_MS) so its final position is measured.
-    function uncoveredArea(besidePane = true) {
-        const area = container.getBoundingClientRect();
-        let right = area.width;
-        let bottom = area.height;
-        const pane = besidePane ? document.querySelector("[data-ess-pane]") : null;
-        if (pane) {
-            const rect = pane.getBoundingClientRect();
-            if (rect.top > area.top + area.height / 3) {
-                bottom = rect.top - area.top;
-            } else {
-                right = rect.left - area.left;
-            }
+    // The map's padding: the part the panes cover (essencePane.js), which its center, flyTo, fitBounds and easeTo keep
+    // clear of. Never all of it.
+    function paddingNow() {
+        const { bottom, right } = paneCover();
+        const { clientWidth: width, clientHeight: height } = container;
+        return {
+            top: 0,
+            left: 0,
+            right: Math.round(Math.max(0, Math.min(right, width - MIN_VISIBLE_PX))),
+            bottom: Math.round(Math.max(0, Math.min(bottom, height - MIN_VISIBLE_PX))),
+        };
+    }
+
+    // Sets the padding with nothing moving on screen: the center becomes the point in the middle of the new uncovered part.
+    // False when it's unchanged.
+    function applyPadding(padding) {
+        const current = map.getPadding();
+        if (["top", "right", "bottom", "left"].every(side => current[side] === padding[side])) {
+            return false;
         }
 
-        return { width: area.width, height: area.height, right, bottom };
+        const { clientWidth: width, clientHeight: height } = container;
+        const center = map.unproject([(padding.left + width - padding.right) / 2, (padding.top + height - padding.bottom) / 2]);
+        map.jumpTo({ padding, center });
+        return true;
+    }
+
+    // MapLibre catches up with its container's size (a rotation, the window crossing the wide breakpoint) at its own resize
+    // event, which may come after the pane's: the padding is measured against the size the map is about to have. Its
+    // canvas has the size it last took, to a device pixel.
+    function fitTransform() {
+        const canvas = map.getCanvas();
+        const width = Math.floor(container.clientWidth);
+        const height = Math.floor(container.clientHeight);
+        if (width > 0 && height > 0 && (Math.abs(canvas.clientWidth - width) > 1 || Math.abs(canvas.clientHeight - height) > 1)) {
+            map.resize();
+        }
+    }
+
+    function requestSync() {
+        if (!syncFrame) {
+            syncFrame = requestAnimationFrame(syncPadding);
+        }
+    }
+
+    // A pane opened, closed or changed size: the padding follows, and the page's last move is made again in the new
+    // uncovered part, unless the user has moved the map since. Not under a finger or the mouse's button, whose gesture a
+    // jump would end, nor while the map glides after one: once it's over.
+    function syncPadding() {
+        syncFrame = 0;
+        if (userGesture() || (map.isMoving() && !lastAuto)) {
+            syncDeferred = true;
+            return;
+        }
+
+        syncDeferred = false;
+        fitTransform();
+        if (applyPadding(paddingNow()) && lastAuto && pendingMoves === 0) {
+            run(lastAuto, true);
+        }
+    }
+
+    function flushDeferred() {
+        if (syncDeferred) {
+            requestSync();
+        }
+    }
+
+    // A move made for the page; made again (replay), it eases rather than flies, being short.
+    function run(move, replay = false) {
+        switch (move.kind) {
+            case "fly":
+                if (replay) {
+                    map.easeTo({ center: [move.lon, move.lat], zoom: move.zoom });
+                } else {
+                    map.flyTo({ center: [move.lon, move.lat], zoom: move.zoom });
+                }
+
+                break;
+            case "fit":
+                fit(move, replay);
+                break;
+            case "visible":
+                showPoint(move);
+                break;
+        }
+    }
+
+    // fitBounds keeps the box inside the uncovered part: MapLibre adds the map's padding to these margins.
+    function fit({ west, south, east, north }, linear) {
+        const pane = map.getPadding();
+        const { clientWidth: width, clientHeight: height } = container;
+        let padding = { top: FIT_TOP_PX, left: FIT_PADDING_PX, right: FIT_PADDING_PX, bottom: FIT_PADDING_PX };
+        if (width - pane.left - pane.right - 2 * FIT_PADDING_PX < FIT_PADDING_PX
+            || height - pane.top - pane.bottom - FIT_TOP_PX - FIT_PADDING_PX < FIT_PADDING_PX) {
+            // Too little left beside the pane (a short window): MapLibre wouldn't move at all. The box is fitted to the whole
+            // map instead, these margins taking back the map's padding.
+            const margin = FIT_PADDING_PX / 2;
+            padding = { top: margin - pane.top, left: margin - pane.left, right: margin - pane.right, bottom: margin - pane.bottom };
+        }
+
+        map.fitBounds([[west, south], [east, north]], { padding, maxZoom: FIT_MAX_ZOOM, linear });
+    }
+
+    // Whether the point shows clear of the part `padding` covers.
+    function inView({ lat, lon }, { top, right, bottom, left }) {
+        const { clientWidth: width, clientHeight: height } = container;
+        const point = map.project([lon, lat]);
+        return point.x >= left + VISIBLE_MARGIN_PX && point.x <= width - right - VISIBLE_MARGIN_PX
+            && point.y >= top + VISIBLE_MARGIN_PX && point.y <= height - bottom - VISIBLE_MARGIN_PX;
+    }
+
+    // Pans just enough that the point isn't under a pane: to the middle of the uncovered part, if it's outside it.
+    function showPoint(move) {
+        if (!inView(move, map.getPadding())) {
+            map.easeTo({ center: [move.lon, move.lat] });
+        }
+    }
+
+    // Makes `move` once a pane opening is in place (wait), with the padding it then leaves. It's the move made again when a
+    // pane changes size, unless the page showed something else in the meantime.
+    function schedule(move, wait) {
+        pendingMoves++;
+        const generation = autoGeneration;
+        setTimeout(() => {
+            pendingMoves--;
+            fitTransform();
+            const padding = paddingNow();
+            if (move.kind === "visible" && userGesture() && inView(move, padding)) {
+                // In view already, while the user moves the map: that goes on, and the padding follows once it's over.
+                syncDeferred = true;
+            } else {
+                // Any other move ends the user's.
+                applyPadding(padding);
+                run(move);
+            }
+
+            // Not one the user's gesture went on after.
+            if (generation === autoGeneration && !userMoving) {
+                lastAuto = move;
+            }
+        }, wait ? PANE_SETTLE_MS : 0);
     }
 
     function applyEmphasis(element, id) {
@@ -478,7 +664,10 @@ export function createMap(container, options, dotnet) {
     map.on("zoom", updateCompact);
     map.on("click", onMapClick);
     map.on("contextmenu", onContextMenu);
-    map.on("movestart", cancelHold);
+    map.on("movestart", onMoveStart);
+    map.on("boxzoomstart", forgetAutoMove);
+    map.on("moveend", onMoveEnd);
+    map.on("resize", requestSync);
     map.on("style.load", addRouteLayers);
     container.addEventListener("touchstart", onTouchStart, { passive: true });
     container.addEventListener("touchmove", onTouchMove, { passive: true });
@@ -488,11 +677,20 @@ export function createMap(container, options, dotnet) {
     container.addEventListener("pointermove", onPointerMove);
     container.addEventListener("pointerup", onPointerUp);
     container.addEventListener("pointercancel", onPointerUp);
+    window.addEventListener("pointerup", onWindowPointerUp, true);
+    window.addEventListener("pointercancel", onWindowPointerUp, true);
+    for (const type of ["touchstart", "touchend", "touchcancel"]) {
+        document.addEventListener(type, countFingers, { capture: true, passive: true });
+    }
+
+    document.addEventListener(PANE_CHANGE_EVENT, requestSync);
     // Captured, so it sees the search box's text before Blazor's own handler (which may be registered first) clears it.
     document.addEventListener("keydown", onKeyDown, true);
     darkScheme.addEventListener("change", onSchemeChange);
     document.addEventListener("visibilitychange", onVisibilityChange);
     updateCompact();
+    // A pane in the page already (a link to a station or a list): the map starts clear of it, attached or not yet.
+    applyPadding(paddingNow());
     if (document.visibilityState !== "visible") {
         // Opened in a background tab: no event comes until it's shown.
         onVisibilityChange();
@@ -511,6 +709,7 @@ export function createMap(container, options, dotnet) {
                     element.className = "ess-marker";
                     element.addEventListener("click", e => {
                         e.stopPropagation();
+                        lastAuto = null;
                         call("OnMarkerClicked", model.id);
                     });
                     const marker = new Marker({ element, anchor: "bottom" }).setLngLat([model.lon, model.lat]).addTo(map);
@@ -599,62 +798,32 @@ export function createMap(container, options, dotnet) {
             }
         },
 
-        // With besidePane, the point ends in the middle of the area the details pane leaves uncovered.
-        flyTo(lat, lon, zoom, besidePane) {
-            pendingMoves++;
-            setTimeout(() => {
-                pendingMoves--;
-                let offset = [0, 0];
-                if (besidePane) {
-                    const { width, height, right, bottom } = uncoveredArea();
-                    offset = [right / 2 - width / 2, bottom / 2 - height / 2];
-                }
-
-                if (reducedMotion.matches) {
-                    // MapLibre turns flyTo into a jump under reduced motion and drops the offset, so jump and shift here.
-                    map.jumpTo({ center: [lon, lat], zoom });
-                    map.panBy([-offset[0], -offset[1]], { animate: false });
-                } else {
-                    map.flyTo({ center: [lon, lat], zoom, offset });
-                }
-            }, besidePane ? PANE_SETTLE_MS : 0);
+        // Centers the point in the part of the map the panes leave uncovered; with waitForPane, once a pane opening is in place.
+        flyTo(lat, lon, zoom, waitForPane) {
+            schedule({ kind: "fly", lat, lon, zoom }, waitForPane);
         },
 
-        // Shows the box (degrees), with besidePane in the area the pane leaves uncovered, once the pane is in place.
-        fitBounds(west, south, east, north, besidePane) {
-            pendingMoves++;
-            setTimeout(() => {
-                pendingMoves--;
-                const { width, height, right, bottom } = uncoveredArea(besidePane);
-                let padding = {
-                    top: FIT_TOP_PX,
-                    left: FIT_PADDING_PX,
-                    right: width - right + FIT_PADDING_PX,
-                    bottom: height - bottom + FIT_PADDING_PX,
-                };
-                if (width - padding.left - padding.right < FIT_PADDING_PX || height - padding.top - padding.bottom < FIT_PADDING_PX) {
-                    // Too little left beside the pane (a short window): MapLibre wouldn't move at all.
-                    padding = FIT_PADDING_PX / 2;
-                }
-
-                map.fitBounds([[west, south], [east, north]], { padding, maxZoom: FIT_MAX_ZOOM, animate: !reducedMotion.matches });
-            }, besidePane ? PANE_SETTLE_MS : 0);
+        // Shows the box (degrees) in the part the panes leave uncovered; with waitForPane, once a pane opening is in place.
+        fitBounds(west, south, east, north, waitForPane) {
+            schedule({ kind: "fit", west, south, east, north }, waitForPane);
         },
 
-        // Pans just enough that the point isn't under the details pane: once it's in place, unless it already is
-        // (waitForPane false, for a station chosen in the pane open).
+        // Pans just enough that the point isn't under a pane: once it's in place, unless it already is (waitForPane false,
+        // for a station chosen in the pane open).
         ensureVisible(lat, lon, waitForPane = true) {
-            pendingMoves++;
-            setTimeout(() => {
-                pendingMoves--;
-                const { right, bottom } = uncoveredArea();
-                const point = map.project([lon, lat]);
-                const inside = point.x >= VISIBLE_MARGIN_PX && point.x <= right - VISIBLE_MARGIN_PX
-                    && point.y >= VISIBLE_MARGIN_PX && point.y <= bottom - VISIBLE_MARGIN_PX;
-                if (!inside) {
-                    map.panBy([point.x - right / 2, point.y - bottom / 2]);
-                }
-            }, waitForPane ? PANE_SETTLE_MS : 0);
+            schedule({ kind: "visible", lat, lon }, waitForPane);
+        },
+
+        // A tap on the map, on phones: the sheet open shrinks to its header. False with none, or on a wide screen: the tap
+        // closes what's open.
+        collapsePane() {
+            return collapseSheets();
+        },
+
+        // The page shows something else (another station, list or trip): the last move isn't made again for it.
+        forgetAutoMove() {
+            autoGeneration++;
+            lastAuto = null;
         },
 
         // Reloads the page. With saveView, the page it reloads into opens on this view, with the page's own `state` (C#'s
@@ -664,7 +833,9 @@ export function createMap(container, options, dotnet) {
         // run at all (no animation frames), and the reload starts over instead.
         reload(state, saveView, automatic) {
             if (saveView && pendingMoves === 0 && !map.isMoving()) {
-                const center = map.getCenter();
+                // The middle of the whole map, not getCenter's of the uncovered part: the page reloaded starts without
+                // padding, and keeps the view when it makes room for its pane.
+                const center = map.unproject([container.clientWidth / 2, container.clientHeight / 2]);
                 const user = userMarker?.getLngLat();
                 const view = { ...state, lat: center.lat, lon: center.lng, zoom: map.getZoom(), userLat: user?.lat, userLon: user?.lng };
                 try {
@@ -681,6 +852,7 @@ export function createMap(container, options, dotnet) {
 
         dispose() {
             clearTimeout(viewportTimer);
+            cancelAnimationFrame(syncFrame);
             cancelHold();
             container.removeEventListener("touchstart", onTouchStart);
             container.removeEventListener("touchmove", onTouchMove);
@@ -690,6 +862,13 @@ export function createMap(container, options, dotnet) {
             container.removeEventListener("pointermove", onPointerMove);
             container.removeEventListener("pointerup", onPointerUp);
             container.removeEventListener("pointercancel", onPointerUp);
+            window.removeEventListener("pointerup", onWindowPointerUp, true);
+            window.removeEventListener("pointercancel", onWindowPointerUp, true);
+            for (const type of ["touchstart", "touchend", "touchcancel"]) {
+                document.removeEventListener(type, countFingers, { capture: true });
+            }
+
+            document.removeEventListener(PANE_CHANGE_EVENT, requestSync);
             document.removeEventListener("keydown", onKeyDown, true);
             darkScheme.removeEventListener("change", onSchemeChange);
             document.removeEventListener("visibilitychange", onVisibilityChange);

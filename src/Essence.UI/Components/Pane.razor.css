@@ -56,10 +56,17 @@
     }
 }
 
-/* The bar is drawn in a full-width strip, which is easier to grab than the bar itself. */
+/* The bar is drawn in a full-width strip, which is easier to grab than the bar itself. It's a button: a tap shrinks the
+   sheet to its header or brings it back. */
 .handle {
     position: relative;
+    flex: none;
+    width: 100%;
     height: 20px;
+    padding: 0;
+    border: 0;
+    border-radius: 16px 16px 0 0;
+    background: none;
 }
 
 .handle::before {
@@ -81,11 +88,29 @@ header {
     padding: 14px 12px 10px 16px;
 }
 
-/* The sheet drags by its bar and header (essencePane.js): up to expand, down to shrink back or close. Expanded, it
-   stops below the toolbar. */
+/* The sheet drags by its bar and header (essencePane.js): up to expand, down to shrink back, to its header (slim), then
+   away to close it. Expanded, it stops below the toolbar. Slim, its body keeps its place and scroll but takes no room and
+   can't be reached. */
 @media (max-width: 767px) {
     .pane.is-expanded {
         max-height: calc(100dvh - 66px - env(safe-area-inset-top, 0px));
+    }
+
+    .pane.is-slim {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
+    }
+
+    .pane.is-slim .body {
+        flex: none;
+        height: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        overflow: hidden;
+    }
+
+    /* Measuring its sizes (essencePane.js) doesn't hide the body for that moment, which would lose a focus in it. */
+    .pane.is-slim:not(.is-measuring) .body {
+        visibility: hidden;
     }
 
     .handle,
