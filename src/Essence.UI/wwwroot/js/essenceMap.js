@@ -19,6 +19,11 @@ const FIT_PADDING_PX = 56;
 const FIT_TOP_PX = 130; // under the toolbar, with room for a flag
 const FIT_MAX_ZOOM = 15;
 
+// Beside a tall sheet on a short screen, the margin under the points gives way down to this, nothing standing below a
+// point, to leave them this much height.
+const FIT_TIGHT_PX = 16;
+const FIT_ROOM_PX = 120;
+
 // Press and hold (a long press on Android, a touch timer on iOS, which has none, the left mouse button held, or a
 // right-click) picks a destination. A finger or mouse that moves farther than this, or a second finger, is panning or
 // zooming instead.
@@ -526,7 +531,7 @@ export function createMap(container, options, dotnet) {
         }
     }
 
-    // A move made for the page; made again (replay), it eases rather than flies, being short.
+    // A move made for the page; made again (replay), it eases rather than flies, being short. False if there was no need.
     function run(move, replay = false) {
         switch (move.kind) {
             case "fly":
@@ -541,24 +546,22 @@ export function createMap(container, options, dotnet) {
                 fit(move, replay);
                 break;
             case "visible":
-                showPoint(move);
-                break;
+                return showPoint(move);
         }
+
+        return true;
     }
 
-    // fitBounds keeps the box inside the uncovered part: MapLibre adds the map's padding to these margins.
+    // fitBounds keeps the box inside the uncovered part: MapLibre adds the map's padding to these margins, which give way
+    // where that part is short, so the box never ends up under the pane.
     function fit({ west, south, east, north }, linear) {
         const pane = map.getPadding();
         const { clientWidth: width, clientHeight: height } = container;
-        let padding = { top: FIT_TOP_PX, left: FIT_PADDING_PX, right: FIT_PADDING_PX, bottom: FIT_PADDING_PX };
-        if (width - pane.left - pane.right - 2 * FIT_PADDING_PX < FIT_PADDING_PX
-            || height - pane.top - pane.bottom - FIT_TOP_PX - FIT_PADDING_PX < FIT_PADDING_PX) {
-            // Too little left beside the pane (a short window): MapLibre wouldn't move at all. The box is fitted to the whole
-            // map instead, these margins taking back the map's padding.
-            const margin = FIT_PADDING_PX / 2;
-            padding = { top: margin - pane.top, left: margin - pane.left, right: margin - pane.right, bottom: margin - pane.bottom };
-        }
-
+        const room = height - pane.top - pane.bottom;
+        const bottom = Math.min(FIT_PADDING_PX, Math.max(FIT_TIGHT_PX, room - FIT_TOP_PX - FIT_ROOM_PX));
+        const top = Math.min(FIT_TOP_PX, room - bottom - FIT_PADDING_PX);
+        const side = Math.min(FIT_PADDING_PX, (width - pane.left - pane.right - FIT_PADDING_PX) / 2);
+        const padding = { top, left: side, right: side, bottom };
         map.fitBounds([[west, south], [east, north]], { padding, maxZoom: FIT_MAX_ZOOM, linear });
     }
 
@@ -570,15 +573,24 @@ export function createMap(container, options, dotnet) {
             && point.y >= top + VISIBLE_MARGIN_PX && point.y <= height - bottom - VISIBLE_MARGIN_PX;
     }
 
+    function inBox({ lat, lon }, { west, south, east, north }) {
+        return lat >= south && lat <= north && lon >= west && lon <= east;
+    }
+
     // Pans just enough that the point isn't under a pane: to the middle of the uncovered part, if it's outside it.
     function showPoint(move) {
-        if (!inView(move, map.getPadding())) {
-            map.easeTo({ center: [move.lon, move.lat] });
+        if (inView(move, map.getPadding())) {
+            return false;
         }
+
+        map.easeTo({ center: [move.lon, move.lat] });
+        return true;
     }
 
     // Makes `move` once a pane opening is in place (wait), with the padding it then leaves. It's the move made again when a
-    // pane changes size, unless the page showed something else in the meantime.
+    // pane changes size, unless the page showed something else in the meantime. A point inside the box last fitted is shown
+    // by fitting that again, and a point already in view leaves what framed it: a station chosen on the way keeps the route
+    // in view, even as its pane comes back from slim.
     function schedule(move, wait) {
         pendingMoves++;
         const generation = autoGeneration;
@@ -586,18 +598,20 @@ export function createMap(container, options, dotnet) {
             pendingMoves--;
             fitTransform();
             const padding = paddingNow();
+            const target = move.kind === "visible" && lastAuto?.kind === "fit" && inBox(move, lastAuto) ? lastAuto : move;
+            let moved = false;
             if (move.kind === "visible" && userGesture() && inView(move, padding)) {
                 // In view already, while the user moves the map: that goes on, and the padding follows once it's over.
                 syncDeferred = true;
             } else {
                 // Any other move ends the user's.
                 applyPadding(padding);
-                run(move);
+                moved = run(target, target !== move);
             }
 
             // Not one the user's gesture went on after.
-            if (generation === autoGeneration && !userMoving) {
-                lastAuto = move;
+            if (generation === autoGeneration && !userMoving && (moved || !lastAuto)) {
+                lastAuto = target;
             }
         }, wait ? PANE_SETTLE_MS : 0);
     }
@@ -709,7 +723,6 @@ export function createMap(container, options, dotnet) {
                     element.className = "ess-marker";
                     element.addEventListener("click", e => {
                         e.stopPropagation();
-                        lastAuto = null;
                         call("OnMarkerClicked", model.id);
                     });
                     const marker = new Marker({ element, anchor: "bottom" }).setLngLat([model.lon, model.lat]).addTo(map);
