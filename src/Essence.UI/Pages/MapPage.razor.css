@@ -86,7 +86,7 @@
     position: absolute;
     z-index: 10;
     left: max(12px, env(safe-area-inset-left));
-    bottom: max(calc(var(--ess-slim-sheet, 0px) + 12px), env(safe-area-inset-bottom));
+    bottom: max(calc(var(--ess-slim-sheet, 0px) + 12px), var(--ess-safe-bottom));
     width: 36px;
     height: 36px;
 }

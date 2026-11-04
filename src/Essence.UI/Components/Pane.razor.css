@@ -97,7 +97,7 @@ header {
     }
 
     .pane.is-slim {
-        padding-bottom: env(safe-area-inset-bottom, 0px);
+        padding-bottom: var(--ess-safe-bottom);
     }
 
     .pane.is-slim .body {

@@ -34,6 +34,15 @@
     --ess-compare-6: #4a3aa7;
     --ess-compare-7: #e34948;
     --ess-favorite: #e0a100;
+    /* The part of the page under the home indicator. */
+    --ess-safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* Firefox on Android reports its navigation bar as that part, though the page stops above the bar. */
+@supports (-moz-appearance: none) {
+    :root {
+        --ess-safe-bottom: 0px;
+    }
 }
 
 @media (prefers-color-scheme: dark) {
