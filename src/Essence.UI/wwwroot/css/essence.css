@@ -512,6 +512,14 @@ body {
     left: calc(max(12px, env(safe-area-inset-left)) + 44px);
 }
 
+/* Phones: above a bottom sheet shrunk to its header (essencePane.js sets --ess-slim-sheet to its height), under any other.
+   From body, to win over MapLibre's own stylesheet, which loads after this one. */
+@media (max-width: 767px) {
+    body .maplibregl-ctrl-bottom-right {
+        bottom: var(--ess-slim-sheet, 0px);
+    }
+}
+
 /* On wide screens the details panel covers the right edge, so the zoom buttons and attribution move left of it. */
 @media (min-width: 768px) {
     body:has([data-ess-pane]) .maplibregl-ctrl-bottom-right {

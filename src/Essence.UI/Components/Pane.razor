@@ -3,10 +3,11 @@
 @inject IStringLocalizer<Strings> L
 
 @* The pane the station details and the lists open in: a side panel on wide screens, a bottom sheet on narrow ones
-   (see the CSS), whose header drags to resize or close it (essencePane.js). data-ess-pane lets the map pan a station
-   out from under it. *@
+   (see the CSS), at three sizes: its default one, expanded, or slim, shrunk to its header so the map shows. Its header
+   drags it between them or, from slim, away to close it, and its bar switches it to slim and back (essencePane.js).
+   data-ess-pane lets the map measure what it covers, and keep what it centers clear of it. *@
 <aside class="pane @(Expanded ? "is-expanded" : null)" @ref="_element" data-ess-pane role="dialog" aria-labelledby="@TitleId">
-    <div class="handle" aria-hidden="true"></div>
+    <button type="button" class="handle" aria-label="@L["PanelContent"]" aria-expanded="true" aria-controls="@BodyId"></button>
 
     <header>
         @Header
@@ -17,7 +18,7 @@
         </button>
     </header>
 
-    <div class="body">
+    <div class="body" id="@BodyId">
         @ChildContent
     </div>
 </aside>
@@ -50,9 +51,11 @@
     [Parameter]
     public bool Expanded { get; set; }
 
-    /// <summary>The Close button, or the sheet dragged away.</summary>
+    /// <summary>The Close button, or the sheet dragged away from slim.</summary>
     [Parameter]
     public EventCallback OnClose { get; set; }
+
+    private string BodyId => $"{TitleId}-body";
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -87,6 +90,27 @@
         catch (JSDisconnectedException)
         {
             // The page is going away.
+        }
+    }
+
+    /// <summary>On phones, brings a sheet shrunk to its header back to its default size: a station was chosen while it was.</summary>
+    public Task RestoreAsync() => InvokeSheetAsync("restore");
+
+    /// <summary>On phones, puts the sheet back to its default size at once: the pane shows something else (Best near you ↔ a trip).</summary>
+    public Task ResetAsync() => InvokeSheetAsync("reset");
+
+    private async Task InvokeSheetAsync(string method)
+    {
+        try
+        {
+            if (_sheet is not null && !_disposed)
+            {
+                await _sheet.InvokeVoidAsync(method);
+            }
+        }
+        catch (Exception e) when (e is JSDisconnectedException or ObjectDisposedException)
+        {
+            // The page is going away, or the pane closed meanwhile.
         }
     }
 

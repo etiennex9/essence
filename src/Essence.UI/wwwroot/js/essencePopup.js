@@ -1,7 +1,8 @@
 // The car menu and the info bubble in Best near you's header (BestPanel.razor). Blazor renders them and decides which one
 // is open; this module places it, moves the focus in the menu, and closes it on Escape, a tap outside or the focus leaving,
 // telling .NET (OnPopupClosed). One popup is open at a time. It listens on the window in the capture phase, so it sees
-// Escape and a tap before the map does (essenceMap.js), which would close the whole pane: they close only the popup.
+// Escape and a tap before the map does (essenceMap.js), which would close the whole pane, or shrink a phone's sheet: they
+// close only the popup.
 
 const EDGE_PX = 8; // kept from the screen's edges
 const GAP_PX = 6; // between the popup and its trigger (BestPanel.razor.css)
@@ -96,8 +97,8 @@ function onPointerDown(e) {
     dismiss(false);
 }
 
-// The click a tap outside ends with would otherwise reach what's under it: on the map, that closes the pane. A click from
-// the keyboard (detail 0) isn't the tap's.
+// The click a tap outside ends with would otherwise reach what's under it: on the map, that closes the pane or shrinks the
+// sheet, and on a slim sheet's header it brings the sheet back. A click from the keyboard (detail 0) isn't the tap's.
 function swallowNextClick() {
     disarm();
     window.addEventListener("click", onClick, true);

@@ -48,6 +48,9 @@
   <data name="Close" xml:space="preserve">
     <value>Fermer</value>
   </data>
+  <data name="PanelContent" xml:space="preserve">
+    <value>Contenu du panneau</value>
+  </data>
   <data name="Directions" xml:space="preserve">
     <value>Itinéraire</value>
   </data>

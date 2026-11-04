@@ -683,6 +683,12 @@
             return;
         }
 
+        // Best near you and the trip share the pane: the other one opens at the sheet's default size, as a new pane would.
+        if (_shownTrip is not null && _pane is not null)
+        {
+            await _pane.ResetAsync();
+        }
+
         // Back from a station's details, or in a restored tab, too: the list is open when the station chosen is in it rather
         // than the pick.
         _shownTrip = Trip;
@@ -885,11 +891,21 @@
             return false;
         }
 
+        // Shrunk to its header, the sheet comes back to show it (first, so the station announced is heard).
+        if (_pane is not null)
+        {
+            await _pane.RestoreAsync();
+        }
+
         _allStations = true;
         if (id == ShownId)
         {
-            // Already on top: the pane only scrolls up to it.
+            // Already on top: the pane only scrolls up to it, and the map brings it out from under the pane.
             _revealHero = true;
+            if (Trips.Shown is { } shown)
+            {
+                await OnStationSelected.InvokeAsync(new GeoPoint(shown.Latitude, shown.Longitude));
+            }
         }
         else
         {
