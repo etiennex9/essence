@@ -359,9 +359,11 @@ export function attachSheet(pane, dotnet) {
         }
     }
 
-    // After a release the drag is over already; otherwise the pointer went elsewhere, and it ends as if cancelled.
+    // After a release the drag is over already; otherwise the pointer went elsewhere, and it ends as if cancelled. Only the
+    // pane's own capture counts: the element a finger touched loses its capture to the pane when the drag starts, and that
+    // event bubbles here too.
     function onLostCapture(e) {
-        if (drag && e.pointerId === drag.id) {
+        if (e.target === pane && drag && e.pointerId === drag.id) {
             onPointerUp(new PointerEvent("pointercancel", { pointerId: e.pointerId }));
         }
     }
