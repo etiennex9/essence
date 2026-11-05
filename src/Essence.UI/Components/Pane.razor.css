@@ -5,6 +5,7 @@
     left: 0;
     right: 0;
     bottom: 0;
+    /* vh, not dvh: it counts a phone browser's bar as hidden, and those few pixels show the tiles under Best's hero. */
     max-height: min(60vh, 600px);
     /* Heights include the border, as essencePane.js measures them. */
     box-sizing: border-box;

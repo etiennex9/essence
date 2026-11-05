@@ -14,15 +14,20 @@ const VISIBLE_MARGIN_PX = 48;
 // A pane never counts as covering more of the map than its size less this: the part left is where things are centered.
 const MIN_VISIBLE_PX = 160;
 
-// fitBounds keeps the points this far inside the area left uncovered: a marker's pill and flag stand above its point.
+// fitBounds keeps the points this far inside the area left uncovered.
 const FIT_PADDING_PX = 56;
-const FIT_TOP_PX = 130; // under the toolbar, with room for a flag
 const FIT_MAX_ZOOM = 15;
 
+// Above them it keeps them under the toolbar, and what stands above a point clear of it: any more, and the map zooms out
+// and sits low for nothing.
+const FIT_TOP_PX = 64;
+const FIT_FLAG_PX = 66; // a station's pill and flag
+const FIT_LABEL_PX = 35;
+
 // Beside a tall sheet on a short screen, the margin under the points gives way down to this, nothing standing below a
-// point, to leave them this much height.
+// point, until they have this much height.
 const FIT_TIGHT_PX = 16;
-const FIT_ROOM_PX = 120;
+const FIT_ROOM_PX = 240;
 
 // Press and hold (a long press on Android, a touch timer on iOS, which has none, the left mouse button held, or a
 // right-click) picks a destination. A finger or mouse that moves farther than this, or a second finger, is panning or
@@ -554,15 +559,29 @@ export function createMap(container, options, dotnet) {
 
     // fitBounds keeps the box inside the uncovered part: MapLibre adds the map's padding to these margins, which give way
     // where that part is short, so the box never ends up under the pane.
-    function fit({ west, south, east, north }, linear) {
+    function fit(box, linear) {
+        const { west, south, east, north } = box;
         const pane = map.getPadding();
         const { clientWidth: width, clientHeight: height } = container;
         const room = height - pane.top - pane.bottom;
-        const bottom = Math.min(FIT_PADDING_PX, Math.max(FIT_TIGHT_PX, room - FIT_TOP_PX - FIT_ROOM_PX));
-        const top = Math.min(FIT_TOP_PX, room - bottom - FIT_PADDING_PX);
+        const bottom = Math.min(FIT_PADDING_PX, Math.max(FIT_TIGHT_PX, room - FIT_TOP_PX - FIT_FLAG_PX - FIT_ROOM_PX));
+        const top = Math.min(fitTop(box, room - bottom), room - bottom - FIT_PADDING_PX);
         const side = Math.min(FIT_PADDING_PX, (width - pane.left - pane.right - FIT_PADDING_PX) / 2);
         const padding = { top, left: side, right: side, bottom };
         map.fitBounds([[west, south], [east, north]], { padding, maxZoom: FIT_MAX_ZOOM, linear });
+    }
+
+    // The margin above the box that keeps what stands on its points under the toolbar. A point at a share of the box's
+    // height, with the box from `top` down to `reach`, ends up at top + (reach - top) * share: the lower, the less it needs.
+    function fitTop({ west, south, north, flags, labels }, reach) {
+        const y = lat => map.project([west, lat]).y;
+        const height = y(south) - y(north);
+        const margin = (lat, standing) => {
+            const share = height > 0 ? (y(lat) - y(north)) / height : 0;
+            return share < 1 ? (FIT_TOP_PX + standing - reach * share) / (1 - share) : 0;
+        };
+
+        return Math.max(FIT_TOP_PX, ...flags.map(lat => margin(lat, FIT_FLAG_PX)), ...labels.map(lat => margin(lat, FIT_LABEL_PX)));
     }
 
     // Whether the point shows clear of the part `padding` covers.
@@ -817,8 +836,9 @@ export function createMap(container, options, dotnet) {
         },
 
         // Shows the box (degrees) in the part the panes leave uncovered; with waitForPane, once a pane opening is in place.
-        fitBounds(west, south, east, north, waitForPane) {
-            schedule({ kind: "fit", west, south, east, north }, waitForPane);
+        // Flags and labels are the latitudes in the box where one stands above its point.
+        fitBounds(west, south, east, north, waitForPane, flags, labels) {
+            schedule({ kind: "fit", west, south, east, north, flags, labels }, waitForPane);
         },
 
         // Pans just enough that the point isn't under a pane: once it's in place, unless it already is (waitForPane false,

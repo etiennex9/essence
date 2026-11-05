@@ -144,8 +144,11 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 
     /// <summary>Shows a box in the part of the map the panes leave uncovered.</summary>
     /// <param name="waitForPane">Waits for a pane opening to be in place first.</param>
-    public ValueTask FitBoundsAsync(double west, double south, double east, double north, bool waitForPane) =>
-        InvokeAsync("fitBounds", west, south, east, north, waitForPane);
+    /// <param name="flags">The latitudes in the box where a station's flag stands above its point: it's kept clear of the toolbar.</param>
+    /// <param name="labels">The same for a label, which is shorter.</param>
+    public ValueTask FitBoundsAsync(
+        double west, double south, double east, double north, bool waitForPane, IReadOnlyList<double> flags, IReadOnlyList<double> labels) =>
+        InvokeAsync("fitBounds", west, south, east, north, waitForPane, flags, labels);
 
     /// <summary>Pans just enough to bring a point out from under the details pane.</summary>
     /// <param name="waitForPane">Waits for a pane opening to be in place first; a pane already open needn't be waited for.</param>
