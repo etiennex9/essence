@@ -978,7 +978,7 @@
         points.AddRange(best.Stations.Where(s => s.Id == best.ClosestId).Select(s => new GeoPoint(s.Latitude, s.Longitude)));
         await _map!.FitBoundsAsync(
             points.Min(p => p.Longitude), points.Min(p => p.Latitude), points.Max(p => p.Longitude), points.Max(p => p.Latitude),
-            waitForPane: true);
+            waitForPane: true, flags: [.. points.Skip(1).Select(p => p.Latitude)], labels: []);
     }
 
     /// <summary>
@@ -1021,7 +1021,10 @@
         _ => destination.Address ?? L["DroppedPin"],
     };
 
-    /// <summary>In Best on the way, fits the map to the route beside the pane: when a new plan comes in, not when it's the same.</summary>
+    /// <summary>
+    /// In Best on the way, fits the map to the route and its pick, which may lie past either end, beside the pane: when a new
+    /// plan comes in, not when it's the same.
+    /// </summary>
     private async Task FitToTripAsync()
     {
         if (!_mapReady || View != TripView || Station is not null || MapTrip is not { Path.Length: > 1 } plan
@@ -1037,8 +1040,17 @@
             return;
         }
 
+        var pick = plan.Stations.FirstOrDefault(s => s.Id == plan.PickId);
+        double[][] points = pick is null ? plan.Path : [.. plan.Path, [pick.Longitude, pick.Latitude]];
+        List<double> labels = [plan.Path[^1][1]];
+        if (plan.StopBeforeKm > 0 && TripPath.Split(plan.Path, plan.DistanceKm, plan.StopBeforeKm).At is { } rangeEnd)
+        {
+            labels.Add(rangeEnd.Latitude);
+        }
+
         await _map!.FitBoundsAsync(
-            plan.Path.Min(p => p[0]), plan.Path.Min(p => p[1]), plan.Path.Max(p => p[0]), plan.Path.Max(p => p[1]), waitForPane: true);
+            points.Min(p => p[0]), points.Min(p => p[1]), points.Max(p => p[0]), points.Max(p => p[1]), waitForPane: true,
+            flags: pick is null ? [] : [pick.Latitude], labels: labels);
     }
 
     /// <summary>A press and hold on the map: a pin drops there, with its card.</summary>
