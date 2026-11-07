@@ -164,6 +164,49 @@ public class HistorySeriesTests
         Assert.Null(HistorySeries.Current(rows, "Super"));
     }
 
+    [Fact]
+    public void Only_keeps_the_chosen_series_as_they_are()
+    {
+        var chart = HistorySeries.Build(
+            [Row("Régulier", 160m, From, null), Row("Super", 175m, From, null), Row("Diesel", 180m, From, null)],
+            From,
+            To);
+
+        var only = HistorySeries.Only(chart, s => s.Key != "Super");
+
+        Assert.Equal(2, only.Series.Count);
+        Assert.Same(chart.Series[0], only.Series[0]);
+        Assert.Same(chart.Series[2], only.Series[1]);
+        Assert.Equal(2, only.Series[1].Color);
+    }
+
+    [Fact]
+    public void Only_starts_at_the_first_step_kept()
+    {
+        var chart = HistorySeries.Build(
+            [Row("Diesel", 180m, From.AddDays(2), null), Row("Régulier", 160m, From.AddDays(8), null)],
+            From,
+            To);
+
+        var only = HistorySeries.Only(chart, s => s.Key == "Régulier");
+
+        Assert.Equal(From.AddDays(2), chart.From);
+        Assert.Equal(From.AddDays(8), only.From);
+        Assert.Equal(To, only.To);
+    }
+
+    [Fact]
+    public void Only_tightens_the_prices_and_the_scale()
+    {
+        var chart = HistorySeries.Build([Row("Régulier", 160m, From, null), Row("Diesel", 190m, From, null)], From, To);
+
+        var only = HistorySeries.Only(chart, s => s.Key == "Régulier");
+
+        Assert.Equal(160m, only.MinPrice);
+        Assert.Equal(160m, only.MaxPrice);
+        Assert.True(new ChartScale(only, 100, 60, 0, 0).YMax < new ChartScale(chart, 100, 60, 0, 0).YMax);
+    }
+
     private static PriceHistoryDto Row(string fuel, decimal price, DateTimeOffset from, DateTimeOffset? to) =>
         new(fuel, price, true, from, to);
 }

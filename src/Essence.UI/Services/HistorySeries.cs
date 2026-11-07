@@ -66,6 +66,10 @@ public static class HistorySeries
         return Chart(series, from, to);
     }
 
+    /// <summary>The lines of <paramref name="chart"/> that <paramref name="keep"/> accepts, starting with the first of them.</summary>
+    public static PriceChartData Only(PriceChartData chart, Func<PriceSeries, bool> keep) =>
+        Chart(chart.Series.Where(keep).ToList(), chart.From, chart.To);
+
     /// <summary>The current price of <paramref name="fuel"/>: the row still open, or null when the station doesn't list it.</summary>
     public static CurrentPriceDto? Current(IEnumerable<PriceHistoryDto> rows, string fuel) =>
         rows

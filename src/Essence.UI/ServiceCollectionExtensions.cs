@@ -22,6 +22,7 @@ public static class ServiceCollectionExtensions
         services.AddLocalization();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<HistoryCache>();
+        services.AddScoped<HistoryFuels>();
         services.AddScoped<FavoriteStations>();
         services.AddScoped<ComparedStations>();
         services.AddScoped<CarProfiles>();
