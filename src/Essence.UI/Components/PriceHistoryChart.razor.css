@@ -50,6 +50,8 @@ svg {
     height: 100%;
     overflow: visible;
     touch-action: pan-y;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 .grid {
@@ -79,7 +81,7 @@ svg {
     stroke-dasharray: 3 3;
 }
 
-.slice {
+.hit {
     fill: transparent;
 }
 
