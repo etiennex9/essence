@@ -66,6 +66,10 @@ public static class HistorySeries
         return Chart(series, from, to);
     }
 
+    /// <summary>The lines of <paramref name="chart"/> that <paramref name="keep"/> accepts, starting with the first of them.</summary>
+    public static PriceChartData Only(PriceChartData chart, Func<PriceSeries, bool> keep) =>
+        Chart(chart.Series.Where(keep).ToList(), chart.From, chart.To);
+
     /// <summary>The current price of <paramref name="fuel"/>: the row still open, or null when the station doesn't list it.</summary>
     public static CurrentPriceDto? Current(IEnumerable<PriceHistoryDto> rows, string fuel) =>
         rows
@@ -120,6 +124,9 @@ public sealed class ChartScale
     private readonly double _top;
     private readonly double _plotHeight;
 
+    /// <summary>The moments the pointer stops at, in time order (<see cref="NearestChange"/>).</summary>
+    private readonly DateTimeOffset[] _changes = [];
+
     public ChartScale(PriceChartData data, double width, double height, double padTop, double padBottom)
     {
         _data = data;
@@ -136,6 +143,18 @@ public sealed class ChartScale
         var span = Math.Max(max - min, MinSpanCents);
         var middle = (min + max) / 2;
         (YMin, YMax) = (Math.Floor(middle - span * 0.6m), Math.Ceiling(middle + span * 0.6m));
+
+        // The right edge is the latest price, just short of To: a step ends there, so At would find no price.
+        _changes =
+        [
+            .. data.Series
+                .SelectMany(s => s.Steps)
+                .SelectMany(s => new[] { s.From, s.To })
+                .Where(t => t < data.To)
+                .Append(data.To.AddTicks(-1))
+                .Distinct()
+                .Order(),
+        ];
     }
 
     public decimal YMin { get; }
@@ -146,6 +165,39 @@ public sealed class ChartScale
         (time - _data.From).TotalSeconds / (_data.To - _data.From).TotalSeconds * _width;
 
     public double Y(decimal priceCents) => _top + (double)((YMax - priceCents) / (YMax - YMin)) * _plotHeight;
+
+    /// <summary>
+    /// The moment to show at <paramref name="share"/> of the width: the closest time a line changes, the earlier one when
+    /// it's halfway, or the right edge. Null without lines.
+    /// </summary>
+    public DateTimeOffset? NearestChange(double share)
+    {
+        if (_changes.Length == 0)
+        {
+            return null;
+        }
+
+        var time = _data.From + (_data.To - _data.From) * Math.Clamp(share, 0, 1);
+        var index = Array.BinarySearch(_changes, time);
+        if (index >= 0)
+        {
+            return _changes[index];
+        }
+
+        var after = ~index;
+        if (after == 0)
+        {
+            return _changes[0];
+        }
+
+        if (after == _changes.Length)
+        {
+            return _changes[^1];
+        }
+
+        var (previous, next) = (_changes[after - 1], _changes[after]);
+        return time - previous <= next - time ? previous : next;
+    }
 
     /// <summary>SVG path of a stepped line: horizontal runs, joined vertically when a step starts where the previous one ends.</summary>
     public string Path(PriceSeries series)

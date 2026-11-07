@@ -120,6 +120,57 @@
 .fuel-2 { --fuel-color: var(--ess-fuel-2); }
 .fuel-3 { --fuel-color: var(--ess-fuel-3); }
 
+/* The chart's lines: the map's fuel, and the others to add. */
+.chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.chip {
+    position: relative;
+    flex: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    padding: 0 10px;
+    border: 0.5px solid var(--ess-border-strong);
+    border-radius: 999px;
+    background: var(--ess-surface);
+    color: var(--ess-text-muted);
+    font: 500 12px/1.2 var(--ess-font);
+    cursor: pointer;
+}
+
+/* A 44 px target, without making the row taller. */
+.chip::after {
+    content: "";
+    position: absolute;
+    inset: -4px 0;
+}
+
+.chip:hover {
+    background: var(--ess-hover);
+}
+
+.chip.is-on {
+    border-color: var(--ess-accent);
+    background: var(--ess-selected);
+    color: var(--ess-text);
+}
+
+.chip.is-locked {
+    cursor: default;
+}
+
+/* Hollow at the same size, so a tap doesn't move the row. */
+.chip:not(.is-on) .swatch {
+    background: transparent;
+    box-shadow: inset 0 0 0 1.5px var(--fuel-color);
+}
+
 .star.is-on,
 .star.is-on:hover {
     color: var(--ess-favorite);

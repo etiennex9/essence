@@ -102,6 +102,12 @@
   <data name="HistoryHigh" xml:space="preserve">
     <value>High {0}</value>
   </data>
+  <data name="HistoryFuels" xml:space="preserve">
+    <value>Fuels shown</value>
+  </data>
+  <data name="HistoryMapFuel" xml:space="preserve">
+    <value>The map’s fuel stays shown</value>
+  </data>
   <data name="Independent" xml:space="preserve">
     <value>Independent</value>
   </data>

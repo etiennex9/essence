@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject EssenceApiClient Api
 @inject HistoryCache History
+@inject HistoryFuels ChartFuels
 @inject FavoriteStations Favorites
 @inject ComparedStations Comparison
 @inject IStringLocalizer<Strings> L
@@ -112,9 +113,24 @@
                 {
                     <p class="message">@L["HistoryEmpty"]</p>
                 }
-                else
+                else if (_shownHistory is { } shown)
                 {
-                    <PriceHistoryChart Data="_history" Highlight="@Fuel" />
+                    @if (HistoryFuels.Applies(_history, Fuel))
+                    {
+                        <div class="chips" role="group" aria-label="@L["HistoryFuels"]">
+                            @foreach (var series in _history.Series)
+                            {
+                                var locked = HistoryFuels.IsMapFuel(series.Key, Fuel);
+                                var on = ChartFuels.IsShown(series.Key, Fuel);
+                                <button type="button" @key="series.Key" class="chip @(on ? "is-on" : null) @(locked ? "is-locked" : null)"
+                                        aria-pressed="@(on ? "true" : "false")" aria-disabled="@(locked ? "true" : null)"
+                                        title="@(locked ? L["HistoryMapFuel"].Value : null)" @onclick="() => ToggleFuelAsync(series.Key)">
+                                    <i class="swatch fuel-@series.Color"></i>@series.Label
+                                </button>
+                            }
+                        </div>
+                    }
+                    <PriceHistoryChart Data="shown" Highlight="@HistoryFuels.Highlight(shown, Fuel)" />
                 }
             </section>
 
@@ -151,6 +167,11 @@
     private StationDetail? _station;
     private ApiError _error;
     private PriceChartData? _history;
+
+    /// <summary>The lines of <see cref="_history"/> drawn. Kept, not worked out in the markup: a new chart drops the hover.</summary>
+    private PriceChartData? _shownHistory;
+
+    private string? _shownFuel;
     private ApiError _historyError;
     private int _days = 30;
     private DateTimeOffset _now = DateTimeOffset.UtcNow;
@@ -162,7 +183,7 @@
     [Parameter, EditorRequired]
     public long StationId { get; set; }
 
-    /// <summary>The fuel selected on the map, highlighted in the prices and the chart.</summary>
+    /// <summary>The fuel selected on the map, highlighted in the prices and always drawn in the chart.</summary>
     [Parameter]
     public string? Fuel { get; set; }
 
@@ -195,6 +216,15 @@
         Comparison.Changed += OnListsChanged;
         await Favorites.LoadAsync();
         await Comparison.LoadAsync();
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (Fuel != _shownFuel)
+        {
+            _shownFuel = Fuel;
+            ShowHistory();
+        }
     }
 
     protected override async Task OnParametersSetAsync()
@@ -301,12 +331,15 @@
         {
             _history = null;
             _historyError = ApiError.None;
+            ShowHistory();
         }
 
         _historyCts?.Cancel();
         var cts = _historyCts = new CancellationTokenSource();
         try
         {
+            // Here and not on init: the map rendering meanwhile starts this load anyway, and a cached history could beat the saved fuels.
+            await ChartFuels.LoadAsync();
             var result = await History.GetAsync(StationId, _days, cts.Token, refresh);
             if (cts.IsCancellationRequested || (refresh && !result.IsSuccess))
             {
@@ -315,10 +348,21 @@
 
             _historyError = result.Error;
             _history = result.Value is { } history ? HistorySeries.Build(history.Rows, history.From, history.To) : null;
+            ShowHistory();
         }
         catch (OperationCanceledException)
         {
             // A newer request replaced this one.
+        }
+    }
+
+    private void ShowHistory() => _shownHistory = _history is { } chart ? ChartFuels.Filter(chart, Fuel) : null;
+
+    private async Task ToggleFuelAsync(string fuel)
+    {
+        if (await ChartFuels.ToggleAsync(fuel, Fuel))
+        {
+            ShowHistory();
         }
     }
 
