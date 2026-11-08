@@ -107,7 +107,7 @@ public class StationViewportTests
     }
 
     [Fact]
-    public void Tones_split_the_visible_prices_in_thirds_and_cheapest_draws_on_top()
+    public void Tones_split_the_visible_prices_in_thirds()
     {
         var viewport = Loaded(
             Station(1, 45.50, -73.57, 159.9m),
@@ -122,9 +122,6 @@ public class StationViewportTests
         Assert.Equal(PriceTone.High, visible[3].Tone);
         Assert.Equal(PriceTone.None, visible[4].Tone);
         Assert.False(visible[4].HasPrice);
-        Assert.True(visible[1].ZIndex > visible[2].ZIndex);
-        Assert.True(visible[2].ZIndex > visible[3].ZIndex);
-        Assert.Equal(0, visible[4].ZIndex);
     }
 
     [Theory]

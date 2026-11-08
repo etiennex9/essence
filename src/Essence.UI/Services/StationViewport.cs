@@ -12,8 +12,7 @@ public enum PriceTone
 }
 
 /// <summary>A station to draw, with the price of the selected fuel (null when the station doesn't list it).</summary>
-/// <param name="ZIndex">Higher draws on top: the cheapest priced station has the highest value, stations without a price 0.</param>
-public sealed record VisibleStation(NearbyStation Station, CurrentPriceDto? Price, PriceTone Tone, int ZIndex)
+public sealed record VisibleStation(NearbyStation Station, CurrentPriceDto? Price, PriceTone Tone)
 {
     public bool HasPrice => StationViewport.IsPriced(Price);
 }
@@ -106,7 +105,7 @@ public sealed class StationViewport(int maxCached = StationViewport.DefaultMaxCa
 
     /// <summary>
     /// The stations in view (closest to the center first, at most <c>maxMarkers</c>), each with its tone among the priced
-    /// ones in view and its drawing order.
+    /// ones in view.
     /// </summary>
     public IReadOnlyList<VisibleStation> Visible(Viewport viewport)
     {
@@ -118,19 +117,8 @@ public sealed class StationViewport(int maxCached = StationViewport.DefaultMaxCa
             .ToList();
 
         var prices = inView.Where(x => IsPriced(x.Price)).Select(x => x.Price!.PriceCents!.Value).Order().ToList();
-
-        // The most expensive gets 1, the cheapest prices.Count; ties are broken by id so the order is stable.
-        var zIndex = inView
-            .Where(x => IsPriced(x.Price))
-            .OrderByDescending(x => x.Price!.PriceCents)
-            .ThenByDescending(x => x.Station.Id)
-            .Select((x, rank) => (x.Station.Id, Z: rank + 1))
-            .ToDictionary(x => x.Id, x => x.Z);
-
         return inView
-            .Select(x => IsPriced(x.Price)
-                ? new VisibleStation(x.Station, x.Price, ToneOf(x.Price!.PriceCents!.Value, prices), zIndex[x.Station.Id])
-                : new VisibleStation(x.Station, x.Price, PriceTone.None, 0))
+            .Select(x => new VisibleStation(x.Station, x.Price, IsPriced(x.Price) ? ToneOf(x.Price!.PriceCents!.Value, prices) : PriceTone.None))
             .ToList();
     }
 

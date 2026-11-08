@@ -161,7 +161,6 @@
     /// <summary>The address search and the saved places, pushed over Best near you. Nothing typed goes in the URL.</summary>
     private const string PlacesView = "places";
 
-    private const double CompactBelowZoom = 12;
     private const double OverviewZoom = 5.5;
     private const double UserZoom = 13;
     private const double FallbackZoom = 11;
@@ -256,6 +255,9 @@
 
     /// <summary>The trip plan the map was last fitted to.</summary>
     private TripPlan? _fittedPlan;
+
+    /// <summary>Where a trip plan's range runs out (<see cref="RangeEnd"/>), worked out once per plan.</summary>
+    private (TripPlan? Plan, GeoPoint? At) _rangeEnd;
 
     /// <summary>A cold load with <c>?station=</c> centers on that station once it's loaded, instead of on the user.</summary>
     private bool _centerOnStation;
@@ -490,7 +492,7 @@
         await _map.CreateAsync(
             _mapElement,
             new MapOptions(
-                Options.MapStyleUrl, Options.MapDarkStyleUrl, center.Latitude, center.Longitude, zoom, CompactBelowZoom,
+                Options.MapStyleUrl, Options.MapDarkStyleUrl, center.Latitude, center.Longitude, zoom,
                 CultureInfo.CurrentUICulture.TwoLetterISOLanguageName),
             this);
         _mapReady = true;
@@ -785,26 +787,82 @@
         var visible = _stations.Visible(_viewport);
         _visibleCount = visible.Count;
         var emphasis = MapEmphasisNow();
-        var markers = visible.Select(v => ToMarker(v, emphasis)).ToList();
+        List<(MarkerModel Marker, decimal? PriceCents)> markers =
+            [.. visible.Select(v => (ToMarker(v, emphasis), v.HasPrice ? v.Price!.PriceCents : null))];
 
         // A ranked station 9 km away, or one along a trip zoomed out, is usually not among the stations fetched around the
         // view, which setMarkers would drop.
-        var shown = markers.Select(m => m.Id).ToHashSet();
+        var shown = markers.Select(m => m.Marker.Id).ToHashSet();
         var prices = visible.Where(v => v.HasPrice).Select(v => v.Price!.PriceCents!.Value).Order().ToList();
         if (MapBest is { } best)
         {
-            markers.AddRange(best.Stations.Where(s => shown.Add(s.Id))
-                .Select(s => ToMarker(s.Id, s.Brand, s.Address, s.Latitude, s.Longitude, s.PriceCents, emphasis, prices)));
+            markers.AddRange(best.Stations.Where(s => shown.Add(s.Id)).Select(s =>
+                (ToMarker(s.Id, s.Brand, s.Address, s.Latitude, s.Longitude, s.PriceCents, emphasis, prices), (decimal?)s.PriceCents)));
         }
 
         if (MapTrip is { } trip)
         {
-            markers.AddRange(trip.Stations.Where(s => shown.Add(s.Id))
-                .Select(s => ToMarker(s.Id, s.Brand, s.Address, s.Latitude, s.Longitude, s.PriceCents, emphasis, prices)));
+            markers.AddRange(trip.Stations.Where(s => shown.Add(s.Id)).Select(s =>
+                (ToMarker(s.Id, s.Brand, s.Address, s.Latitude, s.Longitude, s.PriceCents, emphasis, prices), (decimal?)s.PriceCents)));
         }
 
         await SetEmphasisAsync(emphasis);
-        await _map!.SetMarkersAsync(markers);
+        await _map!.SetMarkersAsync(Placed(markers, emphasis));
+    }
+
+    /// <summary>
+    /// Which marker draws on top, and from which zoom each has room for its price (<see cref="PillPlacement"/>): the station
+    /// ringed and the flagged ones first, then the cheapest, the faded ones after those listed.
+    /// </summary>
+    private List<MarkerModel> Placed(List<(MarkerModel Marker, decimal? PriceCents)> markers, MapEmphasis? emphasis)
+    {
+        // Faded as essenceMap.js's applyEmphasis fades them.
+        var selected = MapSelected;
+        var listed = emphasis?.Listed.ToHashSet();
+        string? FlagOf(long id) => id == emphasis?.PickId ? L["BestValue"] : id == emphasis?.SecondId ? emphasis.SecondFlag : null;
+        var places = PillPlacement.Place(
+            [.. markers.Select(m => new PillCandidate(
+                m.Marker.Id, m.Marker.Lat, m.Marker.Lon, m.PriceCents, m.Marker.Favorite,
+                Dimmed: listed is not null && !listed.Contains(m.Marker.Id) && m.Marker.Id != selected,
+                Selected: m.Marker.Id == selected,
+                Pick: m.Marker.Id == emphasis?.PickId,
+                Second: m.Marker.Id == emphasis?.SecondId,
+                Flag: FlagOf(m.Marker.Id)))],
+            MapLabels());
+        return [.. markers.Select(m => m.Marker with { Z = places[m.Marker.Id].Z, PillFrom = places[m.Marker.Id].PillFrom })];
+    }
+
+    /// <summary>What the map draws over the stations: the trip's destination and where its range runs out, and the pin.</summary>
+    private List<PillObstacle> MapLabels()
+    {
+        List<PillObstacle> labels = [];
+        if (TripMode && Trips.Destination is { } destination)
+        {
+            labels.Add(PillObstacle.Label(destination.Point, DestinationLabel(destination)));
+        }
+
+        if (MapTrip is { } plan && RangeEnd(plan) is { } rangeEnd)
+        {
+            labels.Add(PillObstacle.Label(rangeEnd, L["RangeEndsAt", Math.Round(plan.StopBeforeKm ?? 0)]));
+        }
+
+        if (MapPin is { } pin)
+        {
+            labels.Add(PillObstacle.Pin(pin));
+        }
+
+        return labels;
+    }
+
+    /// <summary>Where the trip's range runs out along its route, when it does before the end (<see cref="TripPath.Split"/>).</summary>
+    private GeoPoint? RangeEnd(TripPlan plan)
+    {
+        if (!ReferenceEquals(plan, _rangeEnd.Plan))
+        {
+            _rangeEnd = (plan, plan.StopBeforeKm > 0 ? TripPath.Split(plan.Path, plan.DistanceKm, plan.StopBeforeKm).At : null);
+        }
+
+        return _rangeEnd.At;
     }
 
     /// <summary>
@@ -839,16 +897,18 @@
     /// </summary>
     private GeoPoint? MapPin => _pin ?? (BestOpen && Best.Origin is { Kind: OriginKind.Pin } origin ? origin.Point : null);
 
-    private async Task SyncPinAsync()
+    /// <summary>Shows <see cref="MapPin"/> on the map when it changed, and says so: the prices must then make room for it.</summary>
+    private async Task<bool> SyncPinAsync()
     {
         var pin = MapPin;
         if (!_mapReady || pin == _mapPin)
         {
-            return;
+            return false;
         }
 
         _mapPin = pin;
         await _map!.SetPinAsync(pin);
+        return true;
     }
 
     /// <summary>Rings <see cref="MapSelected"/> on the map, when it changed.</summary>
@@ -902,7 +962,7 @@
         var favorite = Favorites.IsFavorite(station.Id);
         return new MarkerModel(
             station.Id, station.Latitude, station.Longitude, Label(label, station.Id, favorite, emphasis), price, !visible.HasPrice,
-            ToneName(visible.Tone), visible.ZIndex, favorite, brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
+            ToneName(visible.Tone), 0, favorite, brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
     }
 
     /// <summary>A station Best near you ranked, or one along the trip, drawn even though it's not among the stations fetched around the view.</summary>
@@ -916,7 +976,7 @@
         var favorite = Favorites.IsFavorite(id);
         var tone = StationViewport.ToneOf(priceCents, visiblePrices);
         return new MarkerModel(
-            id, latitude, longitude, Label(label, id, favorite, emphasis), price, false, ToneName(tone), visiblePrices.Count + 1, favorite,
+            id, latitude, longitude, Label(label, id, favorite, emphasis), price, false, ToneName(tone), 0, favorite,
             brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
     }
 
@@ -1043,28 +1103,38 @@
         var pick = plan.Stations.FirstOrDefault(s => s.Id == plan.PickId);
         double[][] points = pick is null ? plan.Path : [.. plan.Path, [pick.Longitude, pick.Latitude]];
         List<double> labels = [plan.Path[^1][1]];
-        if (plan.StopBeforeKm > 0 && TripPath.Split(plan.Path, plan.DistanceKm, plan.StopBeforeKm).At is { } rangeEnd)
+        if (RangeEnd(plan) is { } rangeEnd)
         {
             labels.Add(rangeEnd.Latitude);
         }
 
+        // The reference's flag too: zoomed out, it shows when its pill has room.
+        List<double> flags = [.. plan.Stations.Where(s => s.Id == plan.PickId || s.Id == plan.ReferenceId).Select(s => s.Latitude)];
         await _map!.FitBoundsAsync(
             points.Min(p => p[0]), points.Min(p => p[1]), points.Max(p => p[0]), points.Max(p => p[1]), waitForPane: true,
-            flags: pick is null ? [] : [pick.Latitude], labels: labels);
+            flags: flags, labels: labels);
     }
 
     /// <summary>A press and hold on the map: a pin drops there, with its card.</summary>
     public async Task OnMapHeldAsync(double latitude, double longitude)
     {
         _pin = new GeoPoint(latitude, longitude);
-        await SyncPinAsync();
+        if (await SyncPinAsync())
+        {
+            await RenderMarkersAsync();
+        }
+
         StateHasChanged();
     }
 
     private async Task ClearPinAsync()
     {
         _pin = null;
-        await SyncPinAsync();
+        if (await SyncPinAsync())
+        {
+            await RenderMarkersAsync();
+        }
+
         StateHasChanged();
     }
 
@@ -1086,7 +1156,11 @@
         }
 
         await ranking;
-        await SyncPinAsync();
+        if (await SyncPinAsync())
+        {
+            await RenderMarkersAsync();
+        }
+
         StateHasChanged();
     }
 
