@@ -295,14 +295,14 @@ body {
     box-shadow: 0 0 0 2px #185fa5, 0 2px 6px rgba(0, 0, 0, 0.3);
 }
 
-/* Zoomed out: brand-colored dots, centered on the station. The selected station and Best near you's pick keep their
-   full pill. */
-.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) {
+/* A station whose price has no room at this zoom (PillPlacement.cs): a brand-colored dot, centered on the station. The
+   selected station and Best near you's pick keep their full pill, and a dot reached with Tab opens to its pill. */
+.ess-marker.is-compact:not(.is-selected):not(.is-best):not(:focus-visible) {
     padding: 0;
     transform-origin: center;
 }
 
-.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-pill {
+.ess-marker.is-compact:not(.is-selected):not(.is-best):not(:focus-visible) .ess-pill {
     padding: 0;
     gap: 0;
     background: transparent;
@@ -311,14 +311,14 @@ body {
     transform: translateY(50%);
 }
 
-.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-pill::before,
-.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-pill::after,
-.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-price,
-.ess-map--compact .ess-marker:not(.is-selected):not(.is-best)::before {
+.ess-marker.is-compact:not(.is-selected):not(.is-best):not(:focus-visible) .ess-pill::before,
+.ess-marker.is-compact:not(.is-selected):not(.is-best):not(:focus-visible) .ess-pill::after,
+.ess-marker.is-compact:not(.is-selected):not(.is-best):not(:focus-visible) .ess-price,
+.ess-marker.is-compact:not(.is-selected):not(.is-best):not(:focus-visible)::before {
     display: none;
 }
 
-.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-logo {
+.ess-marker.is-compact:not(.is-selected):not(.is-best):not(:focus-visible) .ess-logo {
     width: 12px;
     height: 12px;
     font-size: 0;
@@ -326,25 +326,31 @@ body {
     box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35);
 }
 
-.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-logo > * {
+.ess-marker.is-compact:not(.is-selected):not(.is-best):not(:focus-visible) .ess-logo > * {
     display: none;
 }
 
 /* As a dot, a favorite gets a gold ring instead of the star, and the closest a dark one. */
-.ess-map--compact .ess-marker.is-favorite:not(.is-selected):not(.is-best) .ess-logo {
+.ess-marker.is-compact.is-favorite:not(.is-selected):not(.is-best):not(:focus-visible) .ess-logo {
     width: 14px;
     height: 14px;
     border: 2.5px solid var(--ess-favorite);
 }
 
-.ess-map--compact .ess-marker.is-closest:not(.is-selected) .ess-logo {
+.ess-marker.is-compact.is-closest:not(.is-selected):not(:focus-visible) .ess-logo {
     width: 14px;
     height: 14px;
     border: 2.5px solid #1d1d1b;
 }
 
-.ess-map--compact .ess-marker:not(.is-selected):not(.is-best) .ess-fav {
+.ess-marker.is-compact:not(.is-selected):not(.is-best):not(:focus-visible) .ess-fav {
     display: none;
+}
+
+/* A dot opened by Tab: over the prices that had the room, and the trip's labels, under the station chosen and the flagged
+   ones. */
+.ess-marker.is-compact:focus-visible:not(.is-selected):not(.is-best):not(.is-closest) {
+    z-index: 99997 !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

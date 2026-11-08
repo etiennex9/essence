@@ -1,8 +1,9 @@
-// The MapLibre map behind MapInterop.cs. C# decides what to show (markers and a trip's route arrive preformatted); this
-// module draws it and reports what the user does: map moves, marker clicks, a press and hold on the map, a click on the
-// map (which shrinks a phone's sheet, or closes what's open), Escape, and when the page is hidden or shown again. It keeps
-// the part of the map a pane covers as the map's padding, so its center, and what the page centers or fits, are in the
-// part left uncovered. It also reloads the page for a new release, keeping the view (UpdateCheck.cs): here
+// The MapLibre map behind MapInterop.cs. C# decides what to show (markers and a trip's route arrive preformatted, each
+// marker with the zoom from which it has room for its price); this module draws it and reports what the user does: map
+// moves, marker clicks, a press and hold on the map, a click on the map (which shrinks a phone's sheet, or closes what's
+// open), Escape, and when the page is hidden or shown again. It keeps the part of the map a pane covers as the map's
+// padding, so its center, and what the page centers or fits, are in the part left uncovered. It also reloads the page
+// for a new release, keeping the view (UpdateCheck.cs): here
 // rather than in a module of its own, which a tab would import from the new release only when it's time to reload.
 import { Map as MapLibreMap, Marker, NavigationControl } from "../lib/maplibre-gl/maplibre-gl.mjs";
 import { collapseSheets, paneCover, PANE_CHANGE_EVENT } from "./essencePane.js";
@@ -40,6 +41,10 @@ const HOLD_SLOP_PX = 10;
 // would shrink or close the pane.
 const HOLD_REPEAT_MS = 800;
 const HOLD_CLICK_MS = 700;
+
+// A marker opens from its dot to its price at the zoom C# gives it (pillFrom, PillPlacement.cs), and folds back only this
+// far below it: a pinch resting on that zoom doesn't make it blink.
+const PILL_HYSTERESIS_ZOOM = 0.1;
 
 // What a press and hold on doesn't drop a pin: a marker, or the map's own buttons.
 const NOT_HELD = ".ess-marker, .maplibregl-ctrl";
@@ -166,7 +171,7 @@ export function createMap(container, options, dotnet) {
     map.keyboard.disableRotation();
     map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
 
-    const markers = new Map(); // id → { marker, element, key }
+    const markers = new Map(); // id → { marker, element, key, z, pillFrom, pill }
     let selectedId = null;
     let userMarker = null;
 
@@ -222,8 +227,17 @@ export function createMap(container, options, dotnet) {
         }, VIEWPORT_DEBOUNCE_MS);
     }
 
-    function updateCompact() {
-        container.classList.toggle("ess-map--compact", map.getZoom() < options.compactBelowZoom);
+    // Each marker shows its price from its pillFrom zoom up, and is a brand dot below; one showing its price keeps it down to
+    // PILL_HYSTERESIS_ZOOM under that.
+    function updatePills() {
+        const zoom = map.getZoom();
+        for (const entry of markers.values()) {
+            const pill = zoom >= entry.pillFrom - (entry.pill ? PILL_HYSTERESIS_ZOOM : 0);
+            if (pill !== entry.pill) {
+                entry.pill = pill;
+                entry.element.classList.toggle("is-compact", !pill);
+            }
+        }
     }
 
     function onMapClick(e) {
@@ -654,7 +668,6 @@ export function createMap(container, options, dotnet) {
         element.classList.toggle("is-favorite", model.favorite);
         element.classList.toggle("is-selected", model.id === selectedId);
         applyEmphasis(element, model.id);
-        element.style.zIndex = String(model.z + 1);
         element.setAttribute("aria-label", model.label);
         element.title = model.label;
 
@@ -694,7 +707,7 @@ export function createMap(container, options, dotnet) {
 
     map.on("load", reportViewport);
     map.on("moveend", reportViewport);
-    map.on("zoom", updateCompact);
+    map.on("zoom", updatePills);
     map.on("click", onMapClick);
     map.on("contextmenu", onContextMenu);
     map.on("movestart", onMoveStart);
@@ -721,7 +734,6 @@ export function createMap(container, options, dotnet) {
     document.addEventListener("keydown", onKeyDown, true);
     darkScheme.addEventListener("change", onSchemeChange);
     document.addEventListener("visibilitychange", onVisibilityChange);
-    updateCompact();
     // A pane in the page already (a link to a station or a list): the map starts clear of it, attached or not yet.
     applyPadding(paddingNow());
     if (document.visibilityState !== "visible") {
@@ -730,7 +742,8 @@ export function createMap(container, options, dotnet) {
     }
 
     return {
-        // Adds, updates and removes markers so the map shows exactly `models`. Unchanged markers aren't touched.
+        // Adds, updates and removes markers so the map shows exactly `models`. Unchanged markers aren't touched, nor are those
+        // whose drawing order or zoom for their price is all that changed, beyond that.
         setMarkers(models) {
             const keep = new Set();
             for (const model of models) {
@@ -745,16 +758,24 @@ export function createMap(container, options, dotnet) {
                         call("OnMarkerClicked", model.id);
                     });
                     const marker = new Marker({ element, anchor: "bottom" }).setLngLat([model.lon, model.lat]).addTo(map);
-                    entry = { marker, element, key: "" };
+                    entry = { marker, element, key: "", z: null, pillFrom: 0, pill: null };
                     markers.set(model.id, entry);
                 }
 
-                const key = JSON.stringify(model);
+                const { z, pillFrom, ...drawn } = model;
+                const key = JSON.stringify(drawn);
                 if (entry.key !== key) {
-                    renderMarker(entry.element, model);
+                    renderMarker(entry.element, drawn);
                     entry.marker.setLngLat([model.lon, model.lat]);
                     entry.key = key;
                 }
+
+                if (entry.z !== z) {
+                    entry.element.style.zIndex = String(z + 1);
+                    entry.z = z;
+                }
+
+                entry.pillFrom = pillFrom;
             }
 
             for (const [id, entry] of markers) {
@@ -763,6 +784,9 @@ export function createMap(container, options, dotnet) {
                     markers.delete(id);
                 }
             }
+
+            // Before the new markers are painted: a crowded set of prices never shows.
+            updatePills();
         },
 
         setSelected(id) {
