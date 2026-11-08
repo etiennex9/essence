@@ -100,9 +100,14 @@ public static class PillPlacement
         var pillFrom = new double[count];
         var blockers = (obstacles ?? []).Select(o => (Point: World(o.Latitude, o.Longitude), Box: new Box(o.HalfWidth, o.HalfWidth, o.Top, 0))).ToList();
         var places = new Dictionary<long, PillPlace>(count);
+
+        // How far any pill reaches across and up, and any dot down: what no station farther than that can block.
+        var widest = count == 0 ? 0 : pills.Max(p => Math.Max(p.Left, p.Right));
+        var tallest = count == 0 ? 0 : pills.Max(p => p.Top);
+        const double deepest = RingedDotHalfPx;
         for (var i = 0; i < count; i++)
         {
-            var scale = 0.0;
+            var scale = alwaysScale;
             if (!ordered[i].Selected && !ordered[i].Pick)
             {
                 var (x, y) = points[i];
@@ -112,11 +117,19 @@ public static class PillPlacement
                     scale = Math.Max(scale, Clearing(point.X - x, point.Y - y, a, box));
                 }
 
-                // Up to a few hundred markers, on every move, in WebAssembly's interpreter on a phone: kept lean.
+                // Up to a few hundred markers, on every move, in WebAssembly's interpreter on a phone: kept lean, and a
+                // station already clear at the scale reached so far is passed over.
+                var reachX = Math.Max(a.Left, a.Right) + widest - PillOverlapPx;
+                var reachY = Math.Max(a.Top + deepest, tallest) - PillOverlapPx;
                 for (var j = 0; j < i; j++)
                 {
                     var dx = points[j].X - x;
                     var dy = points[j].Y - y;
+                    if (Math.Abs(dx) * scale >= reachX || Math.Abs(dy) * scale >= reachY)
+                    {
+                        continue;
+                    }
+
                     var perX = 1 / Math.Abs(dx);
                     var perY = 1 / Math.Abs(dy);
                     ref readonly var b = ref pills[j];
