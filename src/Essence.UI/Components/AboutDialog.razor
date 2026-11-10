@@ -3,6 +3,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject IStringLocalizer<Strings> L
+@inject IServiceProvider Services
 
 @* The app's version and what changed in each version, newest first; older months load as the list scrolls. A native
    modal dialog, always rendered and opened from JS (essenceDialog.js): Esc, Android's Back, a click outside and Close all
@@ -54,6 +55,22 @@
                     @L["DevelopmentVersion"]
                 }
             </p>
+
+            @* The Android app's server and newer builds (IAppHost); nothing on the web. *@
+            @if (_host is { } host)
+            {
+                <p class="server">
+                    @L["AppServer", host.ServerName]
+                    · <button type="button" class="link" @onclick="ChangeServerAsync">@L["ChangeServer"]</button>
+                </p>
+                @if (host.NewerRelease is { } newer)
+                {
+                    <p class="app-update">
+                        @L["AppUpdateAvailable", newer.Version]
+                        · <a href="@newer.Url" target="_blank" rel="noopener">@L["AppUpdateDownload"]</a>
+                    </p>
+                }
+            }
 
             <h3>@L["WhatsNew"]</h3>
             @if (Notes.Release is { Unreleased.Count: > 0 } unreleased)
@@ -121,7 +138,29 @@
 
     private bool ShowMore => Notes.State == ReleaseState.Loaded && Notes.HasMore && (Notes.LoadingMonth || !Notes.MonthFailed);
 
-    protected override void OnInitialized() => Navigation.LocationChanged += OnLocationChanged;
+    private IAppHost? _host;
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        _host = Services.GetService<IAppHost>();
+        if (_host is not null)
+        {
+            _host.Changed += OnHostChanged;
+        }
+    }
+
+    private void OnHostChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>The host's server screen opens over the page; the dialog closes first so it isn't left open behind it.</summary>
+    private async Task ChangeServerAsync()
+    {
+        await CloseAsync();
+        if (_host is not null)
+        {
+            await _host.ChangeServerAsync();
+        }
+    }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
@@ -215,6 +254,11 @@
     {
         _disposed = true;
         Navigation.LocationChanged -= OnLocationChanged;
+        if (_host is not null)
+        {
+            _host.Changed -= OnHostChanged;
+        }
+
         await DetachAsync();
     }
 

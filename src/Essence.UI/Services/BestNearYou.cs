@@ -164,8 +164,7 @@ public sealed class BestNearYou : IDisposable
 
         await _cars.LoadAsync();
         var car = _cars.Active;
-        var query = new BestQuery(
-            origin.Point.Latitude, origin.Point.Longitude, Fuel, car.FillLitres, car.LitresPer100Km, car.CostcoMember, car.MaxDetourMinutes);
+        var query = BestQuery.For(origin.Point, Fuel, car);
         var now = _time.GetUtcNow();
         var fresh = _lastFetch is { } last && last.Query == query && (Loading || (now - last.At < Freshness && Error == ApiError.None));
         if (!background && fresh)

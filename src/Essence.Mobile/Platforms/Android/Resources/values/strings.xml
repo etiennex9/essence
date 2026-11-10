@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What Android itself shows of the widgets: the picker and the settings screen's title. Everything the app writes on them
+     is in Essence.UI's Strings.resx. values-fr has the same names (AndroidStringsTests). -->
+<resources>
+    <string name="widget_best_label">Best near a place</string>
+    <string name="widget_best_description">The station Best near you picks from Home, Work or where you last used Essence.</string>
+    <string name="widget_favorites_label">Favorite stations</string>
+    <string name="widget_favorites_description">Your starred stations, cheapest first.</string>
+    <string name="widget_trip_label">Best on the way</string>
+    <string name="widget_trip_description">Where to fill up on a trip you often make, like Home to Work.</string>
+    <string name="widget_config_title">Widget settings</string>
+    <string name="widget_refresh">Refresh</string>
+</resources>

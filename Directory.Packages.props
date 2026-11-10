@@ -24,6 +24,15 @@
     <!-- A trip's corridor on the map, as one shape: the route offset to either side (TripCorridor). Boost licence. -->
     <PackageVersion Include="Clipper2" Version="2.0.0" />
   </ItemGroup>
+  <ItemGroup Label="Mobile">
+    <!-- The Android app (src/Essence.Mobile). 10.0.101 or later: earlier 10.0 builds mishandle Android's back gesture around a
+         BlazorWebView. -->
+    <PackageVersion Include="Microsoft.Maui.Controls" Version="10.0.120" />
+    <PackageVersion Include="Microsoft.AspNetCore.Components.WebView.Maui" Version="10.0.120" />
+    <!-- Refreshes the home-screen widgets in the background, every 30 minutes and on demand. 2.10.3 needs the AndroidX
+         Lifecycle 2.9.2 that MAUI 10.0.120 pins; later ones want 2.9.3 or more, which MAUI's own packages refuse. -->
+    <PackageVersion Include="Xamarin.AndroidX.Work.Runtime" Version="2.10.3" />
+  </ItemGroup>
   <ItemGroup Label="Tests">
     <!-- xunit.v3 runs on Microsoft.Testing.Platform (opted into via global.json), so no VSTest adapter is needed. -->
     <PackageVersion Include="Microsoft.AspNetCore.Mvc.Testing" Version="10.0.12" />

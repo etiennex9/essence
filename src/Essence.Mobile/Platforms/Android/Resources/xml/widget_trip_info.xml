@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Refreshed by WorkManager (WidgetUpdates.cs), not by the launcher: updatePeriodMillis is 0. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="250dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="180dp"
+    android:minResizeHeight="110dp"
+    android:targetCellWidth="4"
+    android:targetCellHeight="2"
+    android:resizeMode="horizontal|vertical"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_essence"
+    android:previewLayout="@layout/widget_essence"
+    android:description="@string/widget_trip_description"
+    android:widgetCategory="home_screen"
+    android:configure="io.github.etiennex9.essence.widgets.WidgetConfigActivity"
+    android:widgetFeatures="reconfigurable|configuration_optional" />

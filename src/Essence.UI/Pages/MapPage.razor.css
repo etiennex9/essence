@@ -91,6 +91,19 @@
     height: 36px;
 }
 
+/* A newer build of the Android app (IAppHost): About says where to get it. */
+.dot {
+    position: absolute;
+    top: -1px;
+    right: -1px;
+    width: 10px;
+    height: 10px;
+    box-sizing: border-box;
+    border-radius: 50%;
+    border: 2px solid var(--ess-surface);
+    background: var(--ess-accent);
+}
+
 /* Small phones: the fuel selector and three buttons share 336 px at 360 px wide. */
 @media (max-width: 400px) {
     .tools {

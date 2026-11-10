@@ -1,0 +1,61 @@
+<Project Sdk="Microsoft.NET.Sdk.Razor">
+
+  <!-- The Android app: Essence.UI's map page in a BlazorWebView, with native location and storage, and home-screen widgets.
+       Not in Essence.slnx, since building it needs the MAUI Android workload: build it by path (README in this folder). -->
+
+  <PropertyGroup>
+    <!-- Singular: Directory.Build.props sets TargetFramework, which would stop TargetFrameworks from applying. -->
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>26.0</SupportedOSPlatformVersion>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Essence.Mobile</RootNamespace>
+    <UseMaui>true</UseMaui>
+    <SingleProject>true</SingleProject>
+    <!-- Blazor handles the CSS, not MAUI. -->
+    <EnableDefaultCssItems>false</EnableDefaultCssItems>
+    <MauiXamlInflator>SourceGen</MauiXamlInflator>
+
+    <ApplicationTitle>Essence</ApplicationTitle>
+    <!-- Permanent once the app is installed anywhere (and on Google Play): no domain in it. -->
+    <ApplicationId>io.github.etiennex9.essence</ApplicationId>
+    <!-- CI sets both from the day tag and the time (README → Versions). -->
+    <ApplicationDisplayVersion>0.0.0</ApplicationDisplayVersion>
+    <ApplicationVersion>1</ApplicationVersion>
+  </PropertyGroup>
+
+  <!-- What CI passes in (README → Versions): none of it is in the source, so a fork starts with an empty server. -->
+  <PropertyGroup>
+    <!-- Prefills the first launch's server screen. A debug build points at the local API through adb reverse. -->
+    <EssenceDefaultServer Condition="'$(EssenceDefaultServer)' == '' and '$(Configuration)' == 'Debug'">http://localhost:8080/</EssenceDefaultServer>
+    <!-- owner/name on GitHub, whose releases the app checks for a newer build. -->
+    <EssenceRepository Condition="'$(EssenceRepository)' == ''"></EssenceRepository>
+    <EssenceUpdateCheck Condition="'$(EssenceUpdateCheck)' == ''">true</EssenceUpdateCheck>
+    <!-- release.json and changelog-*.json from tools/Essence.Release; without them, About says it's a development version. -->
+    <EssenceReleaseNotesDir Condition="'$(EssenceReleaseNotesDir)' == ''">$(MSBuildProjectDirectory)\release\</EssenceReleaseNotesDir>
+    <!-- Under its own name: a value given with -p can't be changed here. -->
+    <_EssenceReleaseNotes>$([MSBuild]::EnsureTrailingSlash('$(EssenceReleaseNotesDir)'))</_EssenceReleaseNotes>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AssemblyMetadata Include="Essence.DefaultServer" Value="$(EssenceDefaultServer)" />
+    <AssemblyMetadata Include="Essence.Repository" Value="$(EssenceRepository)" />
+    <AssemblyMetadata Include="Essence.UpdateCheck" Value="$(EssenceUpdateCheck)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <MauiIcon Include="Resources\AppIcon\appicon.svg" ForegroundFile="Resources\AppIcon\appiconfg.svg" Color="#185FA5" />
+    <MauiSplashScreen Include="Resources\Splash\splash.svg" Color="#185FA5" BaseSize="96,96" />
+    <MauiAsset Include="$(_EssenceReleaseNotes)*.json" LogicalName="release\%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Maui.Controls" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
+    <PackageReference Include="Xamarin.AndroidX.Work.Runtime" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Essence.UI\Essence.UI.csproj" />
+  </ItemGroup>
+
+</Project>

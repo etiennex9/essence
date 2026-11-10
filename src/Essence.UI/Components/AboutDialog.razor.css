@@ -83,6 +83,22 @@ h2 {
     font-variant-numeric: tabular-nums;
 }
 
+.server,
+.app-update {
+    margin: 8px 0 0;
+    font-size: 14px;
+    color: var(--ess-text-muted);
+}
+
+.app-update {
+    color: var(--ess-text);
+}
+
+.app-update a {
+    color: var(--ess-accent);
+    font-weight: 500;
+}
+
 .commit {
     color: var(--ess-text-muted);
 }

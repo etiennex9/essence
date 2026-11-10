@@ -3,8 +3,12 @@ namespace Essence.UI;
 /// <summary>Settings the host passes to <see cref="ServiceCollectionExtensions.AddEssenceUI"/>.</summary>
 public sealed class EssenceUIOptions
 {
-    /// <summary>Root of Essence.Api, e.g. <c>http://localhost:8080/</c>.</summary>
-    public required Uri ApiBaseUrl { get; init; }
+    /// <summary>
+    /// Root of Essence.Api, e.g. <c>http://localhost:8080/</c>. Required unless the host registers its own
+    /// <see cref="Services.EssenceApiClient"/> first, as the Android app does: its server is chosen at first launch and can
+    /// change while it runs.
+    /// </summary>
+    public Uri? ApiBaseUrl { get; init; }
 
     /// <summary>MapLibre style for the light theme (OpenFreeMap: free, no key, OpenStreetMap data).</summary>
     public string MapStyleUrl { get; init; } = "https://tiles.openfreemap.org/styles/positron";
