@@ -520,9 +520,13 @@
     private const double DefaultRadiusKm = 10;
     private const double WideRadiusKm = 25;
 
-    /// <summary>A stop that adds at most this is on the way (Essence.Ranking's OnTheWay.NoDetourKm and NoDetourMinutes).</summary>
-    private const double NoDetourKm = 1.0;
-    private const double NoDetourMinutes = 2.0;
+    /// <summary>
+    /// A stop that adds at most this is on the way (Essence.Ranking's OnTheWay.NoDetourKm and NoDetourMinutes). The Android
+    /// widgets say so the same way (WidgetFeeds).
+    /// </summary>
+    internal const double NoDetourKm = 1.0;
+
+    internal const double NoDetourMinutes = 2.0;
 
     private const string PopupModulePath = "./_content/Essence.UI/js/essencePopup.js";
 
@@ -813,8 +817,8 @@
     {
         if (Trip && Trips.PlanQuery is { } trip)
         {
-            yield return Trips.FromMapCenter || Trips.PlannedAt is not { } plannedAt
-                ? L["TripFromMapCenter"]
+            yield return Trips.OriginName is { } from ? L["TripFromPlace", from]
+                : Trips.FromMapCenter || Trips.PlannedAt is not { } plannedAt ? L["TripFromMapCenter"]
                 : L["TripPlannedAt", Formatting.TimeOfDay(plannedAt, TimeZoneInfo.Local, CultureInfo.CurrentCulture)];
             yield return CarFooter(trip.FillLitres, trip.LitresPer100Km, trip.CostcoMember);
         }

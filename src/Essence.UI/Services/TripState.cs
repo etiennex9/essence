@@ -61,6 +61,12 @@ public sealed class TripState : IDisposable
     /// <summary>The trip starts at the map's centre, the user's location being unknown.</summary>
     public bool FromMapCenter { get; private set; }
 
+    /// <summary>
+    /// The saved place the trip starts at, as named, when it doesn't start where the user is: the Android app's widget for
+    /// a frequent route opens its own route. Null otherwise, and once planned again from where the user is.
+    /// </summary>
+    public string? OriginName { get; private set; }
+
     /// <summary>The map's fuel.</summary>
     public string Fuel { get; private set; } = Fuels.Default;
 
@@ -105,11 +111,11 @@ public sealed class TripState : IDisposable
     /// <summary>Reads the trip the tab had open, once; later calls return the same task.</summary>
     public Task LoadAsync() => _loading ??= LoadCoreAsync();
 
-    /// <summary>Opens a trip and plans it from <paramref name="origin"/>.</summary>
-    public async Task StartAsync(GeoPoint origin, TripDestination destination, bool fromMapCenter = false)
+    /// <summary>Opens a trip and plans it from <paramref name="origin"/>, a saved place when <paramref name="originName"/> names it.</summary>
+    public async Task StartAsync(GeoPoint origin, TripDestination destination, bool fromMapCenter = false, string? originName = null)
     {
         await LoadAsync();
-        (Destination, Origin, FromMapCenter) = (destination, origin, fromMapCenter);
+        (Destination, Origin, FromMapCenter, OriginName) = (destination, origin, fromMapCenter, originName);
         (Plan, PlanQuery, PlannedAt, Error, SelectedId) = (null, null, null, ApiError.None, null);
         await SaveAsync();
         await PlanAsync();
@@ -123,7 +129,7 @@ public sealed class TripState : IDisposable
             return;
         }
 
-        (Origin, FromMapCenter) = (origin, fromMapCenter);
+        (Origin, FromMapCenter, OriginName) = (origin, fromMapCenter, null);
         await PlanAsync(force: true);
     }
 
@@ -148,7 +154,7 @@ public sealed class TripState : IDisposable
     public async Task EndAsync()
     {
         _planCts?.Cancel();
-        (Destination, Origin, FromMapCenter) = (null, null, false);
+        (Destination, Origin, FromMapCenter, OriginName) = (null, null, false, null);
         (Plan, PlanQuery, PlannedAt, Error, Loading, _pendingQuery) = (null, null, null, ApiError.None, false, null);
         SelectedId = null;
         await _session.RemoveAsync(StorageKey);
@@ -178,9 +184,7 @@ public sealed class TripState : IDisposable
 
         await _cars.LoadAsync();
         var car = _cars.Active;
-        var query = new TripQuery(
-            origin.Latitude, origin.Longitude, destination.Latitude, destination.Longitude, Fuel, car.FillLitres, car.LitresPer100Km,
-            car.CostcoMember, car.MaxDetourMinutes, car.RangeKm, car.SpareKm);
+        var query = TripQuery.For(origin, destination.Point, Fuel, car, car.RangeKm);
         if (!force && ((Loading && query == _pendingQuery) || (!Loading && query == PlanQuery && Plan is not null && Error == ApiError.None)))
         {
             return;
@@ -246,7 +250,7 @@ public sealed class TripState : IDisposable
             return;
         }
 
-        (Destination, Origin, FromMapCenter) = (destination, stored.Origin, stored.FromMapCenter);
+        (Destination, Origin, FromMapCenter, OriginName) = (destination, stored.Origin, stored.FromMapCenter, stored.OriginName);
         (Plan, PlanQuery, PlannedAt) = stored.Plan is not null && stored.Query is not null
             ? (stored.Plan, stored.Query, stored.PlannedAt)
             : (null, null, null);
@@ -264,7 +268,7 @@ public sealed class TripState : IDisposable
             ? _session.SetAsync(
                 StorageKey,
                 JsonSerializer.Serialize(
-                    new StoredTrip(destination, origin, FromMapCenter, PlanQuery, Plan, PlannedAt, SelectedId),
+                    new StoredTrip(destination, origin, FromMapCenter, PlanQuery, Plan, PlannedAt, SelectedId, OriginName),
                     TripStateJsonContext.Default.StoredTrip))
             : ValueTask.CompletedTask;
 
@@ -278,6 +282,7 @@ public sealed class TripState : IDisposable
     }
 
     /// <param name="SelectedId">The station shown on top; null (and in what an older version stored) the pick.</param>
+    /// <param name="OriginName">The saved place the trip starts at (<see cref="TripState.OriginName"/>).</param>
     internal sealed record StoredTrip(
         TripDestination? Destination,
         GeoPoint Origin,
@@ -285,7 +290,8 @@ public sealed class TripState : IDisposable
         TripQuery? Query,
         TripPlan? Plan,
         DateTimeOffset? PlannedAt,
-        long? SelectedId = null);
+        long? SelectedId = null,
+        string? OriginName = null);
 }
 
 /// <summary>Source-generated (trim-safe) serialization of the trip kept in the tab's storage.</summary>

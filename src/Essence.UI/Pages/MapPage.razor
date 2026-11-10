@@ -17,6 +17,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject IStringLocalizer<Strings> L
+@inject IServiceProvider ServiceProvider
 
 <PageTitle>Essence</PageTitle>
 
@@ -98,9 +99,14 @@
 
     @* Alone in the bottom-left corner (the map's own controls are bottom-right): above a bottom sheet shrunk to its header,
        under any other. *@
-    <button type="button" class="tool about" @onclick="() => _about!.ShowAsync()" aria-label="@L["About"]" title="@L["About"]">
+    <button type="button" class="tool about" @onclick="() => _about!.ShowAsync()"
+            aria-label="@(_appHost?.NewerRelease is null ? L["About"] : L["AboutAppUpdate"])" title="@L["About"]">
         <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
              stroke-linecap="round"><path d="@Icons.Info" /></svg>
+        @if (_appHost?.NewerRelease is not null)
+        {
+            <span class="dot" aria-hidden="true"></span>
+        }
     </button>
 
     @* The details open over a list (?view=…&station=…): closing them goes back to it. *@
@@ -147,7 +153,6 @@
 </div>
 
 @code {
-    private const string FuelPreferenceKey = "essence.fuel";
     private const string FavoritesView = "favorites";
     private const string CompareView = "compare";
     private const string BestView = "best";
@@ -176,6 +181,12 @@
     private readonly StationViewport _stations = new();
     private MapInterop? _map;
     private AboutDialog? _about;
+
+    /// <summary>The <see cref="To"/> link being started (with <see cref="From"/> and <see cref="Pick"/>); null once it's out of the URL.</summary>
+    private string? _linkedTo;
+
+    /// <summary>The Android app's host, for its newer builds; null on the web.</summary>
+    private IAppHost? _appHost;
     private BestPanel? _bestPanel;
     private StationDetails? _details;
     private ElementReference _mapElement;
@@ -285,6 +296,22 @@
     [SupplyParameterFromQuery(Name = "view")]
     public string? View { get; set; }
 
+    /// <summary>
+    /// A trip to start, to a saved place: <c>home</c>, <c>work</c> or a place's id. The Android app's widget for a frequent
+    /// route opens it, with <see cref="From"/> and <see cref="Pick"/>. They're dropped from the URL as the trip starts, so
+    /// Back, closing the trip or a reload doesn't start it again.
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "to")]
+    public string? To { get; set; }
+
+    /// <summary>Where a <see cref="To"/> trip starts, as <see cref="To"/> names places; without it, where the user is.</summary>
+    [SupplyParameterFromQuery(Name = "from")]
+    public string? From { get; set; }
+
+    /// <summary>The station a <see cref="To"/> trip shows on top: the one the widget showed, if the plan still has it on the way.</summary>
+    [SupplyParameterFromQuery(Name = "pick")]
+    public long? Pick { get; set; }
+
     private bool ListOpen => View is FavoritesView or CompareView or BestView or TripView or CarsView or PlacesView;
 
     /// <summary>Best near you is open, maybe under My cars, the address search or a station's details.</summary>
@@ -360,6 +387,12 @@
         Favorites.Changed += OnFavoritesChanged;
         Comparison.Changed += OnComparisonChanged;
         Updates.Changed += OnUpdateChanged;
+        _appHost = ServiceProvider.GetService<IAppHost>();
+        if (_appHost is not null)
+        {
+            _appHost.Changed += OnAppHostChanged;
+        }
+
         Updates.ReloadDue += OnReloadDue;
         Best.Changed += OnBestChanged;
         Cars.Changed += OnCarsChanged;
@@ -441,6 +474,11 @@
             await FitToBestAsync();
             await FitToTripAsync();
         }
+
+        if (_placed)
+        {
+            await StartLinkedTripAsync();
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -457,7 +495,7 @@
         // A reload for a new release reopens as the page was (ReloadAsync): its view, fuel (another tab may have changed the
         // saved one since) and history.
         var saved = await _map.TakeSavedViewAsync();
-        _fuel = Fuels.Normalize(saved?.Fuel ?? await Preferences.GetAsync(FuelPreferenceKey));
+        _fuel = Fuels.Normalize(saved?.Fuel ?? await Preferences.GetAsync(Fuels.PreferenceKey));
         _stations.SetFuel(_fuel);
         await Best.SetFuelAsync(_fuel);
         await Cars.SetFuelAsync(_fuel);
@@ -527,7 +565,58 @@
 
         _placed = true;
         await planning;
+        await StartLinkedTripAsync();
     }
+
+    /// <summary>Starts the trip <see cref="To"/> asks for, once the page is placed, as if the place was picked in Your places.</summary>
+    /// <remarks>
+    /// The trip takes the link's place in the history, as a link opened cold, rather than going on top of it: closing the
+    /// trip goes back, and back to the link would start it again. Until the URL without the link is in (in the Android app
+    /// the page's URL changes only once the WebView has navigated), <see cref="_linkedTo"/> keeps it from starting twice.
+    /// </remarks>
+    private async Task StartLinkedTripAsync()
+    {
+        if (To is not { Length: > 0 } to)
+        {
+            _linkedTo = null;
+            return;
+        }
+
+        var link = $"{From}>{to}>{Pick}";
+        if (_linkedTo == link)
+        {
+            return;
+        }
+
+        _linkedTo = link;
+        // Read now: the trip's navigation takes them out of the URL, and the parameters with them.
+        var (fromName, pick) = (From, Pick);
+        var from = fromName is { Length: > 0 } ? PlaceNamed(fromName) : null;
+        if (PlaceNamed(to) is { } place && (fromName is not { Length: > 0 } || from is not null))
+        {
+            await StartTripAsync(TripDestination.To(place), from, fromLink: true);
+            if (pick is { } id)
+            {
+                await Trips.SelectAsync(id);
+            }
+        }
+
+        if (!Trips.IsOpen)
+        {
+            // A place since forgotten, or nowhere to start from: only the link goes.
+            Navigation.NavigateTo(
+                Navigation.GetUriWithQueryParameters(new Dictionary<string, object?> { ["to"] = null, ["from"] = null, ["pick"] = null }),
+                replace: true);
+        }
+    }
+
+    /// <summary>A saved place as links name it: <c>home</c>, <c>work</c>, or its id.</summary>
+    private SavedPlace? PlaceNamed(string name) => name switch
+    {
+        "home" => Places.Home,
+        "work" => Places.Work,
+        _ => Places.Places.FirstOrDefault(p => p.Id == name),
+    };
 
     /// <summary>
     /// Shows where the user is and, with <paramref name="moveMap"/>, flies there. When the location isn't available,
@@ -579,7 +668,7 @@
         }
 
         _fuel = fuel;
-        await Preferences.SetAsync(FuelPreferenceKey, fuel);
+        await Preferences.SetAsync(Fuels.PreferenceKey, fuel);
         await Best.SetFuelAsync(fuel);
         await Cars.SetFuelAsync(fuel);
         var planning = Trips.SetFuelAsync(fuel);
@@ -1169,10 +1258,23 @@
     /// one known may be hours old), and without it, the trip starts where Best near you ranks from, or the map's centre. A
     /// user who had Best near you rank from the map's centre or a pin starts there, without being asked again.
     /// </summary>
-    private async Task StartTripAsync(TripDestination destination)
+    private Task StartTripAsync(TripDestination destination) => StartTripAsync(destination, from: null, fromLink: false);
+
+    /// <param name="from">A saved place to start at instead (a widget's route).</param>
+    /// <param name="fromLink">Opened by a link (<see cref="To"/>): the trip takes the link's entry in the history.</param>
+    private async Task StartTripAsync(TripDestination destination, SavedPlace? from, bool fromLink)
     {
         // A trip the user starts is fitted, even if a release reload kept the view of the pane it started from.
         _keepView = false;
+        if (from is not null)
+        {
+            await ClearPinAsync();
+            var startingFrom = Trips.StartAsync(from.Point, destination, fromMapCenter: true, originName: PlaceName(from));
+            ShowLinkedTrip();
+            await startingFrom;
+            return;
+        }
+
         if (Best.Origin is not { IsChosen: true })
         {
             await LocateAsync(moveMap: false, fallBackToMontreal: false);
@@ -1196,9 +1298,37 @@
 
         // The trip is open once StartAsync returns its task (the plan comes after): the view can show it at once.
         var starting = Trips.StartAsync(origin, destination, fromMapCenter);
-        await ShowTripAsync();
+        if (fromLink)
+        {
+            ShowLinkedTrip();
+        }
+        else
+        {
+            await ShowTripAsync();
+        }
+
         await starting;
     }
+
+    /// <summary>Best on the way in the place of the link that opened it, with nothing below to go back to: as a link opened cold.</summary>
+    private void ShowLinkedTrip()
+    {
+        (_stationPushed, _listPushed, _carsPushed, _carsOverTrip, _placesPushed, _tripPushed) = (false, false, false, false, false, false);
+        Navigation.NavigateTo(
+            Navigation.GetUriWithQueryParameters(new Dictionary<string, object?>
+            {
+                ["view"] = TripView, ["station"] = null, ["to"] = null, ["from"] = null, ["pick"] = null,
+            }),
+            replace: true);
+    }
+
+    /// <summary>How a saved place is called on the page: Home, Work, or its own name.</summary>
+    private string PlaceName(SavedPlace place) => place.Kind switch
+    {
+        PlaceKind.Home => L["Home"],
+        PlaceKind.Work => L["Work"],
+        _ => string.IsNullOrEmpty(place.Name) ? place.Address ?? "" : place.Name,
+    };
 
     /// <summary>
     /// Shows Best on the way: pushed over Best near you, so Back returns to it, and otherwise in the place of the pane
@@ -1587,6 +1717,8 @@
     /// <summary>Another release came out, or was rolled back: the offer to reload shows or goes.</summary>
     private void OnUpdateChanged() => InvokeAsync(StateHasChanged);
 
+    private void OnAppHostChanged() => InvokeAsync(StateHasChanged);
+
     /// <summary>Another release while the page is away or just back: it reloads by itself.</summary>
     private void OnReloadDue() => InvokeAsync(() => ReloadAsync(automatic: true));
 
@@ -1672,6 +1804,11 @@
         Comparison.Changed -= OnComparisonChanged;
         Updates.Changed -= OnUpdateChanged;
         Updates.ReloadDue -= OnReloadDue;
+        if (_appHost is not null)
+        {
+            _appHost.Changed -= OnAppHostChanged;
+        }
+
         Best.Changed -= OnBestChanged;
         Cars.Changed -= OnCarsChanged;
         Trips.Changed -= OnTripChanged;

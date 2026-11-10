@@ -5,6 +5,9 @@ public static class Fuels
 {
     public const string Default = "Régulier";
 
+    /// <summary>Where the map's fuel is kept (<see cref="IPreferenceStore"/>); the Android widgets read it too.</summary>
+    public const string PreferenceKey = "essence.fuel";
+
     public static IReadOnlyList<string> All { get; } = ["Régulier", "Super", "Diesel"];
 
     /// <summary>The matching known fuel, or <see cref="Default"/> for anything else (e.g. a stale saved preference).</summary>

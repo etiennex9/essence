@@ -163,7 +163,12 @@ public sealed record BestQuery(
     decimal FillLitres,
     decimal LitresPer100Km,
     bool CostcoMember,
-    int MaxDetourMinutes);
+    int MaxDetourMinutes)
+{
+    /// <summary>The question Best near you asks for a car from a point; the Android widgets ask the same.</summary>
+    public static BestQuery For(GeoPoint point, string fuel, CarProfile car) =>
+        new(point.Latitude, point.Longitude, fuel, car.FillLitres, car.LitresPer100Km, car.CostcoMember, car.MaxDetourMinutes);
+}
 
 /// <summary>What <see cref="EssenceApiClient.GetTripAsync"/> asks for: from where, to where, which fuel, and the car.</summary>
 /// <param name="RangeKm">What the dashboard said was left; null when the driver didn't say.</param>
@@ -178,7 +183,16 @@ public sealed record TripQuery(
     bool CostcoMember,
     int MaxDetourMinutes,
     int? RangeKm,
-    int SpareKm);
+    int SpareKm)
+{
+    /// <summary>
+    /// The question Best on the way asks for a car. <paramref name="rangeKm"/> is what the dashboard said was left: the car's
+    /// <see cref="CarProfile.RangeKm"/> in the app; the widgets leave it out, as one reading doesn't last the hours they show.
+    /// </summary>
+    public static TripQuery For(GeoPoint from, GeoPoint to, string fuel, CarProfile car, int? rangeKm) =>
+        new(from.Latitude, from.Longitude, to.Latitude, to.Longitude, fuel, car.FillLitres, car.LitresPer100Km, car.CostcoMember,
+            car.MaxDetourMinutes, rangeKm, car.SpareKm);
+}
 
 /// <summary>Source-generated (trim-safe) serialization of the API's responses, with the API's web defaults (camelCase).</summary>
 [JsonSourceGenerationOptions(JsonSerializerDefaults.Web)]

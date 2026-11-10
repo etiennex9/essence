@@ -62,6 +62,21 @@ public class TripStateTests
     }
 
     [Fact]
+    public async Task A_trip_from_a_saved_place_names_it_until_planned_again_from_where_the_user_is()
+    {
+        var trip = NewTrip();
+        await trip.StartAsync(Montreal, Quebec, fromMapCenter: true, originName: "Work");
+
+        var restored = NewTrip();
+        await restored.LoadAsync();
+        await trip.RefreshAsync(new GeoPoint(45.6, -73.7));
+
+        Assert.Equal("Work", restored.OriginName);
+        Assert.Null(trip.OriginName);
+        Assert.False(trip.FromMapCenter);
+    }
+
+    [Fact]
     public async Task The_cars_range_is_asked_for_and_typing_it_plans_again_from_the_same_start()
     {
         var trip = NewTrip();

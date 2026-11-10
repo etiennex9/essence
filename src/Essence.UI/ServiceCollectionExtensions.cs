@@ -10,15 +10,24 @@ public static class ServiceCollectionExtensions
     /// Registers what the map page needs. The device services default to the browser ones; a host with better ones
     /// (e.g. native geolocation in MAUI) registers its own <see cref="IDeviceLocation"/>, <see cref="IPreferenceStore"/> or
     /// <see cref="ISessionStore"/> first,
-    /// and likewise its own <see cref="IReleaseNotesSource"/> (release notes bundled with the app).
+    /// and likewise its own <see cref="IReleaseNotesSource"/> (release notes bundled with the app). A host whose API address
+    /// isn't known at startup registers its own <see cref="EssenceApiClient"/> and leaves
+    /// <see cref="EssenceUIOptions.ApiBaseUrl"/> out.
     /// </summary>
     public static IServiceCollection AddEssenceUI(this IServiceCollection services, EssenceUIOptions options)
     {
-        // API paths are relative to its root, so the base address must end with a slash.
-        var apiBaseUrl = options.ApiBaseUrl.AbsoluteUri.EndsWith('/') ? options.ApiBaseUrl : new Uri(options.ApiBaseUrl.AbsoluteUri + "/");
-
         services.AddSingleton(options);
-        services.AddSingleton(_ => new EssenceApiClient(new HttpClient { BaseAddress = apiBaseUrl, Timeout = TimeSpan.FromSeconds(20) }));
+        if (options.ApiBaseUrl is { } apiUrl)
+        {
+            var apiBaseUrl = WithTrailingSlash(apiUrl);
+            services.TryAddSingleton(_ => new EssenceApiClient(new HttpClient { BaseAddress = apiBaseUrl, Timeout = TimeSpan.FromSeconds(20) }));
+        }
+        else if (!services.Any(s => s.ServiceType == typeof(EssenceApiClient)))
+        {
+            throw new InvalidOperationException(
+                $"Give {nameof(EssenceUIOptions)}.{nameof(EssenceUIOptions.ApiBaseUrl)}, or register an {nameof(EssenceApiClient)} first.");
+        }
+
         services.AddLocalization();
         services.TryAddSingleton(TimeProvider.System);
         services.AddScoped<HistoryCache>();
@@ -38,7 +47,7 @@ public static class ServiceCollectionExtensions
         services.TryAddScoped<ISessionStore>(sp => sp.GetRequiredService<BrowserDevice>().Session);
         if (options.ReleaseNotesUrl is { } notesUrl)
         {
-            var notesBaseUrl = notesUrl.AbsoluteUri.EndsWith('/') ? notesUrl : new Uri(notesUrl.AbsoluteUri + "/");
+            var notesBaseUrl = WithTrailingSlash(notesUrl);
             services.TryAddSingleton<IReleaseNotesSource>(
                 _ => new HttpReleaseNotesSource(new HttpClient { BaseAddress = notesBaseUrl, Timeout = TimeSpan.FromSeconds(20) }));
         }
@@ -48,4 +57,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<UpdateCheck>();
         return services;
     }
+
+    // API paths are relative to its root, so the base address must end with a slash.
+    private static Uri WithTrailingSlash(Uri url) => url.AbsoluteUri.EndsWith('/') ? url : new Uri(url.AbsoluteUri + "/");
 }

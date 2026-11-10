@@ -810,4 +810,136 @@
   <data name="BestFromDroppedPin" xml:space="preserve">
     <value>Classées à partir de l’épingle.</value>
   </data>
+  <data name="AboutAppUpdate" xml:space="preserve">
+    <value>À propos · une version plus récente de l’application est disponible</value>
+  </data>
+  <data name="AppServer" xml:space="preserve">
+    <value>Serveur : {0}</value>
+  </data>
+  <data name="ChangeServer" xml:space="preserve">
+    <value>Changer</value>
+  </data>
+  <data name="AppUpdateAvailable" xml:space="preserve">
+    <value>La version {0} de l’application est disponible</value>
+  </data>
+  <data name="AppUpdateDownload" xml:space="preserve">
+    <value>Télécharger</value>
+  </data>
+  <data name="ServerTitle" xml:space="preserve">
+    <value>Choisir un serveur</value>
+  </data>
+  <data name="ServerIntro" xml:space="preserve">
+    <value>Essence obtient ses prix d’un serveur. Utilisez l’adresse ci-dessous ou entrez-en une autre.</value>
+  </data>
+  <data name="ServerAddressLabel" xml:space="preserve">
+    <value>Adresse du serveur</value>
+  </data>
+  <data name="ServerConnect" xml:space="preserve">
+    <value>Se connecter</value>
+  </data>
+  <data name="ServerConnecting" xml:space="preserve">
+    <value>Connexion…</value>
+  </data>
+  <data name="ServerCancel" xml:space="preserve">
+    <value>Annuler</value>
+  </data>
+  <data name="ServerErrorEmpty" xml:space="preserve">
+    <value>Entrez l’adresse du serveur.</value>
+  </data>
+  <data name="ServerErrorInvalid" xml:space="preserve">
+    <value>Ce n’est pas une adresse Web.</value>
+  </data>
+  <data name="ServerErrorHttps" xml:space="preserve">
+    <value>L’adresse doit commencer par https://.</value>
+  </data>
+  <data name="ServerErrorUnreachable" xml:space="preserve">
+    <value>Impossible de joindre le serveur. Vérifiez l’adresse et votre connexion.</value>
+  </data>
+  <data name="ServerErrorNotEssence" xml:space="preserve">
+    <value>Ce serveur ne répond pas comme un serveur Essence.</value>
+  </data>
+  <data name="AppTooOldTitle" xml:space="preserve">
+    <value>Mettez Essence à jour</value>
+  </data>
+  <data name="AppTooOldMessage" xml:space="preserve">
+    <value>Cette version de l’application est trop ancienne pour le serveur. Téléchargez la plus récente.</value>
+  </data>
+  <data name="AppTooOldLater" xml:space="preserve">
+    <value>Plus tard</value>
+  </data>
+  <data name="WidgetBestNear" xml:space="preserve">
+    <value>Meilleur choix près de {0}</value>
+  </data>
+  <data name="WidgetRoute" xml:space="preserve">
+    <value>{0} → {1}</value>
+  </data>
+  <data name="WidgetYou" xml:space="preserve">
+    <value>vous</value>
+  </data>
+  <data name="WidgetPlace" xml:space="preserve">
+    <value>un lieu</value>
+  </data>
+  <data name="WidgetUpdated" xml:space="preserve">
+    <value>Mis à jour à {0}</value>
+  </data>
+  <data name="WidgetNoServer" xml:space="preserve">
+    <value>Ouvrez Essence pour choisir son serveur.</value>
+  </data>
+  <data name="WidgetNoPlace" xml:space="preserve">
+    <value>Choisissez un lieu pour ce widget : touchez-le longuement.</value>
+  </data>
+  <data name="WidgetNoLocationYet" xml:space="preserve">
+    <value>Ouvrez Essence une fois pour qu’il sache où vous êtes.</value>
+  </data>
+  <data name="WidgetNoFavorites" xml:space="preserve">
+    <value>Ajoutez des stations à vos favoris dans Essence pour voir leurs prix ici.</value>
+  </data>
+  <data name="WidgetNoPrice" xml:space="preserve">
+    <value>Aucune station à proximité n’a de prix pour {0}.</value>
+  </data>
+  <data name="WidgetNoRoute" xml:space="preserve">
+    <value>Aucun trajet entre ces lieux.</value>
+  </data>
+  <data name="WidgetUnavailable" xml:space="preserve">
+    <value>Les trajets ne sont pas offerts pour l’instant.</value>
+  </data>
+  <data name="WidgetFailed" xml:space="preserve">
+    <value>Mise à jour impossible. Touchez ↻ pour réessayer.</value>
+  </data>
+  <data name="WidgetRefresh" xml:space="preserve">
+    <value>Actualiser</value>
+  </data>
+  <data name="WidgetRankFrom" xml:space="preserve">
+    <value>Classer à partir de</value>
+  </data>
+  <data name="WidgetFrom" xml:space="preserve">
+    <value>De</value>
+  </data>
+  <data name="WidgetTo" xml:space="preserve">
+    <value>À</value>
+  </data>
+  <data name="WidgetLastUsedOption" xml:space="preserve">
+    <value>Là où j’ai utilisé Essence en dernier</value>
+  </data>
+  <data name="WidgetLastUsedAgo" xml:space="preserve">
+    <value>Là où j’ai utilisé Essence en dernier ({0})</value>
+  </data>
+  <data name="WidgetAdd" xml:space="preserve">
+    <value>Terminé</value>
+  </data>
+  <data name="WidgetNoPlacesYet" xml:space="preserve">
+    <value>Enregistrez d’abord Maison, Travail ou un autre lieu dans Essence.</value>
+  </data>
+  <data name="WidgetOpenPlaces" xml:space="preserve">
+    <value>Ouvrir Vos lieux</value>
+  </data>
+  <data name="WidgetSamePlace" xml:space="preserve">
+    <value>Choisissez deux lieux différents.</value>
+  </data>
+  <data name="ServerErrorTooOld" xml:space="preserve">
+    <value>Ce serveur demande une version plus récente de l’application.</value>
+  </data>
+  <data name="TripFromPlace" xml:space="preserve">
+    <value>Planifié à partir de {0}.</value>
+  </data>
 </root>
