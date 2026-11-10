@@ -4,8 +4,8 @@ A single page: a fullscreen map that zooms to the device's location and shows ne
 selected fuel. Clicking a station opens its details: current prices and their recent history. The fuel pump says which
 station is worth going to near you, or on the way to a destination.
 
-It's a standalone Blazor WebAssembly app. The page itself lives in the `Essence.UI` Razor class library, so a MAUI Blazor Hybrid
-app can host the same components later (see [Android](#android) below). The browser calls `Essence.Api` directly.
+It's a standalone Blazor WebAssembly app. The page itself lives in the `Essence.UI` Razor class library, which the Android app
+hosts too (see [Android](#android) below). The browser calls `Essence.Api` directly.
 
 ## How it's built
 
@@ -89,13 +89,5 @@ Brand logos are trademarks; make sure you're allowed to use them. Colors for the
 
 ## Android
 
-.NET MAUI can't target the browser, so the shared part is `Essence.UI`. A MAUI Blazor Hybrid app (`src/Essence.Mobile`,
-not created yet) would:
-
-- host `Essence.UI`'s router in a `BlazorWebView`, with `essence.css` linked from its `wwwroot/index.html`;
-- call `AddEssenceUI(...)` with a public API address (the Android emulator reaches the host as `10.0.2.2`);
-- register its own `IDeviceLocation` (MAUI `Geolocation`) and `IPreferenceStore` (MAUI `Preferences`) before `AddEssenceUI`,
-  because WebView geolocation needs extra permission plumbing on Android;
-- handle the hardware Back button by navigating back in the WebView, which closes the details pane.
-
-The API calls go through .NET's `HttpClient` there, not the browser, so no CORS entry is needed.
+The Android app, [src/Essence.Mobile](../Essence.Mobile/README.md), hosts the same `Essence.UI` in a MAUI `BlazorWebView`. Its
+README says how to run it on a phone and how it's released.

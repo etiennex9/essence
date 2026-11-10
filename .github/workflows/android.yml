@@ -1,0 +1,311 @@
+# Builds the Android app (src/Essence.Mobile). A pull request that touches it gets an APK to try, kept 7 days. After each
+# Publish run that succeeded on main (for a push, or started by hand), and when started by hand on main, the app is built if
+# its inputs changed since the latest release (.github/scripts/select-android.sh), then released on GitHub: a signed APK on
+# the release of the day tag Publish set, where installed apps look for it (README → Versions → Android app releases).
+name: Android
+
+on:
+  pull_request:
+    paths:
+      - src/Essence.Mobile/**
+      - src/Essence.UI/**
+      - src/Essence.Contracts/**
+      - Directory.Build.props
+      - Directory.Packages.props
+      - global.json
+      - .editorconfig
+      - .github/workflows/android.yml
+      - .github/scripts/select-android.sh
+      - "!**.md"
+  # After Publish rather than on push: by then its tag job has set the day tag that dates the app and names its release,
+  # which the notes command needs. A Publish run started by hand on main runs that job too, so it counts like a push's:
+  # it's how main's tip gets its day tag after a push that started no Publish run (Markdown or docs/ only). Publish's pull
+  # request runs, and its runs that failed, start this too: the jobs skip them.
+  workflow_run:
+    workflows: [Publish]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+
+# A pull request's newer push cancels its older run. A release run waits for the one in progress instead, so that a release
+# is never stopped halfway. Only one run waits: a newer one replaces it, and its changes include the replaced one's, since
+# both compare with the latest release. Runs that skip get a group of their own, so that they don't replace a waiting one.
+# The release condition is the changes job's.
+concurrency:
+  group: >-
+    ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref
+    || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    || (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
+    && github.event.workflow_run.conclusion == 'success') && 'release'
+    || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+# GitHub's default shell is bash -e, without pipefail: a command that fails on the left of a pipe, such as git ls-remote
+# losing the network, would go unnoticed. Naming bash adds -o pipefail.
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  # An APK to try the pull request on a phone, from the run's artifacts: signed with a debug key, with no server filled in,
+  # no release notes (About says Development version) and no update check. A release can't update it, nor it a release:
+  # their keys differ, so uninstall one to install the other.
+  pull-request:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+          workloads: maui-android
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      # The Android platform and build tools the project targets, added to the runner's SDK.
+      - run: >-
+          dotnet build src/Essence.Mobile/Essence.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android
+          "-p:AndroidSdkDirectory=$ANDROID_HOME" "-p:JavaSdkDirectory=$JAVA_HOME" -p:AcceptAndroidSDKLicenses=True
+      - env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          dotnet publish src/Essence.Mobile/Essence.Mobile.csproj -c Release -f net10.0-android -o "$RUNNER_TEMP/publish" \
+            "-p:AndroidSdkDirectory=$ANDROID_HOME" "-p:JavaSdkDirectory=$JAVA_HOME" -p:AndroidPackageFormats=apk \
+            -p:ApplicationDisplayVersion=0.0.0 -p:ApplicationVersion=1 -p:EssenceDefaultServer= -p:EssenceUpdateCheck=false
+          cp "$RUNNER_TEMP"/publish/*-Signed.apk "$RUNNER_TEMP/essence-pr-$PR.apk"
+      # Not zipped: the artifact downloads as the APK itself.
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ${{ runner.temp }}/essence-pr-${{ github.event.pull_request.number }}.apk
+          archive: false
+          retention-days: 7
+          if-no-files-found: error
+          overwrite: true
+
+  # Whether to build: when the app's inputs changed since the commit the latest release was built from, which its notes
+  # record (<!-- essence-android-commit: … -->). Without a release to compare with, or on a manual run, it builds. Only for
+  # Publish runs on main that succeeded, for a push or started by hand: this run has the repository's secrets and checks
+  # out what that run built, and a pull request's Publish run is listed under main too when it comes from a fork's main.
+  # The concurrency group above repeats this condition.
+  changes:
+    if: >-
+      github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+      || (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
+      && github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      build: ${{ steps.select.outputs.build }}
+      commit: ${{ steps.select.outputs.commit }}
+    steps:
+      # The commit that Publish run built and tagged; a manual run takes main as it is, which needs its day tag too.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0
+      # When main has already moved on, the run for its new tip builds instead: only main's tip is released (see the
+      # release job, which checks again), and an older commit may have lost its day tag to a force push.
+      - id: select
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          commit=$(git rev-parse HEAD)
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          main=$(git ls-remote origin refs/heads/main | cut -f 1)
+          if [ "$main" != "$commit" ]; then
+            echo "::notice::main moved on from ${commit::7} to ${main::7}: the run that follows Publish's for it builds the app. If that push changed only Markdown or docs/, Publish didn't run for it: start Publish by hand (Actions → Publish → Run workflow), and this follows."
+            echo "build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          range=""
+          if [ "$EVENT" = workflow_run ]; then
+            # Without a tag, gh release view shows the latest release; it fails when there's none.
+            notes=$(gh release view --json body --jq .body 2>/dev/null) || notes=""
+            last=$(grep -oE 'essence-android-commit: [0-9a-f]{40}' <<<"$notes" | head -n 1 | cut -d ' ' -f 2) || true
+            range="${last:+$last..HEAD}"
+          fi
+          # Assigned first: inside echo's arguments, the script failing would go unnoticed and read as "don't build".
+          build=$(bash .github/scripts/select-android.sh "$range")
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+  # Builds the app with the release's version and changelog, which About shows, from the same notes command as the web
+  # image. Signed with the upload key when the ANDROID_KEYSTORE_BASE64 secret is set; without it (a fork), with a debug
+  # key, kept as the run's artifact and not released.
+  build:
+    needs: changes
+    if: needs.changes.outputs.build == 'true'
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEY: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    outputs:
+      signed: ${{ steps.version.outputs.signed }}
+      day: ${{ steps.version.outputs.day }}
+      name: ${{ steps.version.outputs.name }}
+      code: ${{ steps.version.outputs.code }}
+    steps:
+      # The whole history and its day tags, for the notes.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.changes.outputs.commit }}
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+          workloads: maui-android
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: >-
+          dotnet build src/Essence.Mobile/Essence.Mobile.csproj -t:InstallAndroidDependencies -f net10.0-android
+          "-p:AndroidSdkDirectory=$ANDROID_HOME" "-p:JavaSdkDirectory=$JAVA_HOME" -p:AcceptAndroidSDKLicenses=True
+      # release.json and changelog-<month>.json. The command requires a version for a push to main or a manual run on it,
+      # failing when no day tag contains the commit rather than let an app out without one. It knows them by GITHUB_REF and
+      # GITHUB_EVENT_NAME, which after Publish are a workflow_run's, and GitHub's GITHUB_* variables can't be overridden with
+      # env:, so they're set on the command itself. This job only runs for main.
+      - run: |
+          GITHUB_REF=refs/heads/main GITHUB_EVENT_NAME=push \
+            dotnet run --project tools/Essence.Release --configuration Release -- notes "$RUNNER_TEMP/release"
+      # The version name is the release's day: 2026.11.07. The version code, which Android compares before it updates an app
+      # and the app's update check compares with essence-<code>.apk, is the minutes since 2026 began: it grows with every
+      # build, and stays under Android's limit (2100000000) for thousands of years.
+      - id: version
+        run: |
+          day=$(jq -r '.version // empty' "$RUNNER_TEMP/release/release.json")
+          [ -n "$day" ] || { echo "::error::release.json has no version."; exit 1; }
+          code=$(( ($(date -u +%s) - $(date -u -d 2026-01-01T00:00:00Z +%s)) / 60 ))
+          {
+            echo "day=$day"
+            echo "name=${day//-/.}"
+            echo "code=$code"
+            echo "signed=$HAS_KEY"
+          } >> "$GITHUB_OUTPUT"
+      # Into the job's temporary folder, which the runner empties after the job. --ignore-garbage: a secret pasted from
+      # Windows may carry carriage returns. Without the password, signing would fail later with a vaguer message.
+      - if: env.HAS_KEY == 'true'
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          [ -n "$ANDROID_KEYSTORE_PASSWORD" ] || { echo "::error::ANDROID_KEYSTORE_BASE64 is set but ANDROID_KEYSTORE_PASSWORD isn't (README → Versions)."; exit 1; }
+          base64 --decode --ignore-garbage <<<"$KEYSTORE" > "$RUNNER_TEMP/essence-upload.jks"
+      - if: env.HAS_KEY != 'true'
+        run: echo "::notice::No ANDROID_KEYSTORE_BASE64 secret, so the APK is signed with a debug key and kept as this run's artifact, not released (README → Versions)."
+      # The password goes by environment variable (env:NAME), not on the command line. The server is the
+      # ESSENCE_DEFAULT_SERVER secret, not in the source, so that a fork's app doesn't start on this one's server (without it,
+      # the first launch's server screen is empty), and a secret so that the public log masks it. Quoted, the semicolon in
+      # apk;aab is MSBuild's value, not a separator.
+      - env:
+          DEFAULT_SERVER: ${{ secrets.ESSENCE_DEFAULT_SERVER }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          NAME: ${{ steps.version.outputs.name }}
+          CODE: ${{ steps.version.outputs.code }}
+        run: |
+          signing=()
+          if [ "$HAS_KEY" = true ]; then
+            signing=(-p:AndroidKeyStore=true "-p:AndroidSigningKeyStore=$RUNNER_TEMP/essence-upload.jks"
+                     -p:AndroidSigningKeyAlias=essence -p:AndroidSigningStorePass=env:ANDROID_KEYSTORE_PASSWORD
+                     -p:AndroidSigningKeyPass=env:ANDROID_KEYSTORE_PASSWORD)
+          fi
+          dotnet publish src/Essence.Mobile/Essence.Mobile.csproj -c Release -f net10.0-android -o "$RUNNER_TEMP/publish" \
+            "-p:AndroidSdkDirectory=$ANDROID_HOME" "-p:JavaSdkDirectory=$JAVA_HOME" '-p:AndroidPackageFormats="apk;aab"' \
+            "-p:ApplicationDisplayVersion=$NAME" "-p:ApplicationVersion=$CODE" \
+            "-p:EssenceDefaultServer=$DEFAULT_SERVER" "-p:EssenceRepository=$GITHUB_REPOSITORY" \
+            "-p:EssenceReleaseNotesDir=$RUNNER_TEMP/release" "${signing[@]}"
+      # The release's notes: that day's changelog in English, then in French, and the commit, also as the marker that the
+      # next run's changes job compares with.
+      - env:
+          DAY: ${{ steps.version.outputs.day }}
+          NAME: ${{ steps.version.outputs.name }}
+          CODE: ${{ steps.version.outputs.code }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"
+          cp "$RUNNER_TEMP"/publish/*-Signed.apk "$RUNNER_TEMP/out/essence-$CODE.apk"
+          cp "$RUNNER_TEMP"/publish/*-Signed.aab "$RUNNER_TEMP/essence-$CODE.aab"
+          commit=$(git rev-parse HEAD)
+          month="$RUNNER_TEMP/release/changelog-${DAY::7}.json"
+          entries() {
+            jq -r --arg day "$DAY" --arg lang "$1" '.versions[] | select(.date == $day) | .changes[] | "- " + .[$lang]' "$month" 2>/dev/null || true
+          }
+          en=$(entries en)
+          fr=$(entries fr)
+          {
+            echo "Essence for Android $NAME (build $CODE). To install it, open \`essence-$CODE.apk\` on your phone."
+            echo "Pour l’installer, ouvrez \`essence-$CODE.apk\` sur votre téléphone."
+            echo
+            echo "**What's new on $DAY**"
+            echo
+            echo "${en:-- Fixes and changes behind the scenes.}"
+            echo
+            echo "**Nouveautés du $DAY**"
+            echo
+            echo "${fr:-- Corrections et changements en coulisses.}"
+            echo
+            echo "Built from $commit."
+            echo
+            echo "<!-- essence-android-commit: $commit -->"
+          } > "$RUNNER_TEMP/out/release-notes.md"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: android-release
+          path: ${{ runner.temp }}/out/
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: true
+      # For Google Play some day: the bundle it takes, signed with the same upload key. Only kept here, not released.
+      - uses: actions/upload-artifact@v7
+        with:
+          path: ${{ runner.temp }}/essence-${{ steps.version.outputs.code }}.aab
+          archive: false
+          retention-days: 30
+          if-no-files-found: error
+          overwrite: true
+
+  # Puts the APK on the GitHub Release of the day tag, created if needed and marked latest, which the app's update check
+  # reads. The tags are Publish's tag job's: this only uses them (--verify-tag), and moving a day's tag moves its release
+  # along, which is why immutable releases must stay off. A day built twice keeps one release: the newer APK replaces the
+  # older, and the notes are written again.
+  release:
+    needs: [changes, build]
+    if: needs.build.outputs.signed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.changes.outputs.commit }}
+      - uses: actions/download-artifact@v8
+        with:
+          name: android-release
+          path: ${{ runner.temp }}/out
+      # If main moved on during the build, the run for its new commit releases instead: each run releases only main's tip.
+      # git ls-remote failing fails the step (pipefail) rather than reading as main having moved.
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          COMMIT: ${{ needs.changes.outputs.commit }}
+          TAG: v${{ needs.build.outputs.day }}
+          TITLE: Essence for Android ${{ needs.build.outputs.name }}
+          APK: essence-${{ needs.build.outputs.code }}.apk
+        run: |
+          main=$(git ls-remote origin refs/heads/main | cut -f 1)
+          if [ "$main" != "$COMMIT" ]; then
+            echo "::notice::main moved on from ${COMMIT::7} to ${main::7}: the run that follows Publish's for it releases the app. If that push changed only Markdown or docs/, Publish didn't run for it: start Publish by hand (Actions → Publish → Run workflow), and this follows."
+            exit 0
+          fi
+          cd "$RUNNER_TEMP/out"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$APK" --clobber
+            for old in $(gh release view "$TAG" --json assets --jq '.assets[].name | select(test("^essence-[0-9]+\\.apk$"))'); do
+              [ "$old" = "$APK" ] || gh release delete-asset "$TAG" "$old" --yes
+            done
+            gh release edit "$TAG" --title "$TITLE" --notes-file release-notes.md --latest
+          else
+            gh release create "$TAG" --verify-tag --latest --title "$TITLE" --notes-file release-notes.md "$APK"
+          fi

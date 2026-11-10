@@ -16,9 +16,10 @@ and shows them on a map of nearby stations.
 | `src/Essence.Routing` | The routing image: OSRM with Essence's car profile, which builds and refreshes Québec's road data itself (see [Routing and address search](#routing-and-address-search)). |
 | `src/Essence.Geocoding` | The address search image: Photon, which builds and refreshes its index of Québec's places itself. |
 | `src/Essence.Supervisor` | The supervisor both of those images run: it builds their data, serves it, refreshes it, retries, and reports its progress at `:9090/status`. |
-| `src/Essence.UI` | Razor class library: the map page, the station details pane and everything behind them. Shared with a future MAUI app. |
+| `src/Essence.UI` | Razor class library: the map page, the station details pane and everything behind them. Shared by the web app and the Android app. |
 | `src/Essence.Web` | Blazor WebAssembly host for `Essence.UI`, served as static files by nginx. See [its README](src/Essence.Web/README.md). |
-| `tools/Essence.Release` | Run by the publish workflow: dates each release by the day it landed on `main` and writes the web app's changelog (see [Versions](#versions)). |
+| `src/Essence.Mobile` | The Android app: a .NET MAUI Blazor Hybrid host for `Essence.UI`, with home-screen widgets. Not in `Essence.slnx`: see [its README](src/Essence.Mobile/README.md). |
+| `tools/Essence.Release` | Run by the publish and Android workflows: dates each release by the day it landed on `main` and writes the apps' changelog (see [Versions](#versions)). |
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. |
 | `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM and Photon clients against stub servers; the address search's labels and filtering; Québec's boundary at its borders. |
 | `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs. |
@@ -77,7 +78,8 @@ dotnet build
 dotnet test
 ```
 
-`dotnet test` runs on Microsoft.Testing.Platform (opted in via `global.json`).
+`dotnet test` runs on Microsoft.Testing.Platform (opted in via `global.json`). Both leave out the Android app, which needs
+the MAUI Android workload: [src/Essence.Mobile](src/Essence.Mobile/README.md) says how to build it.
 To add a migration after changing the model:
 
 ```bash
@@ -203,6 +205,23 @@ headers are trusted from private networks only, where the web container that for
 takes the client's address from a reverse proxy on a private network. Allowed CORS origins come from `Cors:AllowedOrigins`:
 in Compose, `CORS_ORIGIN` from `.env`. The web container needs none, since the map calls the API through its own `/api/`.
 
+### API compatibility
+
+The web app always runs the UI its server serves, but an installed Android app runs the UI it was built with against the
+live API, for as long as it isn't updated, and a newer app may meet an older self-hosted API. So the API's contract (its
+paths, parameters and answers, `src/Essence.Contracts`) only grows:
+
+- **Allowed:** new endpoints; new optional parameters whose default keeps the old behaviour; new response fields that are
+  nullable or have a default.
+- **Never:** removing or renaming a field or a parameter; changing its type, unit or meaning; making a parameter
+  required; narrowing the range a parameter accepts.
+- **Clients** tolerate values they don't know in enum-like strings (a fuel, a `state`, a reason): they show them as they
+  are or leave them out, and don't fail.
+- **A breaking change** gets a new path, and the old one keeps answering as before while installed apps use it.
+- **To retire old apps**, the API can answer `426 Upgrade Required` to their `User-Agent`,
+  `Essence-Android/<version name> (<version code>)` (e.g. `Essence-Android/2026.11.07 (449482)`): the app then asks to be
+  updated.
+
 ## Deploy
 
 On every push to `main` that changes more than Markdown files and `docs/`,
@@ -215,10 +234,11 @@ builds its images again and moves `latest` past them, and re-running the older o
 On `main`, a run waits for the one in progress instead of canceling it; a push made while a manual run waits replaces the
 manual run, so start that again afterwards. An image's inputs are read from
 its Dockerfile: the projects it copies (its own and those it references) and the shared build files such as
-`Directory.Packages.props` ([select-images.sh](.github/scripts/select-images.sh)). A manual run, or a change to the workflow
-or `.dockerignore`, builds all six. The web image is also built along with any other, and when a changelog entry
-changed: it carries the release's version and changelog ([Versions](#versions)). Pull requests build the images they
-affect, without pushing.
+`Directory.Packages.props` ([select-images.sh](.github/scripts/select-images.sh)). A manual run, or a change to the publish
+workflow, its script or `.dockerignore`, builds all six. The web image is also built along with any other, and when a
+changelog entry changed: it carries the release's version and changelog ([Versions](#versions)). Pull requests build the
+images they affect, without pushing. The Android app has a workflow of its own, which runs after this one
+([Android app releases](#android-app-releases)).
 
 [deploy/truenas.yaml](deploy/truenas.yaml) runs those images on TrueNAS (Apps → Discover Apps → ⋮ → Install via YAML).
 Only the web container publishes a port; a reverse proxy in front of it serves the whole app, API included, at one HTTPS address.
@@ -429,6 +449,70 @@ dotnet run --project tools/Essence.Release -- notes src/Essence.Web/wwwroot/rele
 
 With those notes, `dotnet watch` checks for new releases too: after a commit, running `notes` again makes an open tab offer
 to reload. Keep DevTools' *Disable cache* on, as the development server doesn't ask browsers to revalidate the file.
+
+### Android app releases
+
+[The Android workflow](.github/workflows/android.yml) builds the Android app ([src/Essence.Mobile](src/Essence.Mobile/README.md))
+and releases it on the repository's GitHub Releases page, where people download it and where installed apps look for
+updates.
+
+**When.** After each Publish run on `main` that succeeded, for a push or started by hand, whose `tag` job has dated the
+commit by then; and when run by hand on `main` (**Actions → Android → Run workflow**), which builds `main`'s tip and so
+needs Publish to have run for it. It builds only when the app's inputs changed since the commit the latest release was
+built from, which that release's notes record in a hidden `<!-- essence-android-commit: … -->` line: `src/Essence.Mobile`,
+`Essence.UI`, `Essence.Contracts`, the shared build files, or the workflow and its script, Markdown aside
+([select-android.sh](.github/scripts/select-android.sh)). A change to the API alone doesn't rebuild the app. With no
+release yet, or run by hand, it builds. Only `main`'s tip is released: if `main` has moved on, before or during the build,
+the run after Publish's for the newer commit releases instead. A push of only Markdown or `docs/` starts no Publish run,
+though, so its commit has no day tag: run Publish by hand then (**Actions → Publish → Run workflow**), and Android follows.
+
+**What.** It runs `tools/Essence.Release notes` as the web image does, so About shows the same version and changelog. The
+release is the day tag's (`vYYYY-MM-DD`), marked latest, with the APK `essence-<version code>.apk` and notes that list that
+day's changelog in English and French. A day built twice keeps one release: the newer APK replaces the older. The workflow
+never creates or moves tags, which stay the `tag` job's. The Android App Bundle (the `.aab` Google Play takes) is only kept
+as the run's artifact, for 30 days.
+
+**Version name and code.** The name is the day with dots: `2026.11.07`. The code is the minutes from 2026-01-01 00:00 UTC
+to the build, e.g. `449482`: it grows with every build, which Android requires to update an app. The app's update check
+reads the latest release and compares its APK's number with its own; About then offers the newer one, with a link to the
+release's page. Pull requests that touch the app get an APK in the run's artifacts, kept 7 days: version `0.0.0` (1), signed
+with a debug key, no server filled in, *Development version* in About, no update check. Android won't install it over a
+release, or a release over it, since their keys differ: uninstall first.
+
+**Setting it up**, once:
+
+1. Make the upload key, outside the repository. `keytool` comes with any JDK, Android Studio's included. It asks for a
+   password, which the store and the key share, and for a name to put in the certificate:
+   ```bash
+   keytool -genkeypair -keystore essence-upload.jks -alias essence -keyalg RSA -keysize 4096 -validity 10000
+   ```
+2. Give it to the workflow as two Actions secrets: the keystore in base64 (on macOS, `base64 -i essence-upload.jks`), and
+   its password, which `gh secret set` asks for. On github.com, that's **Settings → Secrets and variables → Actions → New
+   repository secret**.
+   ```bash
+   base64 -w0 essence-upload.jks | gh secret set ANDROID_KEYSTORE_BASE64
+   ```
+   ```bash
+   gh secret set ANDROID_KEYSTORE_PASSWORD
+   ```
+3. Set the server that the first launch suggests, as a third secret. It isn't hidden, since anyone can read it in a
+   release's APK, but out of the source a fork doesn't inherit it, and as a secret it's masked in the runs' logs, which are
+   public, where a variable's value would be printed.
+   ```bash
+   gh secret set ESSENCE_DEFAULT_SERVER --body "https://<your domain>/"
+   ```
+4. Keep `essence-upload.jks` and its password safe offline, say in a password manager and on a USB key, and never in the
+   repository (`.gitignore` leaves out `*.jks` and `*.keystore`). **Losing it** means no update can be signed: every user
+   would have to uninstall the app, losing what it saved, to install the next one. If the app ever goes on Google Play,
+   this key becomes its upload key.
+
+**Forks.** Without the `ANDROID_KEYSTORE_BASE64` secret, the workflow builds the APK with a debug key, keeps it as the run's
+artifact and releases nothing, with a notice in the run saying so. Without the `ESSENCE_DEFAULT_SERVER` secret, the first
+launch's server field is empty. An app checks for updates in the repository that built it, so a fork's follows the fork's
+releases.
+
+**Immutable releases stay off** (**Settings → General**, under **Releases**): an immutable release locks its tag and its
+files, while the `tag` job moves a day's tag each time `main` moves that day, and a second build that day replaces the APK.
 
 ## Configuration
 
