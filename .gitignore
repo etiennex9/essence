@@ -25,3 +25,8 @@ coverage*.xml
 
 # Release notes written locally to preview the About dialog (README → Versions)
 src/Essence.Web/wwwroot/release/
+
+# The Android app's release notes and upload key, when building a release locally (src/Essence.Mobile/README.md)
+src/Essence.Mobile/release/
+*.jks
+*.keystore

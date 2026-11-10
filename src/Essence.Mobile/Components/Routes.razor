@@ -1,0 +1,33 @@
+@implements IDisposable
+@inject NavigationManager Navigation
+@inject ISessionStore Session
+@inject DeepLinks Links
+
+@* Essence.Web's App.razor, plus the page's URL kept in the session store: when Android kills the app in the background (while
+   Google Maps navigates, say) and restores it, the page reopens where it was, as a browser restores a discarded tab. *@
+<Router AppAssembly="typeof(MapPage).Assembly" NotFoundPage="typeof(NotFound)">
+    <Found Context="routeData">
+        <RouteView RouteData="routeData" />
+    </Found>
+</Router>
+
+@code {
+    public const string UrlKey = "essence.url";
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        Save(Navigation.Uri);
+        // A widget's tap that came while this page was starting.
+        if (Links.TakePending() is { } path)
+        {
+            Navigation.Open(path);
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e) => Save(e.Location);
+
+    private void Save(string uri) => _ = Session.SetAsync(UrlKey, Navigation.ToBaseRelativePath(uri)).AsTask();
+
+    public void Dispose() => Navigation.LocationChanged -= OnLocationChanged;
+}

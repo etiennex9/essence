@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="colorPrimary">#185FA5</color>
+    <color name="colorPrimaryDark">#0F4A82</color>
+    <color name="colorAccent">#185FA5</color>
+
+    <!-- The widgets, in essence.css's light colors; values-night has the dark ones. -->
+    <color name="widget_bg">#FFFFFFFF</color>
+    <color name="widget_text">#FF1D1D1B</color>
+    <color name="widget_muted">#FF5F5E5A</color>
+    <color name="widget_accent">#FF185FA5</color>
+    <color name="widget_chip">#12185FA5</color>
+    <color name="widget_ripple">#14000000</color>
+</resources>

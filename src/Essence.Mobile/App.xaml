@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Application xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="Essence.Mobile.App">
+    <Application.Resources>
+        <ResourceDictionary>
+            <!-- Essence.UI's colors (essence.css), for the few native screens. -->
+            <Color x:Key="BgLight">#F2F0EA</Color>
+            <Color x:Key="BgDark">#1B1B1A</Color>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
