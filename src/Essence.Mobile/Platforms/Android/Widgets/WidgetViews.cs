@@ -22,14 +22,15 @@ internal static class WidgetViews
         (Resource.Id.row4, Resource.Id.row4_logo, Resource.Id.row4_monogram, Resource.Id.row4_name, Resource.Id.row4_detail, Resource.Id.row4_price),
     ];
 
-    public static RemoteViews Build(Context context, WidgetKind kind, WidgetView view)
+    /// <param name="locate">↻ finds where you are before refreshing (<see cref="WidgetLocationService"/>).</param>
+    public static RemoteViews Build(Context context, WidgetKind kind, WidgetView view, bool locate)
     {
         var views = new RemoteViews(context.PackageName, Resource.Layout.widget_essence);
         views.SetTextViewText(Resource.Id.title, view.Title);
         views.SetTextViewText(Resource.Id.fuel, view.Fuel);
         views.SetTextViewText(Resource.Id.updated, view.Updated);
         views.SetOnClickPendingIntent(Resource.Id.widget_root, Open(context, view.Tap));
-        views.SetOnClickPendingIntent(Resource.Id.refresh, Refresh(context, kind));
+        views.SetOnClickPendingIntent(Resource.Id.refresh, locate ? Locate(context, kind) : Refresh(context, kind));
 
         for (var i = 0; i < Rows; i++)
         {
@@ -70,6 +71,13 @@ internal static class WidgetViews
             .AddFlags(ActivityFlags.NewTask | ActivityFlags.ClearTop | ActivityFlags.SingleTop)!;
         return PendingIntent.GetActivity(context, 0, intent, PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent)!;
     }
+
+    /// <summary>
+    /// Starts the location service itself, not through a broadcast: Android lets a foreground service use the location when a
+    /// tap on a widget starts it, an exemption a hop through the app may lose.
+    /// </summary>
+    private static PendingIntent Locate(Context context, WidgetKind kind) => PendingIntent.GetForegroundService(
+        context, (int)kind, new Intent(context, typeof(WidgetLocationService)), PendingIntentFlags.Immutable | PendingIntentFlags.UpdateCurrent)!;
 
     private static PendingIntent Refresh(Context context, WidgetKind kind)
     {

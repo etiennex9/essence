@@ -889,7 +889,7 @@
     <value>Choose a place for this widget: touch and hold it.</value>
   </data>
   <data name="WidgetNoLocationYet" xml:space="preserve">
-    <value>Open Essence once so it knows where you are.</value>
+    <value>Tap ↻ to find where you are.</value>
   </data>
   <data name="WidgetNoFavorites" xml:space="preserve">
     <value>Star stations in Essence to see their prices here.</value>
@@ -918,12 +918,6 @@
   <data name="WidgetTo" xml:space="preserve">
     <value>To</value>
   </data>
-  <data name="WidgetLastUsedOption" xml:space="preserve">
-    <value>Where I last used Essence</value>
-  </data>
-  <data name="WidgetLastUsedAgo" xml:space="preserve">
-    <value>Where I last used Essence ({0})</value>
-  </data>
   <data name="WidgetAdd" xml:space="preserve">
     <value>Done</value>
   </data>
@@ -935,6 +929,102 @@
   </data>
   <data name="WidgetSamePlace" xml:space="preserve">
     <value>Choose two different places.</value>
+  </data>
+  <data name="WidgetYouOption" xml:space="preserve">
+    <value>Where I am</value>
+  </data>
+  <data name="WidgetYouKept" xml:space="preserve">
+    <value>Kept up to date, even when Essence is closed.</value>
+  </data>
+  <data name="WidgetYouOnTap" xml:space="preserve">
+    <value>Updated when Essence finds where you are, or when you tap ↻.</value>
+  </data>
+  <data name="WidgetYouPaused" xml:space="preserve">
+    <value>Updated when Essence finds where you are, or when you tap ↻: following where you are is paused.</value>
+  </data>
+  <data name="WidgetYouWillAsk" xml:space="preserve">
+    <value>Essence will ask for your location.</value>
+  </data>
+  <data name="WidgetKeepUpToDate" xml:space="preserve">
+    <value>Keep it up to date</value>
+  </data>
+  <data name="WidgetLocatedAt" xml:space="preserve">
+    <value>Location as of {0}</value>
+  </data>
+  <data name="WidgetLocatedOn" xml:space="preserve">
+    <value>Location as of {0}</value>
+  </data>
+  <data name="WidgetApproximate" xml:space="preserve">
+    <value>approximate location</value>
+  </data>
+  <data name="WidgetLocationNotAllowed" xml:space="preserve">
+    <value>Open Essence and allow your location.</value>
+  </data>
+  <data name="WidgetAtDestination" xml:space="preserve">
+    <value>You’re there.</value>
+  </data>
+  <data name="WidgetFollowTitle" xml:space="preserve">
+    <value>Follow where I am</value>
+  </data>
+  <data name="WidgetFollowDisclosure" xml:space="preserve">
+    <value>Essence collects location data to keep the Best near you and Best on the way widgets up to date with where you are, even when the app is closed or not in use.</value>
+  </data>
+  <data name="WidgetFollowHow" xml:space="preserve">
+    <value>It checks about every 30 minutes, and sooner when your phone notices you’ve moved about 1 km or more, using little battery.</value>
+  </data>
+  <data name="WidgetFollowPrivacy" xml:space="preserve">
+    <value>Your location is sent only to your Essence server, to rank the stations around you.</value>
+  </data>
+  <data name="WidgetFollowStep1" xml:space="preserve">
+    <value>First, allow Essence to use your location.</value>
+  </data>
+  <data name="WidgetFollowAllowLocation" xml:space="preserve">
+    <value>Allow location</value>
+  </data>
+  <data name="WidgetFollowStep2" xml:space="preserve">
+    <value>On the next screen, choose “{0}”.</value>
+  </data>
+  <data name="WidgetFollowAllTheTime" xml:space="preserve">
+    <value>Allow all the time</value>
+  </data>
+  <data name="WidgetFollowTurnOn" xml:space="preserve">
+    <value>Turn on</value>
+  </data>
+  <data name="WidgetFollowOpenSettings" xml:space="preserve">
+    <value>Open settings</value>
+  </data>
+  <data name="WidgetFollowNotNow" xml:space="preserve">
+    <value>Not now</value>
+  </data>
+  <data name="WidgetFollowOn" xml:space="preserve">
+    <value>The widgets follow where you are.</value>
+  </data>
+  <data name="WidgetFollowPaused" xml:space="preserve">
+    <value>Paused: Essence can’t use your location all the time anymore.</value>
+  </data>
+  <data name="WidgetFollowTurnOff" xml:space="preserve">
+    <value>Turn off</value>
+  </data>
+  <data name="WidgetFollowApproximate" xml:space="preserve">
+    <value>Your location is approximate, so the widgets rank from within about 2 km. Precise location is a choice in settings.</value>
+  </data>
+  <data name="WidgetFollowSamsung" xml:space="preserve">
+    <value>On Samsung phones, add Essence to Never sleeping apps so it can keep the widgets up to date.</value>
+  </data>
+  <data name="WidgetFollowSamsungOpen" xml:space="preserve">
+    <value>Never sleeping apps</value>
+  </data>
+  <data name="AppWidgetsFollow" xml:space="preserve">
+    <value>Widgets follow where you are: {0}</value>
+  </data>
+  <data name="AppWidgetsFollowOn" xml:space="preserve">
+    <value>on</value>
+  </data>
+  <data name="AppWidgetsFollowOff" xml:space="preserve">
+    <value>off</value>
+  </data>
+  <data name="AppWidgetsFollowPaused" xml:space="preserve">
+    <value>paused</value>
   </data>
   <data name="ServerErrorTooOld" xml:space="preserve">
     <value>This server needs a newer version of the app.</value>

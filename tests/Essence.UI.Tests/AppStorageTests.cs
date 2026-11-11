@@ -20,6 +20,20 @@ public class AppStorageTests
     }
 
     [Fact]
+    public async Task An_older_fix_never_replaces_a_newer_one()
+    {
+        var preferences = new MemoryPreferences();
+        var at = new DateTimeOffset(2026, 11, 8, 9, 30, 0, TimeSpan.Zero);
+        var newer = new LastFix(45.5, -73.5, 20, at);
+
+        Assert.True(await LastLocation.WriteIfNewerAsync(preferences, newer));
+        Assert.False(await LastLocation.WriteIfNewerAsync(preferences, newer with { Latitude = 46, At = at.AddMinutes(-1) }));
+        Assert.True(await LastLocation.WriteIfNewerAsync(preferences, newer with { Latitude = 47, At = at.AddMinutes(1) }));
+
+        Assert.Equal(47, (await LastLocation.ReadAsync(preferences))!.Latitude);
+    }
+
+    [Fact]
     public async Task A_damaged_last_location_reads_as_none()
     {
         var preferences = new MemoryPreferences();

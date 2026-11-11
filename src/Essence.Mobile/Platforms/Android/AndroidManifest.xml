@@ -3,7 +3,11 @@
     <application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true"></application>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- While the app is in use only: the widgets rank from where it was last used, never asking in the background. -->
+    <!-- While the app is in use, and for a moment after ↻ on a widget (a location foreground service, WidgetLocation.cs). "All
+         the time" is only asked for when the user turns on Follow where I am, and only in builds that may
+         (EssenceBackgroundLocation adds ACCESS_BACKGROUND_LOCATION). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 </manifest>

@@ -16,6 +16,9 @@ public sealed class WidgetFeedsTests : IDisposable
     private static readonly GeoPoint HomePoint = new(45.5017, -73.5673);
     private static readonly GeoPoint WorkPoint = new(45.4995, -73.5662);
 
+    /// <summary>About 6 km from Home and Work.</summary>
+    private static readonly GeoPoint FarPoint = new(45.5500, -73.6100);
+
     private readonly CultureInfo _culture = CultureInfo.CurrentCulture;
     private readonly CultureInfo _uiCulture = CultureInfo.CurrentUICulture;
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 11, 8, 13, 10, 0, TimeSpan.Zero));
@@ -64,10 +67,75 @@ public sealed class WidgetFeedsTests : IDisposable
         await LastLocation.WriteAsync(_preferences, new LastFix(HomePoint.Latitude, HomePoint.Longitude, 20, _time.GetUtcNow()));
         Answer(BestPath(HomePoint), Best(pick: 1, reference: 1, "0"));
 
-        var view = await _feeds.BestNearAsync(WidgetPlaceRef.LastUsed, TestContext.Current.CancellationToken);
+        var view = await _feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
 
         Assert.Equal("Best near you", view.Title);
         Assert.Equal("1.0 km · Closest", Assert.Single(view.Lines).Detail);
+        // A fresh, precise fix: nothing to say about it.
+        Assert.Equal(Updated(), view.Updated);
+    }
+
+    [Fact]
+    public async Task An_old_fix_says_when_it_was_taken()
+    {
+        var at = _time.GetUtcNow().AddHours(-2);
+        await LastLocation.WriteAsync(_preferences, new LastFix(HomePoint.Latitude, HomePoint.Longitude, 20, at));
+        Answer(BestPath(HomePoint), Best(pick: 1, reference: 1, "0"));
+
+        var view = await _feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
+
+        Assert.Equal($"{Updated()} · Location as of {TimeOfDay(at)}", view.Updated);
+    }
+
+    [Fact]
+    public async Task A_fix_from_another_day_gives_its_day()
+    {
+        var at = _time.GetUtcNow().AddDays(-2);
+        await LastLocation.WriteAsync(_preferences, new LastFix(HomePoint.Latitude, HomePoint.Longitude, 20, at));
+        Answer(BestPath(HomePoint), Best(pick: 1, reference: 1, "0"));
+
+        var view = await _feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
+
+        Assert.Equal($"{Updated()} · Location as of {Formatting.MonthDay(at, _time.LocalTimeZone, CultureInfo.CurrentCulture)}", view.Updated);
+    }
+
+    [Fact]
+    public async Task An_approximate_fix_says_so()
+    {
+        await LastLocation.WriteAsync(_preferences, new LastFix(HomePoint.Latitude, HomePoint.Longitude, 2500, _time.GetUtcNow().AddMinutes(-5)));
+        Answer(BestPath(HomePoint), Best(pick: 1, reference: 1, "0"));
+
+        var view = await _feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
+
+        Assert.Equal($"{Updated()} · approximate location", view.Updated);
+    }
+
+    [Fact]
+    public async Task A_saved_place_says_nothing_of_the_location()
+    {
+        await LastLocation.WriteAsync(_preferences, new LastFix(FarPoint.Latitude, FarPoint.Longitude, 2500, _time.GetUtcNow().AddDays(-3)));
+        await new SavedPlaces(_preferences).SaveAsync(PlaceKind.Home, HomePoint);
+        Answer(BestPath(HomePoint), Best(pick: 1, reference: 1, "0"));
+
+        var view = await _feeds.BestNearAsync(new WidgetPlaceRef(PlaceKind.Home), TestContext.Current.CancellationToken);
+
+        Assert.Equal(Updated(), view.Updated);
+    }
+
+    [Fact]
+    public async Task Without_the_permission_a_kept_fix_still_ranks_and_without_one_it_asks_for_it()
+    {
+        var feeds = FeedsWith(WidgetLocationAccess.NotAllowed);
+
+        var nowhere = await feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
+        Assert.Equal((WidgetProblem.LocationNotAllowed, "Open Essence and allow your location."), (nowhere.Problem, nowhere.Message));
+        Assert.Empty(_http.Requests);
+
+        await LastLocation.WriteAsync(_preferences, new LastFix(HomePoint.Latitude, HomePoint.Longitude, 20, _time.GetUtcNow().AddHours(-1)));
+        Answer(BestPath(HomePoint), Best(pick: 1, reference: 1, "0"));
+        var kept = await feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
+        Assert.Equal(WidgetProblem.None, kept.Problem);
+        Assert.Contains("Location as of", kept.Updated);
     }
 
     [Fact]
@@ -90,11 +158,10 @@ public sealed class WidgetFeedsTests : IDisposable
         await new SavedPlaces(_preferences).RemoveAsync(removed.Id);
 
         var gone = await _feeds.BestNearAsync(new WidgetPlaceRef(PlaceKind.Other, removed.Id), TestContext.Current.CancellationToken);
-        var nowhere = await _feeds.BestNearAsync(WidgetPlaceRef.LastUsed, TestContext.Current.CancellationToken);
+        var nowhere = await _feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
 
         Assert.Equal(WidgetProblem.NoPlace, gone.Problem);
-        Assert.Equal(WidgetProblem.NoLocationYet, nowhere.Problem);
-        Assert.NotEmpty(nowhere.Message!);
+        Assert.Equal((WidgetProblem.NoLocationYet, "Tap ↻ to find where you are."), (nowhere.Problem, nowhere.Message));
         Assert.Empty(_http.Requests);
     }
 
@@ -272,15 +339,44 @@ public sealed class WidgetFeedsTests : IDisposable
     }
 
     [Fact]
-    public async Task A_route_from_where_the_app_was_last_used_starts_from_where_the_user_is()
+    public async Task A_route_from_where_you_are_starts_from_where_the_user_is()
     {
+        var at = _time.GetUtcNow().AddHours(-1);
+        await LastLocation.WriteAsync(_preferences, new LastFix(FarPoint.Latitude, FarPoint.Longitude, 20, at));
+        await new SavedPlaces(_preferences).SaveAsync(PlaceKind.Home, HomePoint);
+        Answer(TripPath(FarPoint, HomePoint), Trip(pick: 3, reference: 3, detourKm: 0.4, detourMin: 1, saves: "0"));
+
+        var view = await _feeds.TripAsync(WidgetPlaceRef.You, new WidgetPlaceRef(PlaceKind.Home), TestContext.Current.CancellationToken);
+
+        Assert.Equal("you → Home", view.Title);
+        Assert.Equal("/?to=home&pick=3", Assert.Single(view.Lines).Tap);
+        Assert.Equal($"{Updated()} · Location as of {TimeOfDay(at)}", view.Updated);
+    }
+
+    [Fact]
+    public async Task A_route_from_where_you_are_at_its_destination_is_there_without_asking()
+    {
+        // Work is about 250 m from Home.
         await LastLocation.WriteAsync(_preferences, new LastFix(WorkPoint.Latitude, WorkPoint.Longitude, 20, _time.GetUtcNow()));
         await new SavedPlaces(_preferences).SaveAsync(PlaceKind.Home, HomePoint);
-        Answer(TripPath(WorkPoint, HomePoint), Trip(pick: 3, reference: 3, detourKm: 0.4, detourMin: 1, saves: "0"));
 
-        var view = await _feeds.TripAsync(WidgetPlaceRef.LastUsed, new WidgetPlaceRef(PlaceKind.Home), TestContext.Current.CancellationToken);
+        var view = await _feeds.TripAsync(WidgetPlaceRef.You, new WidgetPlaceRef(PlaceKind.Home), TestContext.Current.CancellationToken);
 
-        Assert.Equal("/?to=home&pick=3", Assert.Single(view.Lines).Tap);
+        Assert.Equal((WidgetProblem.AtDestination, "You’re there.", "/?view=best"), (view.Problem, view.Message, view.Tap));
+        Assert.Empty(_http.Requests);
+    }
+
+    [Fact]
+    public async Task A_route_between_two_saved_places_close_together_is_still_asked()
+    {
+        var places = new SavedPlaces(_preferences);
+        await places.SaveAsync(PlaceKind.Home, HomePoint);
+        await places.SaveAsync(PlaceKind.Work, WorkPoint);
+        Answer(TripPath(HomePoint, WorkPoint), Trip(pick: 3, reference: 3, detourKm: 0.4, detourMin: 1, saves: "0"));
+
+        var view = await _feeds.TripAsync(new WidgetPlaceRef(PlaceKind.Home), new WidgetPlaceRef(PlaceKind.Work), TestContext.Current.CancellationToken);
+
+        Assert.Equal(WidgetProblem.None, view.Problem);
     }
 
     [Fact]
@@ -316,10 +412,53 @@ public sealed class WidgetFeedsTests : IDisposable
         var feeds = new WidgetFeeds(_preferences, new EssenceApiClient(new HttpClient(_http)), l, _time);
 
         Assert.Equal("Maison", feeds.PlaceName(new WidgetPlaceRef(PlaceKind.Home), new SavedPlaces(_preferences)));
-        Assert.Equal("Ouvrez Essence une fois pour qu’il sache où vous êtes.", feeds.MessageFor(WidgetProblem.NoLocationYet, "Régulier"));
+        Assert.Equal("Touchez ↻ pour trouver où vous êtes.", feeds.MessageFor(WidgetProblem.NoLocationYet, "Régulier"));
+        Assert.Equal("Vous y êtes.", feeds.MessageFor(WidgetProblem.AtDestination, "Régulier"));
+    }
+
+    [Fact]
+    public async Task French_widgets_give_the_fix_s_time_or_day_in_french()
+    {
+        CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");
+        var feeds = FeedsWith(WidgetLocationAccess.WhileInUse);
+        var earlier = _time.GetUtcNow().AddHours(-2);
+        var yesterday = _time.GetUtcNow().AddDays(-1);
+
+        Answer(BestPath(HomePoint), Best(pick: 1, reference: 1, "0"));
+        await LastLocation.WriteAsync(_preferences, new LastFix(HomePoint.Latitude, HomePoint.Longitude, 20, earlier));
+        var today = await feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
+        Answer(BestPath(HomePoint), Best(pick: 1, reference: 1, "0"));
+        await LastLocation.WriteAsync(_preferences, new LastFix(HomePoint.Latitude, HomePoint.Longitude, 2500, yesterday));
+        var before = await feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
+
+        Assert.EndsWith($" · Position à {TimeOfDay(earlier)}", today.Updated);
+        Assert.EndsWith($" · Position du {Formatting.MonthDay(yesterday, _time.LocalTimeZone, CultureInfo.CurrentCulture)} · position approximative", before.Updated);
+    }
+
+    [Fact]
+    public async Task Where_you_are_is_kept_as_an_empty_place_as_it_always_was()
+    {
+        await _preferences.SetAsync(WidgetConfigs.KeyFor(5), """{"origin":{"kind":null,"placeId":null},"from":{},"to":null}""");
+
+        var config = await WidgetConfigs.ReadAsync(_preferences, 5);
+
+        Assert.True(config.Origin!.IsYou);
+        Assert.True(config.From!.IsYou);
+        Assert.Null(config.To);
     }
 
     private void Answer(string pathAndQuery, HttpResponseMessage response) => _answers[pathAndQuery] = response;
+
+    private WidgetFeeds FeedsWith(WidgetLocationAccess access) => new(
+        _preferences,
+        new EssenceApiClient(new HttpClient(_http) { BaseAddress = new Uri("http://api.test/") }),
+        new StringLocalizer<Strings>(new ResourceManagerStringLocalizerFactory(Options.Create(new LocalizationOptions()), NullLoggerFactory.Instance)),
+        _time,
+        access);
+
+    private string TimeOfDay(DateTimeOffset at) => Formatting.TimeOfDay(at, _time.LocalTimeZone, CultureInfo.CurrentCulture);
+
+    private string Updated() => $"Updated {TimeOfDay(_time.GetUtcNow())}";
 
     private static string BestPath(GeoPoint at) => string.Create(
         CultureInfo.InvariantCulture,

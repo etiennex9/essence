@@ -17,6 +17,7 @@ public partial class App : Application
     private readonly DeepLinks _links;
     private readonly AppUpdateCheck _updates;
     private readonly IStringLocalizer<Strings> _l;
+    private readonly MobileAppHost _host;
 
     /// <param name="host">Taken here so it listens for a server's 426 from the start, before About asks for it.</param>
     public App(ServerSettings servers, NativeSessionStore session, DeepLinks links, AppUpdateCheck updates, IStringLocalizer<Strings> l, MobileAppHost host)
@@ -27,6 +28,7 @@ public partial class App : Application
         _links = links;
         _updates = updates;
         _l = l;
+        _host = host;
         RequestedThemeChanged += (_, _) => SystemBars.Update();
     }
 
@@ -46,6 +48,7 @@ public partial class App : Application
         {
             MapHost.Current?.OnAppResumed();
             _ = _updates.CheckAsync();
+            _host.OnResumed();
         };
         // Back on the map's first page closes the activity, but not the process: the next launch makes a new window, and the
         // old page would keep its WebView and scope alive (and its timers) for as long as the process lives.

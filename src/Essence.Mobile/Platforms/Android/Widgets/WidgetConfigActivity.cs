@@ -1,12 +1,13 @@
 using Android.App;
 using Android.Appwidget;
 using Android.Content;
+using Android.Content.PM;
 using Android.OS;
 using Android.Views;
 using Android.Widget;
 using AndroidX.AppCompat.App;
+using AndroidX.Core.App;
 using Essence.Mobile.Services;
-using Essence.UI.App;
 using Essence.UI.App.Widgets;
 using Essence.UI.Resources;
 using Essence.UI.Services;
@@ -19,7 +20,9 @@ namespace Essence.Mobile.Widgets;
 
 /// <summary>
 /// A widget's settings, when it's added (Android 12 and later skip it: the defaults apply, and touching and holding the widget
-/// reopens it): where Best near a place ranks from, or a frequent route's two places. The favorites widget has none.
+/// reopens it): where Best near a place ranks from, or a frequent route's two places. The favorites widget has none. With
+/// Where I am chosen, it says how up to date that is, offers to keep it so (<see cref="WidgetLocationActivity"/>), and asks for
+/// the location when the app has never had it.
 /// </summary>
 [Activity(
     Name = "io.github.etiennex9.essence.widgets.WidgetConfigActivity",
@@ -29,11 +32,17 @@ namespace Essence.Mobile.Widgets;
 [IntentFilter([AppWidgetManager.ActionAppwidgetConfigure])]
 public sealed class WidgetConfigActivity : AppCompatActivity
 {
+    private const int AskLocation = 1;
+
     private int _widgetId = AppWidgetManager.InvalidAppwidgetId;
+    private WidgetKind _kind;
     private IStringLocalizer<Strings> _l = null!;
     private IPreferenceStore _preferences = null!;
     private readonly List<(RadioGroup Group, Dictionary<int, WidgetPlaceRef> Choices)> _groups = [];
     private TextView? _error;
+    private LinearLayout? _youNote;
+    private TextView? _youState;
+    private Android.Widget.Button? _keepUpToDate;
 
     protected override void OnCreate(Bundle? savedInstanceState)
     {
@@ -48,28 +57,24 @@ public sealed class WidgetConfigActivity : AppCompatActivity
             return;
         }
 
+        _kind = kind.Value;
         AppCulture.Apply(this);
         var services = IPlatformApplication.Current!.Services;
         _l = services.GetRequiredService<IStringLocalizer<Strings>>();
         _preferences = services.GetRequiredService<IPreferenceStore>();
-        var time = services.GetRequiredService<TimeProvider>();
         var places = new SavedPlaces(_preferences);
         places.LoadAsync().GetAwaiter().GetResult();
         var config = WidgetConfigs.ReadAsync(_preferences, _widgetId).AsTask().GetAwaiter().GetResult();
-        var lastFix = LastLocation.ReadAsync(_preferences).AsTask().GetAwaiter().GetResult();
 
         var root = new LinearLayout(this) { Orientation = Orientation.Vertical };
         root.SetPadding(Dp(24), Dp(24), Dp(24), Dp(24));
-        root.SetFitsSystemWindows(true);
         root.AddView(Text(kind == WidgetKind.BestNear ? _l["BestNearYou"] : _l["BestOnTheWay"], 22, bold: true));
 
-        var lastUsed = new Choice(
-            lastFix is null ? _l["WidgetLastUsedOption"] : _l["WidgetLastUsedAgo", Ago(lastFix.At, time.GetUtcNow())],
-            WidgetPlaceRef.LastUsed);
+        var you = new Choice(_l["WidgetYouOption"], WidgetPlaceRef.You);
         var saved = places.Places.Select(p => new Choice(PlaceName(p), WidgetPlaceRef.For(p))).ToList();
         if (kind == WidgetKind.BestNear)
         {
-            AddGroup(root, _l["WidgetRankFrom"], [.. saved, lastUsed], config.Origin ?? WidgetRefresher.DefaultOrigin(places));
+            AddGroup(root, _l["WidgetRankFrom"], [you, .. saved], config.Origin ?? WidgetRefresher.DefaultOrigin);
         }
         else if (saved.Count == 0)
         {
@@ -81,30 +86,104 @@ public sealed class WidgetConfigActivity : AppCompatActivity
         else
         {
             var (from, to) = WidgetRefresher.DefaultRoute(config, places);
-            AddGroup(root, _l["WidgetFrom"], [.. saved, lastUsed], from ?? saved[0].Place);
+            AddGroup(root, _l["WidgetFrom"], [you, .. saved], from ?? saved[0].Place);
             AddGroup(root, _l["WidgetTo"], saved, to ?? saved[^1].Place);
         }
 
+        root.AddView(YouNote());
         _error = Text("", 15);
         _error.Visibility = ViewStates.Gone;
         root.AddView(_error);
-        root.AddView(ActionButton(_l["WidgetAdd"], () => Save(kind.Value)));
+        root.AddView(ActionButton(_l["WidgetAdd"], Save));
         SetContentView(new ScrollView(this) { FillViewport = true }.With(root));
     }
 
-    private void Save(WidgetKind kind)
+    /// <summary>Back from turning Follow on, or from Android's settings: the note says what's true now.</summary>
+    protected override void OnResume()
     {
-        var chosen = _groups.Select(g => g.Choices.GetValueOrDefault(g.Group.CheckedRadioButtonId)).ToList();
-        var config = kind == WidgetKind.BestNear
-            ? new WidgetConfig(Origin: chosen[0])
-            : new WidgetConfig(From: chosen[0], To: chosen[1]);
-        if (kind == WidgetKind.Trip && config.From == config.To)
+        base.OnResume();
+        UpdateYouNote();
+    }
+
+    /// <summary>Under the choices, while Where I am is chosen: how up to date it is, and the way to keep it so.</summary>
+    private LinearLayout YouNote()
+    {
+        _youNote = new LinearLayout(this) { Orientation = Orientation.Vertical };
+        _youNote.SetPadding(0, Dp(12), 0, 0);
+        _youState = Text("", 15);
+        _youNote.AddView(_youState);
+        _keepUpToDate = ActionButton(_l["WidgetKeepUpToDate"], () => StartActivity(new Intent(this, typeof(WidgetLocationActivity))));
+        ((LinearLayout.LayoutParams)_keepUpToDate.LayoutParameters!).TopMargin = Dp(8);
+        _youNote.AddView(_keepUpToDate);
+        foreach (var (group, _) in _groups)
+        {
+            group.CheckedChange += (_, _) => UpdateYouNote();
+        }
+
+        return _youNote;
+    }
+
+    private void UpdateYouNote()
+    {
+        if (_youNote is null || _youState is null || _keepUpToDate is null)
+        {
+            return;
+        }
+
+        _youNote.Visibility = Chosen().Any(c => c?.IsYou == true) ? ViewStates.Visible : ViewStates.Gone;
+        var access = WidgetLocator.Access(this);
+        _youState.Text = access switch
+        {
+            WidgetLocationAccess.AllTheTime => _l["WidgetYouKept"],
+            WidgetLocationAccess.NotAllowed => _l["WidgetYouWillAsk"],
+            _ when WidgetLocator.IsFollowOn() => _l["WidgetYouPaused"],
+            _ => _l["WidgetYouOnTap"],
+        };
+        _keepUpToDate.Visibility = BuildInfo.Current.BackgroundLocation && access != WidgetLocationAccess.AllTheTime
+            ? ViewStates.Visible
+            : ViewStates.Gone;
+    }
+
+    private List<WidgetPlaceRef?> Chosen() => [.. _groups.Select(g => g.Choices.GetValueOrDefault(g.Group.CheckedRadioButtonId))];
+
+    /// <summary>
+    /// Saves the choices; with Where I am chosen and no location allowed yet, asks for it first (and saves whatever the
+    /// answer: the widget then says to allow it).
+    /// </summary>
+    private void Save()
+    {
+        var chosen = Chosen();
+        if (_kind == WidgetKind.Trip && chosen[0] == chosen[1])
         {
             _error!.Text = _l["WidgetSamePlace"];
             _error.Visibility = ViewStates.Visible;
             return;
         }
 
+        if (chosen.Any(c => c?.IsYou == true) && !WidgetLocator.HasLocation(this))
+        {
+            ActivityCompat.RequestPermissions(
+                this, [Android.Manifest.Permission.AccessCoarseLocation, Android.Manifest.Permission.AccessFineLocation], AskLocation);
+            return;
+        }
+
+        SaveAndClose(chosen);
+    }
+
+    public override void OnRequestPermissionsResult(int requestCode, string[] permissions, Permission[] grantResults)
+    {
+        base.OnRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == AskLocation)
+        {
+            SaveAndClose(Chosen());
+        }
+    }
+
+    private void SaveAndClose(List<WidgetPlaceRef?> chosen)
+    {
+        var config = _kind == WidgetKind.BestNear
+            ? new WidgetConfig(Origin: chosen[0])
+            : new WidgetConfig(From: chosen[0], To: chosen[1]);
         WidgetConfigs.WriteAsync(_preferences, _widgetId, config).AsTask().GetAwaiter().GetResult();
         SetResult(Result.Ok, ResultIntent());
         WidgetUpdates.Schedule(this);
@@ -161,18 +240,6 @@ public sealed class WidgetConfigActivity : AppCompatActivity
         _ => string.IsNullOrEmpty(place.Name) ? place.Address ?? _l["WidgetPlace"] : place.Name,
     };
 
-    private string Ago(DateTimeOffset when, DateTimeOffset now)
-    {
-        var (unit, value) = Formatting.Ago(now - when);
-        return unit switch
-        {
-            AgoUnit.JustNow => _l["AgoJustNow"],
-            AgoUnit.Minutes => _l["AgoMinutes", value],
-            AgoUnit.Hours => _l["AgoHours", value],
-            _ => _l["AgoDays", value],
-        };
-    }
-
     private TextView Text(string text, float size, bool bold = false)
     {
         var view = new TextView(this) { Text = text, TextSize = size };
@@ -202,8 +269,13 @@ public sealed class WidgetConfigActivity : AppCompatActivity
 
 internal static class ViewExtensions
 {
+    /// <summary>
+    /// The screen's scrolling content, kept clear of the system bars: the scroll view takes their insets as its padding, which
+    /// would replace the content's own margins if the content took them.
+    /// </summary>
     public static ScrollView With(this ScrollView scroll, View child)
     {
+        scroll.SetFitsSystemWindows(true);
         scroll.AddView(child);
         return scroll;
     }

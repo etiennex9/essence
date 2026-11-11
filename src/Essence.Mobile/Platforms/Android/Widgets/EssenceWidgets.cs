@@ -53,6 +53,12 @@ public abstract class EssenceWidget : AppWidgetProvider
             Preferences.Default.Remove(WidgetConfigs.KeyFor(id));
             Preferences.Default.Remove(WidgetViewCache.KeyFor(id));
         }
+
+        // The movement trigger stops with the last widget that followed (the refresh decides).
+        if (context is not null)
+        {
+            WidgetUpdates.RefreshNow(context);
+        }
     }
 
     /// <summary>Restored from a backup, widgets get new ids: their settings follow them.</summary>

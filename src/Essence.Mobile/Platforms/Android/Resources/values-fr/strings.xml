@@ -1,11 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="widget_best_label">Meilleur choix près d’un lieu</string>
-    <string name="widget_best_description">La station que choisit Meilleur choix près de vous, à partir de Maison, de Travail ou de là où vous avez utilisé Essence.</string>
+    <string name="widget_best_description">La station que choisit Meilleur choix près de vous, à partir de là où vous êtes, de Maison ou de Travail.</string>
     <string name="widget_favorites_label">Stations favorites</string>
     <string name="widget_favorites_description">Vos stations favorites, la moins chère en premier.</string>
     <string name="widget_trip_label">Meilleur choix en chemin</string>
     <string name="widget_trip_description">Où faire le plein sur un trajet fréquent, comme de la maison au travail.</string>
     <string name="widget_config_title">Réglages du widget</string>
     <string name="widget_refresh">Actualiser</string>
+    <string name="widget_follow_title">Suivre où je suis</string>
+    <string name="widget_location_channel">Position des widgets</string>
+    <string name="widget_location_finding">Recherche de votre position…</string>
 </resources>

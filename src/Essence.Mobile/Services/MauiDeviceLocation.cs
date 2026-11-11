@@ -5,8 +5,8 @@ namespace Essence.Mobile.Services;
 
 /// <summary>
 /// The device's location from Android, asking for the permission while the app is in use. (The WebView's own geolocation
-/// would wait for a permission answer the WebView never gives.) Each fix is also kept as <see cref="LastLocation"/>, for the
-/// widgets that rank from where the app was last used.
+/// would wait for a permission answer the WebView never gives.) Each fix is also kept as <see cref="LastLocation"/>, with the
+/// time the device took it, for the widgets that rank from where you are.
 /// </summary>
 public sealed class MauiDeviceLocation(MauiPreferenceStore preferences, TimeProvider time) : IDeviceLocation
 {
@@ -40,7 +40,9 @@ public sealed class MauiDeviceLocation(MauiPreferenceStore preferences, TimeProv
             }
 
             var accuracy = location.Accuracy ?? 0;
-            await LastLocation.WriteAsync(preferences, new LastFix(location.Latitude, location.Longitude, accuracy, time.GetUtcNow()));
+            // Never later than now: a fix stamped ahead (a GPS clock against a wrong phone clock) would hold off every next one.
+            var at = location.Timestamp < time.GetUtcNow() ? location.Timestamp : time.GetUtcNow();
+            await LastLocation.WriteIfNewerAsync(preferences, new LastFix(location.Latitude, location.Longitude, accuracy, at));
             return new DeviceLocation(LocationStatus.Ok, location.Latitude, location.Longitude, accuracy);
         }
         catch (PermissionException)
