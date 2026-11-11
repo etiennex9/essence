@@ -207,7 +207,7 @@ internal static class WidgetRefresher
 
             // ↻ locates where the widget follows you, unless there's no permission to (it opens the app then).
             var locate = followers.Contains(id) && access != WidgetLocationAccess.NotAllowed;
-            manager.UpdateAppWidget(id, WidgetViews.Build(context, kind, view, locate));
+            manager.UpdateAppWidget(id, WidgetViews.Build(context, kind, view, locate, manager.GetAppWidgetOptions(id)));
         }
 
         if (hasServer && followers.Count > 0 && rankedFrom is not null)

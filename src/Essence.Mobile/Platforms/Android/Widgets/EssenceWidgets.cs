@@ -1,6 +1,7 @@
 using Android.App;
 using Android.Appwidget;
 using Android.Content;
+using Android.OS;
 using Essence.UI.App.Widgets;
 
 namespace Essence.Mobile.Widgets;
@@ -41,6 +42,19 @@ public abstract class EssenceWidget : AppWidgetProvider
     {
         base.OnReceive(context, intent);
         if (context is not null && intent?.Action == RefreshAction)
+        {
+            WidgetUpdates.RefreshNow(context);
+        }
+    }
+
+    /// <summary>
+    /// Resized: before Android 12, the stations that fit are worked out from the size, so the widget is built again. From
+    /// Android 12 the launcher picks among the layouts it was given (WidgetViews), with nothing to do here.
+    /// </summary>
+    public override void OnAppWidgetOptionsChanged(Context? context, AppWidgetManager? appWidgetManager, int appWidgetId, Bundle? newOptions)
+    {
+        base.OnAppWidgetOptionsChanged(context, appWidgetManager, appWidgetId, newOptions);
+        if (context is not null && !OperatingSystem.IsAndroidVersionAtLeast(31))
         {
             WidgetUpdates.RefreshNow(context);
         }
