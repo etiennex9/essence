@@ -1,7 +1,8 @@
 # Builds the Android app (src/Essence.Mobile). A pull request that touches it gets an APK to try, kept 7 days. After each
-# Publish run that succeeded on main (for a push, or started by hand), and when started by hand on main, the app is built if
-# its inputs changed since the latest release (.github/scripts/select-android.sh), then released on GitHub: a signed APK on
-# the release of the day tag Publish set, where installed apps look for it (README → Versions → Android app releases).
+# Publish run that succeeded on main (for a push, or started by hand), the app is built if its inputs changed since the
+# latest release, other than through pull requests labelled "web only" (.github/scripts/select-android.sh); started by hand
+# on main, it's always built. Then it's released on GitHub: a signed APK on a release of its own, tagged
+# android-<version name>, where installed apps look for it (README → Versions → Android app releases).
 name: Android
 
 on:
@@ -17,8 +18,8 @@ on:
       - .github/workflows/android.yml
       - .github/scripts/select-android.sh
       - "!**.md"
-  # After Publish rather than on push: by then its tag job has set the day tag that dates the app and names its release,
-  # which the notes command needs. A Publish run started by hand on main runs that job too, so it counts like a push's:
+  # After Publish rather than on push: by then its tag job has set the day tag that dates the app, which the notes command
+  # and the version name need. A Publish run started by hand on main runs that job too, so it counts like a push's:
   # it's how main's tip gets its day tag after a push that started no Publish run (Markdown or docs/ only). Publish's pull
   # request runs, and its runs that failed, start this too: the jobs skip them.
   workflow_run:
@@ -87,19 +88,25 @@ jobs:
           overwrite: true
 
   # Whether to build: when the app's inputs changed since the commit the latest release was built from, which its notes
-  # record (<!-- essence-android-commit: … -->). Without a release to compare with, or on a manual run, it builds. Only for
-  # Publish runs on main that succeeded, for a push or started by hand: this run has the repository's secrets and checks
-  # out what that run built, and a pull request's Publish run is listed under main too when it comes from a fork's main.
-  # The concurrency group above repeats this condition.
+  # record (<!-- essence-android-commit: … -->), other than through pull requests labelled "web only", whose labels it
+  # reads. Without a release to compare with, or on a manual run, it builds. Only for Publish runs on main that succeeded,
+  # for a push or started by hand: this run has the repository's secrets and checks out what that run built, and a pull
+  # request's Publish run is listed under main too when it comes from a fork's main. The concurrency group above repeats
+  # this condition.
   changes:
     if: >-
       github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
       || (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
       && github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    # A job's permissions replace the workflow's, so contents: read is repeated.
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
       build: ${{ steps.select.outputs.build }}
       commit: ${{ steps.select.outputs.commit }}
+      last: ${{ steps.select.outputs.last }}
     steps:
       # The commit that Publish run built and tagged; a manual run takes main as it is, which needs its day tag too.
       - uses: actions/checkout@v7
@@ -122,20 +129,22 @@ jobs:
             echo "build=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
+          # Without a tag, gh release view shows the latest release; it fails when there's none. Its commit is also where
+          # the next release's notes start, a manual run's included.
+          notes=$(gh release view --json body --jq .body 2>/dev/null) || notes=""
+          last=$(grep -oE 'essence-android-commit: [0-9a-f]{40}' <<<"$notes" | head -n 1 | cut -d ' ' -f 2) || true
+          echo "last=$last" >> "$GITHUB_OUTPUT"
           range=""
           if [ "$EVENT" = workflow_run ]; then
-            # Without a tag, gh release view shows the latest release; it fails when there's none.
-            notes=$(gh release view --json body --jq .body 2>/dev/null) || notes=""
-            last=$(grep -oE 'essence-android-commit: [0-9a-f]{40}' <<<"$notes" | head -n 1 | cut -d ' ' -f 2) || true
             range="${last:+$last..HEAD}"
           fi
           # Assigned first: inside echo's arguments, the script failing would go unnoticed and read as "don't build".
-          build=$(bash .github/scripts/select-android.sh "$range")
+          build=$(bash .github/scripts/select-android.sh --labels "$range")
           echo "build=$build" >> "$GITHUB_OUTPUT"
 
-  # Builds the app with the release's version and changelog, which About shows, from the same notes command as the web
-  # image. Signed with the upload key when the ANDROID_KEYSTORE_BASE64 secret is set; without it (a fork), with a debug
-  # key, kept as the run's artifact and not released.
+  # Builds the app with the release's version name and code, and the changelog About shows, from the same notes command as
+  # the web image. Signed with the upload key when the ANDROID_KEYSTORE_BASE64 secret is set; without it (a fork), with a
+  # debug key, kept as the run's artifact and not released.
   build:
     needs: changes
     if: needs.changes.outputs.build == 'true'
@@ -146,6 +155,7 @@ jobs:
       signed: ${{ steps.version.outputs.signed }}
       day: ${{ steps.version.outputs.day }}
       name: ${{ steps.version.outputs.name }}
+      tag: ${{ steps.version.outputs.tag }}
       code: ${{ steps.version.outputs.code }}
     steps:
       # The whole history and its day tags, for the notes.
@@ -171,17 +181,29 @@ jobs:
       - run: |
           GITHUB_REF=refs/heads/main GITHUB_EVENT_NAME=push \
             dotnet run --project tools/Essence.Release --configuration Release -- notes "$RUNNER_TEMP/release"
-      # The version name is the release's day: 2026.11.07. The version code, which Android compares before it updates an app
-      # and the app's update check compares with essence-<code>.apk, is the minutes since 2026 began: it grows with every
-      # build, and stays under Android's limit (2100000000) for thousands of years.
+      # The version name is the release's day, numbered from the day's second release on: 2026.11.07, then 2026.11.07.2,
+      # 2026.11.07.3… Each release has a tag of its own, android-<name>, which the release job pushes, so the day's releases
+      # so far are its android- tags, and release runs wait for each other, so two can't take one number. A number whose
+      # release failed halfway keeps its tag: the next build takes the one after. The version code, which Android compares
+      # before it updates an app and the app's update check compares with essence-<code>.apk, is the minutes since 2026
+      # began: it grows with every build, and stays under Android's limit (2100000000) for thousands of years.
       - id: version
         run: |
           day=$(jq -r '.version // empty' "$RUNNER_TEMP/release/release.json")
           [ -n "$day" ] || { echo "::error::release.json has no version."; exit 1; }
+          base=${day//-/.}
+          # Assigned first, so that git ls-remote losing the network fails the step rather than give a taken number.
+          tags=$(git ls-remote --tags --refs origin "refs/tags/android-$base" "refs/tags/android-$base.*")
+          # [.] rather than \. for a dot: in double quotes, bash 5.2 drops a replacement's backslash. The day's first
+          # release, which has no number, counts as 1.
+          last=$(cut -f 2 <<<"$tags" | sed -nE "s#^refs/tags/android-${base//./[.]}([.]([0-9]+))?\$#\2#p" \
+            | sed 's/^$/1/' | sort -n | tail -n 1)
+          name=$base${last:+.$((last + 1))}
           code=$(( ($(date -u +%s) - $(date -u -d 2026-01-01T00:00:00Z +%s)) / 60 ))
           {
             echo "day=$day"
-            echo "name=${day//-/.}"
+            echo "name=$name"
+            echo "tag=android-$name"
             echo "code=$code"
             echo "signed=$HAS_KEY"
           } >> "$GITHUB_OUTPUT"
@@ -217,20 +239,36 @@ jobs:
             "-p:ApplicationDisplayVersion=$NAME" "-p:ApplicationVersion=$CODE" \
             "-p:EssenceDefaultServer=$DEFAULT_SERVER" "-p:EssenceRepository=$GITHUB_REPOSITORY" \
             "-p:EssenceReleaseNotesDir=$RUNNER_TEMP/release" "${signing[@]}"
-      # The release's notes: that day's changelog in English, then in French, and the commit, also as the marker that the
-      # next run's changes job compares with.
+      # The release's notes: what's new since the previous release in English, then in French, and the commit, also as the
+      # marker that the next run's changes job compares with. What's new is the changelog entries added since the commit the
+      # previous release was built from, so a day whose changes needed no release is in the next one's notes, and a day's
+      # second release doesn't repeat the first's. Without one to compare with (no release yet, or history rewritten),
+      # the release's day's entries.
       - env:
           DAY: ${{ steps.version.outputs.day }}
           NAME: ${{ steps.version.outputs.name }}
           CODE: ${{ steps.version.outputs.code }}
+          LAST: ${{ needs.changes.outputs.last }}
         run: |
           mkdir -p "$RUNNER_TEMP/out"
           cp "$RUNNER_TEMP"/publish/*-Signed.apk "$RUNNER_TEMP/out/essence-$CODE.apk"
           cp "$RUNNER_TEMP"/publish/*-Signed.aab "$RUNNER_TEMP/essence-$CODE.aab"
           commit=$(git rev-parse HEAD)
           month="$RUNNER_TEMP/release/changelog-${DAY::7}.json"
+          since=false
+          if [ -n "$LAST" ] && git merge-base --is-ancestor "$LAST" HEAD 2>/dev/null; then
+            since=true
+            # The folder's own *.json, as the notes command reads them. -z: otherwise git quotes a name with an accent.
+            added=$(git diff -z --diff-filter=A --no-renames --name-only "$LAST" HEAD -- ':(glob)changelog/*.json' | tr '\0' '\n')
+          fi
           entries() {
-            jq -r --arg day "$DAY" --arg lang "$1" '.versions[] | select(.date == $day) | .changes[] | "- " + .[$lang]' "$month" 2>/dev/null || true
+            if [ "$since" = true ]; then
+              while IFS= read -r file; do
+                [ -z "$file" ] || jq -r --arg lang "$1" '"- " + .[$lang]' "$file"
+              done <<<"$added"
+            else
+              jq -r --arg day "$DAY" --arg lang "$1" '.versions[] | select(.date == $day) | .changes[] | "- " + .[$lang]' "$month" 2>/dev/null || true
+            fi
           }
           en=$(entries en)
           fr=$(entries fr)
@@ -238,11 +276,11 @@ jobs:
             echo "Essence for Android $NAME (build $CODE). To install it, open \`essence-$CODE.apk\` on your phone."
             echo "Pour l’installer, ouvrez \`essence-$CODE.apk\` sur votre téléphone."
             echo
-            echo "**What's new on $DAY**"
+            echo "**What's new**"
             echo
             echo "${en:-- Fixes and changes behind the scenes.}"
             echo
-            echo "**Nouveautés du $DAY**"
+            echo "**Nouveautés**"
             echo
             echo "${fr:-- Corrections et changements en coulisses.}"
             echo
@@ -266,10 +304,13 @@ jobs:
           if-no-files-found: error
           overwrite: true
 
-  # Puts the APK on the GitHub Release of the day tag, created if needed and marked latest, which the app's update check
-  # reads. The tags are Publish's tag job's: this only uses them (--verify-tag), and moving a day's tag moves its release
-  # along, which is why immutable releases must stay off. A day built twice keeps one release: the newer APK replaces the
-  # older, and the notes are written again.
+  # Puts the APK on a GitHub Release of its own, marked latest, which the app's update check reads: its tag is
+  # android-<version name>, at the commit it was built from. A day built twice has two releases. The tag is pushed with
+  # the deploy key in the RELEASE_DEPLOY_KEY secret, as Publish's tag job pushes the day tags (README → Versions), since
+  # GitHub refuses the workflow's own token a tag at some commits that changed a workflow file; without the key, or when
+  # that push fails, with the token. It never moves a tag or replaces an APK. Run again after it failed halfway, it
+  # finishes the release, unless a newer build was released meanwhile: to recover, prefer Actions → Android → Run
+  # workflow, which builds main's tip.
   release:
     needs: [changes, build]
     if: needs.build.outputs.signed == 'true'
@@ -277,35 +318,83 @@ jobs:
     permissions:
       contents: write
     steps:
+      # With the key, origin is an SSH remote that git pushes the tag through.
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.changes.outputs.commit }}
+          ssh-key: ${{ secrets.RELEASE_DEPLOY_KEY }}
       - uses: actions/download-artifact@v8
         with:
           name: android-release
           path: ${{ runner.temp }}/out
-      # If main moved on during the build, the run for its new commit releases instead: each run releases only main's tip.
-      # git ls-remote failing fails the step (pipefail) rather than reading as main having moved.
+      # If main moved on during the build, the run for its new commit releases instead: each run releases only main's tip,
+      # and no tag is pushed, so that run's build takes the same number. git ls-remote failing fails the step (pipefail)
+      # rather than reading as main having moved.
       - env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           COMMIT: ${{ needs.changes.outputs.commit }}
-          TAG: v${{ needs.build.outputs.day }}
+          TAG: ${{ needs.build.outputs.tag }}
           TITLE: Essence for Android ${{ needs.build.outputs.name }}
+          CODE: ${{ needs.build.outputs.code }}
           APK: essence-${{ needs.build.outputs.code }}.apk
+          OVER_SSH: ${{ secrets.RELEASE_DEPLOY_KEY != '' }}
         run: |
+          [ -n "$TAG" ] && [ -n "$CODE" ] || { echo "::error::The build job gave no tag or version code."; exit 1; }
           main=$(git ls-remote origin refs/heads/main | cut -f 1)
           if [ "$main" != "$COMMIT" ]; then
             echo "::notice::main moved on from ${COMMIT::7} to ${main::7}: the run that follows Publish's for it releases the app. If that push changed only Markdown or docs/, Publish didn't run for it: start Publish by hand (Actions → Publish → Run workflow), and this follows."
             exit 0
           fi
+
+          # The newest build released so far, by its APK's number: a newer one would lose latest to this one, and this one
+          # is released already when this job runs again after it succeeded. Drafts aside: see the release below.
+          newest=$(gh api "repos/$GH_REPO/releases?per_page=100" \
+            --jq '[.[] | select(.draft | not) | .assets[].name | capture("^essence-(?<code>[0-9]+)[.]apk$").code | tonumber] | max // 0')
+          if [ "$newest" -gt "$CODE" ]; then
+            echo "::notice::A newer build ($newest) is released already, so this one ($CODE) isn't."
+            exit 0
+          elif [ "$newest" -eq "$CODE" ]; then
+            echo "::notice::Build $CODE is released already."
+            exit 0
+          fi
+
+          # The tag: pushed when it's new, kept when an earlier attempt at this build pushed it. git push without --force
+          # never moves a tag, and the API is only asked to create one.
+          at=$(git ls-remote origin "refs/tags/$TAG" | cut -f 1)
+          if [ -z "$at" ]; then
+            if [ "$OVER_SSH" = true ] && git push --quiet origin "$COMMIT:refs/tags/$TAG"; then
+              echo "Pushed $TAG at ${COMMIT::7} with the deploy key."
+            else
+              [ "$OVER_SSH" != true ] || echo "::warning::Couldn't push $TAG with the deploy key: trying the workflow's token."
+              gh api "repos/$GH_REPO/git/refs" -f ref="refs/tags/$TAG" -f sha="$COMMIT" >/dev/null
+              echo "Created $TAG at ${COMMIT::7} with the workflow's token."
+            fi
+          elif [ "$at" != "$COMMIT" ]; then
+            echo "::error::$TAG is already another commit's (${at::7}). Run Android by hand (Actions → Android → Run workflow): its build takes the next number."
+            exit 1
+          fi
+
+          # gh creates a release as a draft, uploads the APK, then publishes it: an attempt that failed in between left a
+          # draft, which this finishes. A release with another APK has taken the number.
           cd "$RUNNER_TEMP/out"
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "$APK" --clobber
-            for old in $(gh release view "$TAG" --json assets --jq '.assets[].name | select(test("^essence-[0-9]+\\.apk$"))'); do
-              [ "$old" = "$APK" ] || gh release delete-asset "$TAG" "$old" --yes
-            done
-            gh release edit "$TAG" --title "$TITLE" --notes-file release-notes.md --latest
+          if existing=$(gh release view "$TAG" --json isDraft,assets --jq '"\(.isDraft) " + ([.assets[].name] | join(" "))' 2>/dev/null); then
+            case " $existing " in
+              *" $APK "*) [ "${existing%% *}" = false ] || gh release edit "$TAG" --draft=false --latest ;;
+              *) echo "::error::$TAG's release holds another build. Run Android by hand (Actions → Android → Run workflow): its build takes the next number."
+                 exit 1 ;;
+            esac
           else
+            # Right after a push, GitHub's API may not show the tag yet, and --verify-tag would fail.
+            for attempt in 1 2 3 4 5 6; do
+              gh api "repos/$GH_REPO/git/ref/tags/$TAG" >/dev/null 2>&1 && break
+              [ "$attempt" != 6 ] || { echo "::error::GitHub doesn't show $TAG."; exit 1; }
+              sleep 5
+            done
             gh release create "$TAG" --verify-tag --latest --title "$TITLE" --notes-file release-notes.md "$APK"
+          fi
+
+          # Without latest, GitHub would pick the latest release by its commit's date: check that it took.
+          if [ "$(gh api "repos/$GH_REPO/releases/latest" --jq .tag_name)" != "$TAG" ]; then
+            gh release edit "$TAG" --latest
           fi

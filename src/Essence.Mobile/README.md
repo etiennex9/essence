@@ -136,13 +136,13 @@ The APK and the App Bundle land in `src/Essence.Mobile/bin/Release/net10.0-andro
 
 | Property | |
 |---|---|
-| `ApplicationDisplayVersion` | The version name: the day `notes` printed, with dots. |
+| `ApplicationDisplayVersion` | The version name: the day `notes` printed, with dots, and from that day's second release on, its number: `2026.11.07`, `2026.11.07.2`… About shows it when the version code is above 1. |
 | `ApplicationVersion` | The version code: minutes since 2026-01-01 00:00 UTC (`$(( ($(date -u +%s) - $(date -u -d 2026-01-01T00:00:00Z +%s)) / 60 ))`). Android updates an app only to a higher one. |
 | `EssenceDefaultServer` | Fills in the first launch's server. Empty by default; `http://localhost:8080/` in Debug. |
 | `EssenceRepository` | `owner/name` on GitHub, whose latest release the update check reads. Empty: no check. |
 | `EssenceUpdateCheck` | `false` turns the update check off; a version code of 1 never checks either. |
 | `EssenceBackgroundLocation` | `false` leaves *Allow all the time* out of the manifest, and Follow where I am out of the app (a Google Play build). `true` by default. |
-| `EssenceReleaseNotesDir` | The folder with `release.json` and `changelog-*.json` that About shows: `src/Essence.Mobile/release/` by default, ignored by git. Without them, About says *Development version*. |
+| `EssenceReleaseNotesDir` | The folder with `release.json` and `changelog-*.json` that About shows: `src/Essence.Mobile/release/` by default, ignored by git. Without them, About says *Development version*; with them and a version code of 1, it shows their day as the version. |
 
 The `notes` command takes its version from the first day tag containing HEAD, so run `git fetch --tags --force` first.
 `adb install -r <the APK>` puts the build on a phone; over an installed release, Android accepts it only when it's signed

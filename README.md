@@ -219,8 +219,8 @@ paths, parameters and answers, `src/Essence.Contracts`) only grows:
   are or leave them out, and don't fail.
 - **A breaking change** gets a new path, and the old one keeps answering as before while installed apps use it.
 - **To retire old apps**, the API can answer `426 Upgrade Required` to their `User-Agent`,
-  `Essence-Android/<version name> (<version code>)` (e.g. `Essence-Android/2026.11.07 (449482)`): the app then asks to be
-  updated.
+  `Essence-Android/<version name> (<version code>)` (e.g. `Essence-Android/2026.11.07.2 (449482)`): the app then asks to be
+  updated. Compare the version code, which grows with every build; a version name can have a fourth part.
 
 ## Deploy
 
@@ -367,7 +367,8 @@ settings** → **Change visibility**): the autodeploy reads digests anonymously.
 The app's version is a date: the day the newest change it was built from landed on `main`, counted in Québec time
 (America/Toronto), e.g. `2026-10-19`. Everything that lands on one day is one version. The button in the map's
 bottom-left corner shows the version and, under *What's new*, each version's changes, newest first; older months load as
-the list scrolls.
+the list scrolls. The Android app shows its own version name there instead, which numbers a day's second release and
+the next ones ([Android app releases](#android-app-releases)).
 
 **Adding an entry.** A change that users would notice adds a file to [changelog/](changelog/), named freely, with an
 English and a French sentence:
@@ -397,7 +398,8 @@ later run sets it, that day's entries are dated by the next tag.
 
 **The deploy key.** The job pushes the tags with an SSH deploy key, because GitHub refuses the workflow's own token a tag
 at some commits that changed a workflow file (`Resource not accessible by integration`). Without the key, or if a push
-with it fails, it falls back to that token. To set the key up, once:
+with it fails, it falls back to that token. The Android workflow pushes its releases' `android-*` tags the same way. To
+set the key up, once:
 
 1. Make a key pair without a passphrase, outside the repository:
    ```bash
@@ -462,22 +464,44 @@ needs Publish to have run for it. It builds only when the app's inputs changed s
 built from, which that release's notes record in a hidden `<!-- essence-android-commit: … -->` line: `src/Essence.Mobile`,
 `Essence.UI`, `Essence.Contracts`, the shared build files, or the workflow and its script, Markdown aside
 ([select-android.sh](.github/scripts/select-android.sh)). A change to the API alone doesn't rebuild the app. With no
-release yet, or run by hand, it builds. Only `main`'s tip is released: if `main` has moved on, before or during the build,
-the run after Publish's for the newer commit releases instead. A push of only Markdown or `docs/` starts no Publish run,
-though, so its commit has no day tag: run Publish by hand then (**Actions → Publish → Run workflow**), and Android follows.
+release yet, or run by hand, it builds, even with nothing changed: that's a new release. Only `main`'s tip is released: if
+`main` has moved on, before or during the build, the run after Publish's for the newer commit releases instead. A push of
+only Markdown or `docs/` starts no Publish run, though, so its commit has no day tag: run Publish by hand then
+(**Actions → Publish → Run workflow**), and Android follows. To recover from a release that failed, run Android by hand
+too, rather than **Re-run failed jobs** on a run that isn't the latest: a re-run waits in line and can push out the run
+for a newer commit.
 
-**What.** It runs `tools/Essence.Release notes` as the web image does, so About shows the same version and changelog. The
-release is the day tag's (`vYYYY-MM-DD`), marked latest, with the APK `essence-<version code>.apk` and notes that list that
-day's changelog in English and French. A day built twice keeps one release: the newer APK replaces the older. The workflow
-never creates or moves tags, which stay the `tag` job's. The Android App Bundle (the `.aab` Google Play takes) is only kept
-as the run's artifact, for 30 days.
+**Web-only changes.** `Essence.UI` is the web app's too, so a change that only matters on the web, such as a fix for one
+browser, still changes the app's inputs. Label its pull request **`web only`** before merging, and its changes don't count:
+when every change to the app's inputs since the latest release came through such pull requests, nothing is built, and
+the run's summary says which. The workflow walks `main`'s commits since the release's (first parents only, so a merge
+commit stands for its pull request) and reads each one's pull request's labels when the run starts, so add the label
+before Publish finishes; removing it later makes the next run count those changes again. The changes still go into the
+app at its next release. These still count, labelled or not: a change to the Android workflow or its script, a change to
+`src/Essence.Mobile` (with a warning), a commit GitHub can't say anything about, and in a rebase merge of several commits,
+all but the last. Pushes straight to `main`,
+which the ruleset blocks anyway, have no pull request to be labelled. Pull requests still get their APK to try: it checks
+that the shared code still builds for the app.
 
-**Version name and code.** The name is the day with dots: `2026.11.07`. The code is the minutes from 2026-01-01 00:00 UTC
-to the build, e.g. `449482`: it grows with every build, which Android requires to update an app. The app's update check
-reads the latest release and compares its APK's number with its own; About then offers the newer one, with a link to the
-release's page. Pull requests that touch the app get an APK in the run's artifacts, kept 7 days: version `0.0.0` (1), signed
-with a debug key, no server filled in, *Development version* in About, no update check. Android won't install it over a
-release, or a release over it, since their keys differ: uninstall first.
+**What.** It runs `tools/Essence.Release notes` as the web image does, so About shows the same changelog. Each build is a
+release of its own, marked latest, with the APK `essence-<version code>.apk`, tagged `android-<version name>` at the
+commit it was built from, and titled *Essence for Android* with the version name. The workflow pushes that tag with the
+deploy key ([Versions](#versions)) and never moves it, nor replaces a release's APK; the `v*` tags stay the `tag` job's.
+The notes list, in English and French, the changelog entries added since the previous release's commit, so a release
+after skipped web-only changes lists theirs too, and a day's second release doesn't repeat the first's. To take a
+release down, delete it but keep its tag, so that its number isn't given again. The first release, 2026-11-10's, has
+its tag moved to `android-2026.11.10`. The Android App Bundle (the `.aab` Google Play takes) is only kept as the run's
+artifact, for 30 days.
+
+**Version name and code.** The name is the release's day with dots, and from that day's second release on, its number:
+`2026.11.07`, then `2026.11.07.2`, `2026.11.07.3`… The workflow counts the day's `android-` tags, so a number whose
+release failed halfway is skipped. The code is the minutes from 2026-01-01 00:00 UTC to the build, e.g. `449482`: it grows
+with every build, which Android requires to update an app, and the release notes call it the build. About in the app
+shows the version name. The app's update check reads the latest release and compares its APK's number with its own;
+About then offers the newer one by its version name, with a link to the release's page. Pull requests that touch the app
+get an APK in the run's artifacts, kept 7 days: version `0.0.0` (1), signed with a debug key, no server filled in,
+*Development version* in About, no update check. Android won't install it over a release, or a release over it, since
+their keys differ: uninstall first.
 
 **Setting it up**, once:
 
@@ -505,14 +529,21 @@ release, or a release over it, since their keys differ: uninstall first.
    repository (`.gitignore` leaves out `*.jks` and `*.keystore`). **Losing it** means no update can be signed: every user
    would have to uninstall the app, losing what it saved, to install the next one. If the app ever goes on Google Play,
    this key becomes its upload key.
+5. Make the label that keeps a pull request out of the app's releases ([Web-only changes](#android-app-releases)). On
+   github.com, that's **Issues → Labels → New label**. Without it, every change to the app's inputs is released.
+   ```bash
+   gh label create "web only" --description "Changes only the web app: no Android release" --color 1D76DB
+   ```
 
 **Forks.** Without the `ANDROID_KEYSTORE_BASE64` secret, the workflow builds the APK with a debug key, keeps it as the run's
 artifact and releases nothing, with a notice in the run saying so. Without the `ESSENCE_DEFAULT_SERVER` secret, the first
 launch's server field is empty. An app checks for updates in the repository that built it, so a fork's follows the fork's
 releases.
 
-**Immutable releases stay off** (**Settings → General**, under **Releases**): an immutable release locks its tag and its
-files, while the `tag` job moves a day's tag each time `main` moves that day, and a second build that day replaces the APK.
+**Immutable releases are off** (**Settings → General**, under **Releases**). An immutable release locks its tag and its
+files, which the Android releases no longer need to change: their tags never move, and no APK is replaced. Turned on,
+they'd only apply to releases made after; a draft that a failed attempt left stays editable, and a deleted release's
+tag can't be used again, which the workflow never does anyway.
 
 ## Configuration
 

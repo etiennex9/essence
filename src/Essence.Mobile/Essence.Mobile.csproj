@@ -18,7 +18,7 @@
     <ApplicationTitle>Essence</ApplicationTitle>
     <!-- Permanent once the app is installed anywhere (and on Google Play): no domain in it. -->
     <ApplicationId>io.github.etiennex9.essence</ApplicationId>
-    <!-- CI sets both from the day tag and the time (README → Versions). -->
+    <!-- CI sets both: the name from the day tag and the day's release number, the code from the time (README → Versions). -->
     <ApplicationDisplayVersion>0.0.0</ApplicationDisplayVersion>
     <ApplicationVersion>1</ApplicationVersion>
   </PropertyGroup>

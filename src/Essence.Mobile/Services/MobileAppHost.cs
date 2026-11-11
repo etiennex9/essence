@@ -1,3 +1,4 @@
+using System.Globalization;
 using Essence.UI.App;
 using Essence.UI.Resources;
 using Microsoft.Extensions.Localization;
@@ -5,8 +6,8 @@ using Microsoft.Extensions.Localization;
 namespace Essence.Mobile.Services;
 
 /// <summary>
-/// What the app adds to Essence.UI's page (<see cref="IAppHost"/>): the server, newer builds, and whether the widgets follow
-/// where you are.
+/// What the app adds to Essence.UI's page (<see cref="IAppHost"/>): its version name, the server, newer builds, and whether
+/// the widgets follow where you are.
 /// </summary>
 public sealed class MobileAppHost : IAppHost
 {
@@ -25,6 +26,12 @@ public sealed class MobileAppHost : IAppHost
         http.TooOld += OnTooOld;
         _updates.Changed += OnChanged;
     }
+
+    // CI's builds have a version code above 1 (README → Versions); a local or pull request build has 1, and version 0.0.0.
+    public string? VersionName { get; } =
+        long.TryParse(AppInfo.Current.BuildString, NumberStyles.Integer, CultureInfo.InvariantCulture, out var code) && code > 1
+            ? AppInfo.Current.VersionString
+            : null;
 
     public string ServerName => _servers.ServerId ?? "";
 
