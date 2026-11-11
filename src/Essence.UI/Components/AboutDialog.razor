@@ -34,7 +34,8 @@
             <p class="version">
                 @if (Notes.Release is { Version: { } current } release)
                 {
-                    @L["VersionLabel", ReleaseNotes.VersionName(current)]
+                    @* The Android app shows its own version name, which tells a day's releases apart; the web, the day. *@
+                    @L["VersionLabel", _host?.VersionName ?? ReleaseNotes.VersionName(current)]
                     @if (release.Commit is { } commit)
                     {
                         <span class="commit">

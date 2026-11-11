@@ -19,9 +19,10 @@ public sealed record KnownRelease(long VersionCode, string Version, string Url);
 
 /// <summary>
 /// Looks for a newer build of the app among the GitHub releases of the repository it was built from (README → Versions): the
-/// release's APK is <c>essence-{versionCode}.apk</c>, and a higher number than this build's is newer. Checked at start and
-/// when the app comes back, at most every <see cref="Interval"/>; found, it shows in About (IAppHost.NewerRelease). It
-/// never installs anything: the link opens the release's page.
+/// latest release's APK is <c>essence-{versionCode}.apk</c>, a higher number than this build's is newer, and its tag gives
+/// the version name shown (<see cref="AppRelease.VersionOfTag"/>). Checked at start and when the app comes back, at most
+/// every <see cref="Interval"/>; found, it shows in About (IAppHost.NewerRelease). It never installs anything: the link
+/// opens the release's page.
 /// </summary>
 public sealed partial class AppUpdateCheck(BuildInfo build, ServerSettings servers, TimeProvider time)
 {
@@ -75,7 +76,7 @@ public sealed partial class AppUpdateCheck(BuildInfo build, ServerSettings serve
             Preferences.Default.Set(CheckedKey, now.ToUnixTimeMilliseconds().ToString(CultureInfo.InvariantCulture));
             if (release is { HtmlUrl: { } url } && NewestApk(release) is { } versionCode)
             {
-                var found = new KnownRelease(versionCode, release.TagName?.TrimStart('v') ?? "", url);
+                var found = new KnownRelease(versionCode, AppRelease.VersionOfTag(release.TagName), url);
                 Preferences.Default.Set(KnownKey, JsonSerializer.Serialize(found, MobileJsonContext.Default.KnownRelease));
                 Offer(found);
             }
