@@ -963,6 +963,12 @@
   <data name="WidgetAtDestination" xml:space="preserve">
     <value>You’re there.</value>
   </data>
+  <data name="WidgetLocationOff" xml:space="preserve">
+    <value>Turn on location, then tap ↻.</value>
+  </data>
+  <data name="WidgetLocationOffNote" xml:space="preserve">
+    <value>location off</value>
+  </data>
   <data name="WidgetFollowTitle" xml:space="preserve">
     <value>Follow where I am</value>
   </data>

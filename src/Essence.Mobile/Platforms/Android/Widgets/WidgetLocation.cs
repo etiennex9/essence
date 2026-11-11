@@ -46,6 +46,10 @@ internal static class WidgetLocator
     /// <summary>The user turned on Follow (<see cref="WidgetLocation.FollowKey"/>), read where the widgets read it.</summary>
     public static bool IsFollowOn() => Preferences.Default.Get<string?>(WidgetLocation.FollowKey, null) == "true";
 
+    /// <summary>The device's location setting (Quick settings → Location).</summary>
+    public static bool IsLocationOn(Context context) =>
+        context.GetSystemService(Context.LocationService) is LocationManager manager && LocationManagerCompat.IsLocationEnabled(manager);
+
     public static WidgetLocationAccess Access(Context context) =>
         WidgetLocation.AccessOf(HasLocation(context), HasBackground(context), IsFollowOn(), BuildInfo.Current.BackgroundLocation);
 

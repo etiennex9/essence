@@ -142,6 +142,9 @@ public enum WidgetProblem
 
     /// <summary>A trip from where you are, already at its destination.</summary>
     AtDestination,
+
+    /// <summary>Ranking from where you are, with no location kept and the device's location turned off.</summary>
+    LocationOff,
 }
 
 /// <summary>A station on a widget, ready to show.</summary>

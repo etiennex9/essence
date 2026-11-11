@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- backup_rules.xml for Android 12 and later: the same files left out of the cloud backup and of a transfer to a new
+     phone. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="essence.location.xml" />
+        <exclude domain="sharedpref" path="essence.session.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="essence.location.xml" />
+        <exclude domain="sharedpref" path="essence.session.xml" />
+    </device-transfer>
+</data-extraction-rules>

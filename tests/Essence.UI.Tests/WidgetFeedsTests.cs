@@ -339,6 +339,32 @@ public sealed class WidgetFeedsTests : IDisposable
     }
 
     [Fact]
+    public async Task With_the_location_off_the_widget_says_to_turn_it_on()
+    {
+        var feeds = FeedsWith(WidgetLocationAccess.WhileInUse, locationOn: false);
+
+        var nowhere = await feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
+        Assert.Equal((WidgetProblem.LocationOff, "Turn on location, then tap ↻."), (nowhere.Problem, nowhere.Message));
+        Assert.Empty(_http.Requests);
+
+        await LastLocation.WriteAsync(_preferences, new LastFix(HomePoint.Latitude, HomePoint.Longitude, 20, _time.GetUtcNow()));
+        Answer(BestPath(HomePoint), Best(pick: 1, reference: 1, "0"));
+        var kept = await feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
+        Assert.Equal(WidgetProblem.None, kept.Problem);
+        Assert.Equal($"{Updated()} · location off", kept.Updated);
+    }
+
+    [Fact]
+    public async Task Without_the_permission_the_location_setting_isn_t_the_problem()
+    {
+        var feeds = FeedsWith(WidgetLocationAccess.NotAllowed, locationOn: false);
+
+        var view = await feeds.BestNearAsync(WidgetPlaceRef.You, TestContext.Current.CancellationToken);
+
+        Assert.Equal(WidgetProblem.LocationNotAllowed, view.Problem);
+    }
+
+    [Fact]
     public async Task A_route_from_where_you_are_starts_from_where_the_user_is()
     {
         var at = _time.GetUtcNow().AddHours(-1);
@@ -414,6 +440,7 @@ public sealed class WidgetFeedsTests : IDisposable
         Assert.Equal("Maison", feeds.PlaceName(new WidgetPlaceRef(PlaceKind.Home), new SavedPlaces(_preferences)));
         Assert.Equal("Touchez ↻ pour trouver où vous êtes.", feeds.MessageFor(WidgetProblem.NoLocationYet, "Régulier"));
         Assert.Equal("Vous y êtes.", feeds.MessageFor(WidgetProblem.AtDestination, "Régulier"));
+        Assert.Equal("Activez la localisation, puis touchez ↻.", feeds.MessageFor(WidgetProblem.LocationOff, "Régulier"));
     }
 
     [Fact]
@@ -449,12 +476,13 @@ public sealed class WidgetFeedsTests : IDisposable
 
     private void Answer(string pathAndQuery, HttpResponseMessage response) => _answers[pathAndQuery] = response;
 
-    private WidgetFeeds FeedsWith(WidgetLocationAccess access) => new(
+    private WidgetFeeds FeedsWith(WidgetLocationAccess access, bool locationOn = true) => new(
         _preferences,
         new EssenceApiClient(new HttpClient(_http) { BaseAddress = new Uri("http://api.test/") }),
         new StringLocalizer<Strings>(new ResourceManagerStringLocalizerFactory(Options.Create(new LocalizationOptions()), NullLoggerFactory.Instance)),
         _time,
-        access);
+        access,
+        locationOn);
 
     private string TimeOfDay(DateTimeOffset at) => Formatting.TimeOfDay(at, _time.LocalTimeZone, CultureInfo.CurrentCulture);
 

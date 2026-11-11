@@ -11,14 +11,16 @@ namespace Essence.UI.App.Widgets;
 /// (CarProfiles), the saved places and favorites, all read from the app's preferences and never written. Best near a place
 /// and Best on a frequent route send the same questions as Best near you and Best on the way (<see cref="BestQuery.For"/>,
 /// <see cref="TripQuery.For"/>). Where you are is the device's latest fix (<see cref="LastLocation"/>), whose time shows once
-/// it's old; <c>access</c> only says what to ask for when there's none. The texts are ready to show, in the UI's language.
+/// it's old; <c>access</c> and <c>locationOn</c> (the device's location setting) only say what to ask for when there's none,
+/// or why it can't be updated. The texts are ready to show, in the UI's language.
 /// </summary>
 public sealed class WidgetFeeds(
     IPreferenceStore preferences,
     EssenceApiClient api,
     IStringLocalizer<Strings> l,
     TimeProvider time,
-    WidgetLocationAccess access = WidgetLocationAccess.WhileInUse)
+    WidgetLocationAccess access = WidgetLocationAccess.WhileInUse,
+    bool locationOn = true)
 {
     /// <summary>The favorites widget's rows: more wouldn't fit a home screen.</summary>
     public const int MaxFavorites = 5;
@@ -204,6 +206,7 @@ public sealed class WidgetFeeds(
         WidgetProblem.Failed => l["WidgetFailed"],
         WidgetProblem.LocationNotAllowed => l["WidgetLocationNotAllowed"],
         WidgetProblem.AtDestination => l["WidgetAtDestination"],
+        WidgetProblem.LocationOff => l["WidgetLocationOff"],
         _ => "",
     };
 
@@ -237,10 +240,14 @@ public sealed class WidgetFeeds(
         return await LastLocation.ReadAsync(preferences) is { } fix ? new Start(fix.Point, fix) : null;
     }
 
-    /// <summary>Why there's nowhere to rank from: a forgotten place, or for where you are, no fix yet (and no permission).</summary>
+    /// <summary>
+    /// Why there's nowhere to rank from: a forgotten place, or for where you are, no fix yet: no permission, the location off,
+    /// or none found so far.
+    /// </summary>
     private WidgetProblem NotFound(WidgetPlaceRef place) =>
         !place.IsYou ? WidgetProblem.NoPlace
         : access == WidgetLocationAccess.NotAllowed ? WidgetProblem.LocationNotAllowed
+        : !locationOn ? WidgetProblem.LocationOff
         : WidgetProblem.NoLocationYet;
 
     private WidgetLine Line(long id, string? brand, string detail, decimal? cents, string tap)
@@ -256,9 +263,9 @@ public sealed class WidgetFeeds(
         new(title, fuel, [], problem, MessageFor(problem, fuel), tap, Updated(fix));
 
     /// <summary>
-    /// "Updated 8:10 a.m.", and for where you are, when the fix is from (once it's older than one periodic refresh) and whether
-    /// it's approximate. Times rather than "2 h ago": the text is written at the refresh, and a widget Android stops refreshing
-    /// would keep saying 2 h.
+    /// "Updated 8:10 a.m.", and for where you are, when the fix is from (once it's older than one periodic refresh), whether
+    /// it's approximate, and that the location is off (so ↻ can't update it). Times rather than "2 h ago": the text is written
+    /// at the refresh, and a widget Android stops refreshing would keep saying 2 h.
     /// </summary>
     private string Updated(LastFix? fix)
     {
@@ -283,6 +290,11 @@ public sealed class WidgetFeeds(
         if (fix.AccuracyMeters > BestOrigin.ApproximateBeyondMeters)
         {
             notes.Add(l["WidgetApproximate"]);
+        }
+
+        if (!locationOn && access != WidgetLocationAccess.NotAllowed)
+        {
+            notes.Add(l["WidgetLocationOffNote"]);
         }
 
         return string.Join(" · ", notes);

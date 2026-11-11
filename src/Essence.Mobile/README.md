@@ -34,9 +34,12 @@ Best near you, and Best on the way from **Where I am**, rank from the device's l
   5 minutes. *Turn off* forgets the choice; *Allow all the time* stays until changed in Android's settings, which the
   screen then offers.
 
-The location goes only to the server, as the page's does (`/stations/best`, `/trips/best`). Once a fix is over 30 minutes
-old, the widget's footer gives its time ("Location as of 6:10 a.m."), and says when it's approximate. Without any location
-permission, a fix kept from before still ranks; without one, the widget asks to allow it. A trip from where you are that's
+The location goes only to the server, as the page's does (`/stations/best`, `/trips/best`). On the phone it's kept in a
+preferences file of its own, `essence.location`, which Android's backups and transfers to a new phone leave out
+(`Resources/xml/backup_rules.xml`, `data_extraction_rules.xml`). Once a fix is over 30 minutes old, the widget's footer
+gives its time ("Location as of 6:10 a.m."), and says when it's approximate or the location is turned off. Without any
+location permission, a fix kept from before still ranks; without one, the widget asks to allow it, or to turn the location
+on. A trip from where you are that's
 already at its destination says so, without asking the server.
 
 On Samsung phones, One UI puts apps it thinks unused to sleep, which stops every background refresh: the Follow screen links

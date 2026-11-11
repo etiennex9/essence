@@ -963,6 +963,12 @@
   <data name="WidgetAtDestination" xml:space="preserve">
     <value>Vous y êtes.</value>
   </data>
+  <data name="WidgetLocationOff" xml:space="preserve">
+    <value>Activez la localisation, puis touchez ↻.</value>
+  </data>
+  <data name="WidgetLocationOffNote" xml:space="preserve">
+    <value>localisation désactivée</value>
+  </data>
   <data name="WidgetFollowTitle" xml:space="preserve">
     <value>Suivre où je suis</value>
   </data>

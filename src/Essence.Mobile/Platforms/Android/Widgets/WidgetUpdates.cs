@@ -163,7 +163,8 @@ internal static class WidgetRefresher
 
         var rankedFrom = await LastLocation.ReadAsync(preferences);
         var feeds = new WidgetFeeds(
-            preferences, hasServer ? servers.CreateApiClient() : new EssenceApiClient(new HttpClient()), l, time, access);
+            preferences, hasServer ? servers.CreateApiClient() : new EssenceApiClient(new HttpClient()), l, time, access,
+            WidgetLocator.IsLocationOn(context));
 
         var asked = new Dictionary<string, Task<WidgetView>>();
         foreach (var (kind, id) in placed)
