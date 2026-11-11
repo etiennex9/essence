@@ -1,4 +1,5 @@
-@implements IDisposable
+@implements IAsyncDisposable
+@inject IJSRuntime JS
 @inject SavedPlaces Places
 @inject PlaceAddresses Addresses
 @inject ServicesStatus Services
@@ -94,7 +95,11 @@
 </section>
 
 @code {
+    private const string KeyboardModulePath = "./_content/Essence.UI/js/essenceKeyboard.js";
+
     private ElementReference _element;
+    private IJSObjectReference? _keyboard;
+    private bool _disposed;
     private ElementReference _nameInput;
     private GeoPoint? _shown;
     private SavedPlace? _saved;
@@ -223,6 +228,49 @@
             _focusName = false;
             await _nameInput.FocusAsync();
         }
+
+        if (firstRender)
+        {
+            await KeepAboveKeyboardAsync();
+        }
+    }
+
+    /// <summary>On phones, the card rises above the keyboard while the name is typed (essenceKeyboard.js).</summary>
+    private async Task KeepAboveKeyboardAsync()
+    {
+        try
+        {
+            await using var module = await JS.InvokeAsync<IJSObjectReference>("import", KeyboardModulePath);
+            _keyboard = await module.InvokeAsync<IJSObjectReference>("keepAboveKeyboard", _element);
+            if (_disposed)
+            {
+                // Closed while the module was loading.
+                await ReleaseKeyboardAsync();
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page is going away.
+        }
+    }
+
+    private async Task ReleaseKeyboardAsync()
+    {
+        if (_keyboard is not { } keyboard)
+        {
+            return;
+        }
+
+        _keyboard = null;
+        try
+        {
+            await keyboard.InvokeVoidAsync("dispose");
+            await keyboard.DisposeAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page is going away.
+        }
     }
 
     private Task TripAsync() =>
@@ -254,9 +302,11 @@
         _ => place.Name,
     };
 
-    public void Dispose()
+    public async ValueTask DisposeAsync()
     {
+        _disposed = true;
         _lookupCts?.Cancel();
         Services.Changed -= OnServicesChanged;
+        await ReleaseKeyboardAsync();
     }
 }
