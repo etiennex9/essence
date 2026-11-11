@@ -43,6 +43,10 @@ public static class Formatting
     public static string TimeOfDay(DateTimeOffset at, TimeZoneInfo zone, IFormatProvider culture) =>
         TimeZoneInfo.ConvertTime(at, zone).ToString("t", culture);
 
+    /// <summary>The day in the culture's month-and-day style ("November 7", "7 novembre"), in the device's time zone.</summary>
+    public static string MonthDay(DateTimeOffset at, TimeZoneInfo zone, IFormatProvider culture) =>
+        TimeZoneInfo.ConvertTime(at, zone).ToString("M", culture);
+
     /// <summary>The unit and count for "… ago": minutes under an hour, hours under two days, then days.</summary>
     public static (AgoUnit Unit, int Value) Ago(TimeSpan elapsed) => elapsed switch
     {

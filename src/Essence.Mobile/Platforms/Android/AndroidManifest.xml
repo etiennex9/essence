@@ -1,9 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:allowBackup="true" android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true"></application>
+    <!-- Backed up: cars, places, favorites, widget settings. Left out: the device's locations and the page's session (the
+         two rule files say which, for Android 11 and older, and 12 and later). -->
+    <application android:allowBackup="true" android:fullBackupContent="@xml/backup_rules" android:dataExtractionRules="@xml/data_extraction_rules"
+                 android:icon="@mipmap/appicon" android:roundIcon="@mipmap/appicon_round" android:supportsRtl="true"></application>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <!-- While the app is in use only: the widgets rank from where it was last used, never asking in the background. -->
+    <!-- While the app is in use, and for a moment after ↻ on a widget (a location foreground service, WidgetLocation.cs). "All
+         the time" is only asked for when the user turns on Follow where I am, and only in builds that may
+         (EssenceBackgroundLocation adds ACCESS_BACKGROUND_LOCATION). -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
 </manifest>

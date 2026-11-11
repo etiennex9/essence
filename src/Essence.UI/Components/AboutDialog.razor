@@ -63,6 +63,18 @@
                     @L["AppServer", host.ServerName]
                     · <button type="button" class="link" @onclick="ChangeServerAsync">@L["ChangeServer"]</button>
                 </p>
+                @if (host.WidgetsFollow is { } follow)
+                {
+                    <p class="widgets-follow">
+                        @L["AppWidgetsFollow", L[follow switch
+                        {
+                            WidgetFollowState.On => "AppWidgetsFollowOn",
+                            WidgetFollowState.Paused => "AppWidgetsFollowPaused",
+                            _ => "AppWidgetsFollowOff",
+                        }]]
+                        · <button type="button" class="link" @onclick="() => host.OpenWidgetsFollowAsync()">@L["ChangeServer"]</button>
+                    </p>
+                }
                 @if (host.NewerRelease is { } newer)
                 {
                     <p class="app-update">

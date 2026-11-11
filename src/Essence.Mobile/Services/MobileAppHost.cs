@@ -4,7 +4,10 @@ using Microsoft.Extensions.Localization;
 
 namespace Essence.Mobile.Services;
 
-/// <summary>What the app adds to Essence.UI's page (<see cref="IAppHost"/>): the server, and newer builds.</summary>
+/// <summary>
+/// What the app adds to Essence.UI's page (<see cref="IAppHost"/>): the server, newer builds, and whether the widgets follow
+/// where you are.
+/// </summary>
 public sealed class MobileAppHost : IAppHost
 {
     private readonly ServerSettings _servers;
@@ -20,19 +23,31 @@ public sealed class MobileAppHost : IAppHost
         _build = build;
         _l = l;
         http.TooOld += OnTooOld;
+        _updates.Changed += OnChanged;
     }
 
     public string ServerName => _servers.ServerId ?? "";
 
     public AppRelease? NewerRelease => _updates.Newer;
 
-    public event Action? Changed
-    {
-        add => _updates.Changed += value;
-        remove => _updates.Changed -= value;
-    }
+    public event Action? Changed;
+
+    public WidgetFollowState? WidgetsFollow => Widgets.WidgetLocator.FollowState(Platform.AppContext);
 
     public Task ChangeServerAsync() => MainThread.InvokeOnMainThreadAsync(() => App.Current.OpenServerPageAsync());
+
+    public Task OpenWidgetsFollowAsync() => MainThread.InvokeOnMainThreadAsync(() =>
+    {
+        if (Platform.CurrentActivity is { } activity)
+        {
+            activity.StartActivity(new Android.Content.Intent(activity, typeof(Widgets.WidgetLocationActivity)));
+        }
+    });
+
+    /// <summary>The app came back: Follow may have been turned on or off, or its permission changed in Android's settings.</summary>
+    public void OnResumed() => OnChanged();
+
+    private void OnChanged() => Changed?.Invoke();
 
     /// <summary>The server refused this build (426): says so once while the app runs, with where to get a newer one.</summary>
     private void OnTooOld()

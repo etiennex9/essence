@@ -6,14 +6,16 @@ namespace Essence.UI.App.Widgets;
 
 /// <summary>
 /// A place a widget ranks from or goes to. Home and Work are found by their kind (saving Home again gives it a new id),
-/// another place by its id, and neither means where the app was last used (<see cref="LastLocation"/>).
+/// another place by its id, and neither means where the device is: its latest fix (<see cref="LastLocation"/>), which the
+/// app, a tap on ↻ or, with Follow on, the widgets themselves keep up to date. Stored as <c>{}</c> since the first version,
+/// when it meant where the app was last used.
 /// </summary>
 public sealed record WidgetPlaceRef(PlaceKind? Kind = null, string? PlaceId = null)
 {
-    public static WidgetPlaceRef LastUsed { get; } = new();
+    public static WidgetPlaceRef You { get; } = new();
 
     [JsonIgnore]
-    public bool IsLastUsed => Kind is null && PlaceId is null;
+    public bool IsYou => Kind is null && PlaceId is null;
 
     public static WidgetPlaceRef For(SavedPlace place) =>
         place.Kind is PlaceKind.Home or PlaceKind.Work ? new(place.Kind) : new(PlaceKind.Other, place.Id);
@@ -115,7 +117,7 @@ public enum WidgetProblem
     /// <summary>The place it ranks from or goes to isn't saved anymore (or a route has none yet).</summary>
     NoPlace,
 
-    /// <summary>Ranking from where the app was last used, but it never had a location.</summary>
+    /// <summary>Ranking from where you are, but no location was ever found.</summary>
     NoLocationYet,
 
     /// <summary>No favorites to show.</summary>
@@ -132,6 +134,17 @@ public enum WidgetProblem
 
     /// <summary>The server didn't answer, or asked to slow down.</summary>
     Failed,
+
+    // Added later: cached views keep the names, so new ones go last.
+
+    /// <summary>Ranking from where you are, with no location kept and no permission to find one.</summary>
+    LocationNotAllowed,
+
+    /// <summary>A trip from where you are, already at its destination.</summary>
+    AtDestination,
+
+    /// <summary>Ranking from where you are, with no location kept and the device's location turned off.</summary>
+    LocationOff,
 }
 
 /// <summary>A station on a widget, ready to show.</summary>

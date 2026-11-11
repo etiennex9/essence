@@ -10,9 +10,17 @@ namespace Essence.UI.App.Widgets;
 /// What the Android app's home-screen widgets show, asked the way the page asks: the map's fuel, the car being driven
 /// (CarProfiles), the saved places and favorites, all read from the app's preferences and never written. Best near a place
 /// and Best on a frequent route send the same questions as Best near you and Best on the way (<see cref="BestQuery.For"/>,
-/// <see cref="TripQuery.For"/>). The texts are ready to show, in the UI's language.
+/// <see cref="TripQuery.For"/>). Where you are is the device's latest fix (<see cref="LastLocation"/>), whose time shows once
+/// it's old; <c>access</c> and <c>locationOn</c> (the device's location setting) only say what to ask for when there's none,
+/// or why it can't be updated. The texts are ready to show, in the UI's language.
 /// </summary>
-public sealed class WidgetFeeds(IPreferenceStore preferences, EssenceApiClient api, IStringLocalizer<Strings> l, TimeProvider time)
+public sealed class WidgetFeeds(
+    IPreferenceStore preferences,
+    EssenceApiClient api,
+    IStringLocalizer<Strings> l,
+    TimeProvider time,
+    WidgetLocationAccess access = WidgetLocationAccess.WhileInUse,
+    bool locationOn = true)
 {
     /// <summary>The favorites widget's rows: more wouldn't fit a home screen.</summary>
     public const int MaxFavorites = 5;
@@ -24,22 +32,22 @@ public sealed class WidgetFeeds(IPreferenceStore preferences, EssenceApiClient a
     public async Task<WidgetView> BestNearAsync(WidgetPlaceRef origin, CancellationToken cancellationToken)
     {
         var (fuel, car, places) = await LoadAsync();
-        var title = origin.IsLastUsed ? l["BestNearYou"] : l["WidgetBestNear", PlaceName(origin, places)];
+        var title = origin.IsYou ? l["BestNearYou"] : l["WidgetBestNear", PlaceName(origin, places)];
         const string tap = "/?view=best";
-        if (await PointOfAsync(origin, places) is not { } point)
+        if (await StartOfAsync(origin, places) is not { } start)
         {
-            return Problem(title, fuel, origin.IsLastUsed ? WidgetProblem.NoLocationYet : WidgetProblem.NoPlace, tap);
+            return Problem(title, fuel, NotFound(origin), tap);
         }
 
-        var result = await api.GetBestAsync(BestQuery.For(point, fuel, car), cancellationToken);
+        var result = await api.GetBestAsync(BestQuery.For(start.Point, fuel, car), cancellationToken);
         if (!result.IsSuccess || result.Value is not { } best)
         {
-            return Problem(title, fuel, WidgetProblem.Failed, tap);
+            return Problem(title, fuel, WidgetProblem.Failed, tap, start.Fix);
         }
 
         if (best.Pick is not { } pick)
         {
-            return Problem(title, fuel, WidgetProblem.NoPrice, tap);
+            return Problem(title, fuel, WidgetProblem.NoPrice, tap, start.Fix);
         }
 
         var culture = CultureInfo.CurrentCulture;
@@ -48,7 +56,7 @@ public sealed class WidgetFeeds(IPreferenceStore preferences, EssenceApiClient a
             : l["Saves", Formatting.Money(pick.SavesDollars, culture)].Value;
         var distance = l[best.ByRoad ? "DistanceByRoad" : "DistanceApprox", Formatting.Km(pick.DistanceKm, culture)];
         var detail = $"{distance} · {saving}";
-        return View(title, fuel, [Line(pick.Id, pick.Brand, detail, pick.PriceCents, $"/?station={pick.Id}")], tap);
+        return View(title, fuel, [Line(pick.Id, pick.Brand, detail, pick.PriceCents, $"/?station={pick.Id}")], tap, start.Fix);
     }
 
     /// <summary>The starred stations with their price of the fuel: cheapest first, those without one after, in list order.</summary>
@@ -119,9 +127,9 @@ public sealed class WidgetFeeds(IPreferenceStore preferences, EssenceApiClient a
 
         var title = l["WidgetRoute", PlaceName(from, places), PlaceName(to, places)].Value;
         var tap = TripLink(from, to, places, pick: null);
-        if (await PointOfAsync(from, places) is not { } start)
+        if (await StartOfAsync(from, places) is not { } start)
         {
-            return Problem(title, fuel, from.IsLastUsed ? WidgetProblem.NoLocationYet : WidgetProblem.NoPlace, tap);
+            return Problem(title, fuel, NotFound(from), tap);
         }
 
         if (to.Find(places) is not { } destination)
@@ -129,7 +137,13 @@ public sealed class WidgetFeeds(IPreferenceStore preferences, EssenceApiClient a
             return Problem(title, fuel, WidgetProblem.NoPlace, "/?view=places");
         }
 
-        var result = await api.GetTripAsync(TripQuery.For(start, destination.Point, fuel, car, rangeKm: null), cancellationToken);
+        // No trip to plan: Best near you is what's left to open.
+        if (start.Fix is { } fix && WidgetLocation.IsThere(fix, destination.Point))
+        {
+            return Problem(title, fuel, WidgetProblem.AtDestination, "/?view=best", fix);
+        }
+
+        var result = await api.GetTripAsync(TripQuery.For(start.Point, destination.Point, fuel, car, rangeKm: null), cancellationToken);
         if (!result.IsSuccess || result.Value is not { } plan)
         {
             return Problem(title, fuel, result.Error switch
@@ -137,12 +151,12 @@ public sealed class WidgetFeeds(IPreferenceStore preferences, EssenceApiClient a
                 ApiError.NoRoute => WidgetProblem.NoRoute,
                 ApiError.Unavailable => WidgetProblem.Unavailable,
                 _ => WidgetProblem.Failed,
-            }, tap);
+            }, tap, start.Fix);
         }
 
         if (plan.Stations.FirstOrDefault(s => s.Id == plan.PickId) is not { } pick)
         {
-            return Problem(title, fuel, WidgetProblem.NoPrice, tap);
+            return Problem(title, fuel, WidgetProblem.NoPrice, tap, start.Fix);
         }
 
         var culture = CultureInfo.CurrentCulture;
@@ -153,22 +167,22 @@ public sealed class WidgetFeeds(IPreferenceStore preferences, EssenceApiClient a
             ? where
             : $"{where} · {l["Saves", Formatting.Money(pick.SavesDollars, culture)]}";
         var line = TripLink(from, to, places, pick.Id);
-        return View(title, fuel, [Line(pick.Id, pick.Brand, detail, pick.PriceCents, line)], line);
+        return View(title, fuel, [Line(pick.Id, pick.Brand, detail, pick.PriceCents, line)], line, start.Fix);
     }
 
     /// <summary>
-    /// Opens the trip the widget shows: the same two places (from where the user is, for the last-used place), and the station
+    /// Opens the trip the widget shows: the same two places (from where the user is then, for where you are), and the station
     /// it showed on top (MapPage's <c>to</c>, <c>from</c> and <c>pick</c>). With a place forgotten, Your places.
     /// </summary>
     private static string TripLink(WidgetPlaceRef from, WidgetPlaceRef to, SavedPlaces places, long? pick)
     {
-        if (to.LinkName is not { } toName || to.Find(places) is null || (!from.IsLastUsed && (from.LinkName is null || from.Find(places) is null)))
+        if (to.LinkName is not { } toName || to.Find(places) is null || (!from.IsYou && (from.LinkName is null || from.Find(places) is null)))
         {
             return "/?view=places";
         }
 
         var link = $"/?to={Uri.EscapeDataString(toName)}";
-        if (!from.IsLastUsed)
+        if (!from.IsYou)
         {
             link += $"&from={Uri.EscapeDataString(from.LinkName!)}";
         }
@@ -190,15 +204,18 @@ public sealed class WidgetFeeds(IPreferenceStore preferences, EssenceApiClient a
         WidgetProblem.NoRoute => l["WidgetNoRoute"],
         WidgetProblem.Unavailable => l["WidgetUnavailable"],
         WidgetProblem.Failed => l["WidgetFailed"],
+        WidgetProblem.LocationNotAllowed => l["WidgetLocationNotAllowed"],
+        WidgetProblem.AtDestination => l["WidgetAtDestination"],
+        WidgetProblem.LocationOff => l["WidgetLocationOff"],
         _ => "",
     };
 
-    /// <summary>How a place is named on a widget: Home, Work, its own name, or "you" for where the app was last used.</summary>
+    /// <summary>How a place is named on a widget: Home, Work, its own name, or "you" for where you are.</summary>
     public string PlaceName(WidgetPlaceRef place, SavedPlaces places) => place.Kind switch
     {
         PlaceKind.Home => l["Home"],
         PlaceKind.Work => l["Work"],
-        _ when place.IsLastUsed => l["WidgetYou"],
+        _ when place.IsYou => l["WidgetYou"],
         _ => place.Find(places) is { Name: { Length: > 0 } name } ? name : l["WidgetPlace"],
     };
 
@@ -212,8 +229,26 @@ public sealed class WidgetFeeds(IPreferenceStore preferences, EssenceApiClient a
         return (fuel, cars.Active, places);
     }
 
-    private async Task<GeoPoint?> PointOfAsync(WidgetPlaceRef place, SavedPlaces places) =>
-        place.IsLastUsed ? (await LastLocation.ReadAsync(preferences))?.Point : place.Find(places)?.Point;
+    /// <summary>Where a widget ranks from: a saved place's point, or for where you are, the latest fix.</summary>
+    private async Task<Start?> StartOfAsync(WidgetPlaceRef place, SavedPlaces places)
+    {
+        if (!place.IsYou)
+        {
+            return place.Find(places) is { } saved ? new Start(saved.Point, null) : null;
+        }
+
+        return await LastLocation.ReadAsync(preferences) is { } fix ? new Start(fix.Point, fix) : null;
+    }
+
+    /// <summary>
+    /// Why there's nowhere to rank from: a forgotten place, or for where you are, no fix yet: no permission, the location off,
+    /// or none found so far.
+    /// </summary>
+    private WidgetProblem NotFound(WidgetPlaceRef place) =>
+        !place.IsYou ? WidgetProblem.NoPlace
+        : access == WidgetLocationAccess.NotAllowed ? WidgetProblem.LocationNotAllowed
+        : !locationOn ? WidgetProblem.LocationOff
+        : WidgetProblem.NoLocationYet;
 
     private WidgetLine Line(long id, string? brand, string detail, decimal? cents, string tap)
     {
@@ -221,12 +256,50 @@ public sealed class WidgetFeeds(IPreferenceStore preferences, EssenceApiClient a
         return new WidgetLine(id, style.Name ?? l["Independent"], detail, Formatting.Price(cents, CultureInfo.CurrentCulture), style, tap);
     }
 
-    private WidgetView View(string title, string fuel, IReadOnlyList<WidgetLine> lines, string tap) =>
-        new(title, fuel, lines, WidgetProblem.None, null, tap, Updated());
+    private WidgetView View(string title, string fuel, IReadOnlyList<WidgetLine> lines, string tap, LastFix? fix = null) =>
+        new(title, fuel, lines, WidgetProblem.None, null, tap, Updated(fix));
 
-    private WidgetView Problem(string title, string fuel, WidgetProblem problem, string tap) =>
-        new(title, fuel, [], problem, MessageFor(problem, fuel), tap, Updated());
+    private WidgetView Problem(string title, string fuel, WidgetProblem problem, string tap, LastFix? fix = null) =>
+        new(title, fuel, [], problem, MessageFor(problem, fuel), tap, Updated(fix));
 
-    private string Updated() =>
-        l["WidgetUpdated", Formatting.TimeOfDay(time.GetUtcNow(), time.LocalTimeZone, CultureInfo.CurrentCulture)];
+    /// <summary>
+    /// "Updated 8:10 a.m.", and for where you are, when the fix is from (once it's older than one periodic refresh), whether
+    /// it's approximate, and that the location is off (so ↻ can't update it). Times rather than "2 h ago": the text is written
+    /// at the refresh, and a widget Android stops refreshing would keep saying 2 h.
+    /// </summary>
+    private string Updated(LastFix? fix)
+    {
+        var now = time.GetUtcNow();
+        var culture = CultureInfo.CurrentCulture;
+        var zone = time.LocalTimeZone;
+        var updated = l["WidgetUpdated", Formatting.TimeOfDay(now, zone, culture)].Value;
+        if (fix is null)
+        {
+            return updated;
+        }
+
+        var notes = new List<string> { updated };
+        if (now - fix.At >= WidgetLocation.ShowAgeAfter)
+        {
+            var sameDay = TimeZoneInfo.ConvertTime(fix.At, zone).Date == TimeZoneInfo.ConvertTime(now, zone).Date;
+            notes.Add(sameDay
+                ? l["WidgetLocatedAt", Formatting.TimeOfDay(fix.At, zone, culture)]
+                : l["WidgetLocatedOn", Formatting.MonthDay(fix.At, zone, culture)]);
+        }
+
+        if (fix.AccuracyMeters > BestOrigin.ApproximateBeyondMeters)
+        {
+            notes.Add(l["WidgetApproximate"]);
+        }
+
+        if (!locationOn && access != WidgetLocationAccess.NotAllowed)
+        {
+            notes.Add(l["WidgetLocationOffNote"]);
+        }
+
+        return string.Join(" · ", notes);
+    }
+
+    /// <summary>Where a widget ranks from; <paramref name="Fix"/> is the device's, for where you are.</summary>
+    private sealed record Start(GeoPoint Point, LastFix? Fix);
 }

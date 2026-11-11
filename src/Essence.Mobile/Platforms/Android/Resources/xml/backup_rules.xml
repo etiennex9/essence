@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android's backup, up to Android 11: everything but the device's locations (MauiPreferenceStore.LocationSharedName), which
+     go to the server and nowhere else, and the page's session (NativeSessionStore), which lasts a day. Android 12 and later
+     read data_extraction_rules.xml. -->
+<full-backup-content>
+    <exclude domain="sharedpref" path="essence.location.xml" />
+    <exclude domain="sharedpref" path="essence.session.xml" />
+</full-backup-content>

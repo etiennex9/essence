@@ -3,6 +3,7 @@ using Android.Content;
 using Android.Runtime;
 using AndroidX.Work;
 using Essence.Mobile.Services;
+using Essence.UI.App;
 using Essence.UI.App.Widgets;
 using Essence.UI.Resources;
 using Essence.UI.Services;
@@ -13,9 +14,10 @@ namespace Essence.Mobile.Widgets;
 
 /// <summary>
 /// When the widgets are refreshed: every 30 minutes while any is placed (prices change through the day; Android may batch
-/// it), and now when one is added or set up, on its ↻ button, when the app goes to the background (its cars, places,
-/// favorites or fuel may have changed), and after the server changes. Each is one WorkManager job for all widgets, run when
-/// there's a network.
+/// it), and now when one is added or set up, on its ↻ button (after a fix, for those that rank from where you are), when the
+/// app goes to the background (its cars, places, favorites or fuel may have changed), after the server changes, and with
+/// Follow on, when you've moved (<see cref="WidgetLocationReceiver"/>). Each is one WorkManager job for all widgets, run
+/// when there's a network.
 /// </summary>
 public static class WidgetUpdates
 {
@@ -51,6 +53,7 @@ public static class WidgetUpdates
         if (!AnyPlaced(context))
         {
             WorkManager.GetInstance(context).CancelUniqueWork(PeriodicName);
+            WidgetTracking.Update(context, wanted: false);
         }
     }
 
@@ -80,7 +83,8 @@ public static class WidgetUpdates
 [Register("io/github/etiennex9/essence/widgets/WidgetRefreshWorker")]
 public sealed class WidgetRefreshWorker(Context context, WorkerParameters workerParams) : Worker(context, workerParams)
 {
-    private static readonly TimeSpan Budget = TimeSpan.FromSeconds(25);
+    /// <summary>A background fix (5 s) and the API's 20 s.</summary>
+    private static readonly TimeSpan Budget = TimeSpan.FromSeconds(30);
     private static readonly SemaphoreSlim OneAtATime = new(1, 1);
 
     private readonly CancellationTokenSource _stop = new(Budget);
@@ -114,9 +118,15 @@ public sealed class WidgetRefreshWorker(Context context, WorkerParameters worker
     }
 }
 
-/// <summary>Asks each placed widget's question once (two widgets asking the same share the answer) and shows the answers.</summary>
+/// <summary>
+/// Asks each placed widget's question once (two widgets asking the same share the answer) and shows the answers. With Follow
+/// on, those ranking from where you are get a fix of their own first, and the movement trigger is kept to what's placed.
+/// </summary>
 internal static class WidgetRefresher
 {
+    /// <summary>How long a refresh waits for a fix of its own in the background.</summary>
+    private static readonly TimeSpan FixBudget = TimeSpan.FromSeconds(5);
+
     public static async Task RefreshAsync(Context context, CancellationToken cancellationToken)
     {
         var placed = WidgetUpdates.Placed(context).ToList();
@@ -134,10 +144,27 @@ internal static class WidgetRefresher
         var l = services.GetRequiredService<IStringLocalizer<Strings>>();
         var time = services.GetRequiredService<TimeProvider>();
         var hasServer = servers.Current is not null;
-        var feeds = new WidgetFeeds(
-            preferences, hasServer ? servers.CreateApiClient() : new EssenceApiClient(new HttpClient()), l, time);
+        var access = WidgetLocator.Access(context);
         var places = new SavedPlaces(preferences);
         await places.LoadAsync();
+        var configs = new Dictionary<int, WidgetConfig>();
+        foreach (var (_, id) in placed)
+        {
+            configs[id] = await WidgetConfigs.ReadAsync(preferences, id);
+        }
+
+        var followers = placed.Where(p => UsesYou(p.Kind, configs[p.Id], places)).Select(p => p.Id).ToHashSet();
+        var following = hasServer && followers.Count > 0 && access == WidgetLocationAccess.AllTheTime;
+        if (following && WidgetLocation.NeedsFix(await LastLocation.ReadAsync(preferences), time.GetUtcNow())
+            && await WidgetLocator.TryFixAsync(context, FixBudget, allowGps: false, time, cancellationToken) is { } fix)
+        {
+            await LastLocation.WriteIfNewerAsync(preferences, fix);
+        }
+
+        var rankedFrom = await LastLocation.ReadAsync(preferences);
+        var feeds = new WidgetFeeds(
+            preferences, hasServer ? servers.CreateApiClient() : new EssenceApiClient(new HttpClient()), l, time, access,
+            WidgetLocator.IsLocationOn(context));
 
         var asked = new Dictionary<string, Task<WidgetView>>();
         foreach (var (kind, id) in placed)
@@ -149,10 +176,10 @@ internal static class WidgetRefresher
             }
             else
             {
-                var config = await WidgetConfigs.ReadAsync(preferences, id);
+                var config = configs[id];
                 if (kind == WidgetKind.BestNear)
                 {
-                    var origin = config.Origin ?? DefaultOrigin(places);
+                    var origin = config.Origin ?? DefaultOrigin;
                     view = await Ask(asked, $"best:{origin}", () => feeds.BestNearAsync(origin, cancellationToken));
                 }
                 else if (kind == WidgetKind.Favorites)
@@ -178,12 +205,29 @@ internal static class WidgetRefresher
                 await WidgetViewCache.WriteAsync(preferences, id, view);
             }
 
-            manager.UpdateAppWidget(id, WidgetViews.Build(context, kind, view));
+            // ↻ locates where the widget follows you, unless there's no permission to (it opens the app then).
+            var locate = followers.Contains(id) && access != WidgetLocationAccess.NotAllowed;
+            manager.UpdateAppWidget(id, WidgetViews.Build(context, kind, view, locate, manager.GetAppWidgetOptions(id)));
         }
+
+        if (hasServer && followers.Count > 0 && rankedFrom is not null)
+        {
+            await WidgetLocation.WriteRankedFromAsync(preferences, rankedFrom);
+        }
+
+        WidgetTracking.Update(context, following);
     }
 
-    /// <summary>Home when it's saved, otherwise where the app was last used.</summary>
-    public static WidgetPlaceRef DefaultOrigin(SavedPlaces places) => places.Home is not null ? new WidgetPlaceRef(UI.Services.PlaceKind.Home) : WidgetPlaceRef.LastUsed;
+    /// <summary>Where you are: the owner's choice for Best near, whose title is Best near you.</summary>
+    public static WidgetPlaceRef DefaultOrigin => WidgetPlaceRef.You;
+
+    /// <summary>Whether a widget ranks from where you are, as set up or by default.</summary>
+    public static bool UsesYou(WidgetKind kind, WidgetConfig config, SavedPlaces places) => kind switch
+    {
+        WidgetKind.BestNear => (config.Origin ?? DefaultOrigin).IsYou,
+        WidgetKind.Trip => DefaultRoute(config, places).From?.IsYou == true,
+        _ => false,
+    };
 
     /// <summary>The route set up, or Home → Work when both are saved; neither leaves it to be chosen.</summary>
     public static (WidgetPlaceRef? From, WidgetPlaceRef? To) DefaultRoute(WidgetConfig config, SavedPlaces places) =>

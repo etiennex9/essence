@@ -30,6 +30,9 @@
     <!-- owner/name on GitHub, whose releases the app checks for a newer build. -->
     <EssenceRepository Condition="'$(EssenceRepository)' == ''"></EssenceRepository>
     <EssenceUpdateCheck Condition="'$(EssenceUpdateCheck)' == ''">true</EssenceUpdateCheck>
+    <!-- Lets the widgets follow where you are with "Allow all the time"; false leaves the permission out (Google Play). -->
+    <EssenceBackgroundLocation Condition="'$(EssenceBackgroundLocation)' == ''">true</EssenceBackgroundLocation>
+    <DefineConstants Condition="'$(EssenceBackgroundLocation)' == 'true'">$(DefineConstants);ESSENCE_BACKGROUND_LOCATION</DefineConstants>
     <!-- release.json and changelog-*.json from tools/Essence.Release; without them, About says it's a development version. -->
     <EssenceReleaseNotesDir Condition="'$(EssenceReleaseNotesDir)' == ''">$(MSBuildProjectDirectory)\release\</EssenceReleaseNotesDir>
     <!-- Under its own name: a value given with -p can't be changed here. -->

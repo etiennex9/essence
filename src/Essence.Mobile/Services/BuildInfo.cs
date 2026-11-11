@@ -6,8 +6,18 @@ namespace Essence.Mobile.Services;
 /// <param name="DefaultServer">Prefills the server screen at first launch; null in a fork's build.</param>
 /// <param name="Repository">owner/name on GitHub, whose releases are checked for a newer build; null when not built by CI.</param>
 /// <param name="UpdateCheck">Whether to look for newer builds at all (a Google Play build wouldn't).</param>
-public sealed record BuildInfo(string? DefaultServer, string? Repository, bool UpdateCheck)
+/// <param name="BackgroundLocation">
+/// Whether the widgets may follow where you are with "Allow all the time" (EssenceBackgroundLocation; a Google Play build
+/// wouldn't). Without it, the permission isn't in the manifest at all, and ↻ still locates.
+/// </param>
+public sealed record BuildInfo(string? DefaultServer, string? Repository, bool UpdateCheck, bool BackgroundLocation)
 {
+#if ESSENCE_BACKGROUND_LOCATION
+    private const bool BuiltWithBackgroundLocation = true;
+#else
+    private const bool BuiltWithBackgroundLocation = false;
+#endif
+
     public static BuildInfo Current { get; } = Read();
 
     private static BuildInfo Read()
@@ -18,6 +28,7 @@ public sealed record BuildInfo(string? DefaultServer, string? Repository, bool U
         return new BuildInfo(
             metadata.GetValueOrDefault("Essence.DefaultServer"),
             metadata.GetValueOrDefault("Essence.Repository"),
-            !string.Equals(metadata.GetValueOrDefault("Essence.UpdateCheck"), "false", StringComparison.OrdinalIgnoreCase));
+            !string.Equals(metadata.GetValueOrDefault("Essence.UpdateCheck"), "false", StringComparison.OrdinalIgnoreCase),
+            BuiltWithBackgroundLocation);
     }
 }
