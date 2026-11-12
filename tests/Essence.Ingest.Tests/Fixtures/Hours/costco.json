@@ -1,0 +1,216 @@
+[
+  true,
+  {
+    "stlocID": 515,
+    "displayName": "515",
+    "identifier": "515",
+    "address1": "300 RUE BRIDGE",
+    "city": "MONTREAL",
+    "state": "QC",
+    "country": "CA",
+    "zipCode": "H3K 2C3",
+    "distance": 2.042956919007471,
+    "latitude": 45.486,
+    "longitude": -73.553,
+    "parentGeoNodeID": 10090,
+    "active": 1,
+    "languageID": -24,
+    "hasGasDepartment": true,
+    "hasTiresDepartment": true,
+    "hasFoodDepartment": true,
+    "hasHearingDepartment": false,
+    "hasPharmacyDepartment": false,
+    "hasOpticalDepartment": true,
+    "hasBusinessDepartment": false,
+    "hasPhotoCenterDepartment": false,
+    "hasCarWash": false,
+    "hasBusinessHours": false,
+    "regionCode": "EC",
+    "warehouseHours": [
+      "Mon-Fri.  09:00AM - 08:30PM",
+      "Sat.  09:00AM - 07:00PM",
+      "Sun.  09:00AM - 07:00PM"
+    ],
+    "upcomingHolidays": [],
+    "gasStationHours": [
+      {
+        "title": "Mon-Fri. ",
+        "code": "open",
+        "time": "6:00am - 9:30pm"
+      },
+      {
+        "title": "Sat. ",
+        "code": "open",
+        "time": "6:00am - 8:30pm"
+      },
+      {
+        "title": "Sun. ",
+        "code": "open",
+        "time": "6:00am - 8:30pm"
+      }
+    ],
+    "tireCenterHours": [
+      {
+        "title": "Mon-Fri. ",
+        "code": "open",
+        "time": "9:00am - 8:30pm"
+      },
+      {
+        "title": "Sat. ",
+        "code": "open",
+        "time": "9:00am - 6:00pm"
+      },
+      {
+        "title": "Sun. ",
+        "code": "open",
+        "time": "9:00am - 6:00pm"
+      }
+    ],
+    "locationName": "Montreal",
+    "isShipToWarehouse": true,
+    "isWarehousePickup": true,
+    "enableShipToHome": false
+  },
+  {
+    "stlocID": 505,
+    "displayName": "505",
+    "identifier": "505",
+    "address1": "2999 AUTOROUTE LAVAL 440 OUEST",
+    "city": "LAVAL",
+    "state": "QC",
+    "country": "CA",
+    "zipCode": "H7P 5P4",
+    "distance": 16.717101067744444,
+    "latitude": 45.574,
+    "longitude": -73.757,
+    "parentGeoNodeID": 10090,
+    "active": 1,
+    "languageID": -24,
+    "hasGasDepartment": true,
+    "hasTiresDepartment": true,
+    "hasFoodDepartment": true,
+    "hasHearingDepartment": false,
+    "hasPharmacyDepartment": true,
+    "hasOpticalDepartment": true,
+    "hasBusinessDepartment": false,
+    "hasPhotoCenterDepartment": false,
+    "hasCarWash": false,
+    "hasBusinessHours": false,
+    "regionCode": "EC",
+    "warehouseHours": [
+      "Mon-Fri.  09:00AM - 08:30PM",
+      "Sat.  09:00AM - 07:00PM",
+      "Sun.  09:00AM - 07:00PM"
+    ],
+    "upcomingHolidays": [],
+    "gasStationHours": [
+      {
+        "title": "Mon-Fri. ",
+        "code": "open",
+        "time": "6:00am - 9:30pm"
+      },
+      {
+        "title": "Sat. ",
+        "code": "open",
+        "time": "6:00am - 8:30pm"
+      },
+      {
+        "title": "Sun. ",
+        "code": "open",
+        "time": "6:00am - 8:30pm"
+      }
+    ],
+    "tireCenterHours": [
+      {
+        "title": "Mon-Fri. ",
+        "code": "open",
+        "time": "9:00am - 8:30pm"
+      },
+      {
+        "title": "Sat. ",
+        "code": "open",
+        "time": "9:00am - 6:00pm"
+      },
+      {
+        "title": "Sun. ",
+        "code": "open",
+        "time": "9:00am - 6:00pm"
+      }
+    ],
+    "locationName": "Laval",
+    "isShipToWarehouse": true,
+    "isWarehousePickup": true,
+    "enableShipToHome": false
+  },
+  {
+    "stlocID": 1362,
+    "displayName": "1362",
+    "identifier": "1362",
+    "address1": "1405 BLAIR TOWERS PLACE",
+    "city": "GLOUCESTER",
+    "state": "ON",
+    "country": "CA",
+    "zipCode": "K1J 1A5",
+    "distance": 158.5919547321106,
+    "latitude": 45.435,
+    "longitude": -75.603,
+    "parentGeoNodeID": 10044,
+    "active": 1,
+    "languageID": -24,
+    "hasGasDepartment": true,
+    "hasTiresDepartment": true,
+    "hasFoodDepartment": true,
+    "hasHearingDepartment": true,
+    "hasPharmacyDepartment": true,
+    "hasOpticalDepartment": true,
+    "hasBusinessDepartment": false,
+    "hasPhotoCenterDepartment": false,
+    "hasCarWash": false,
+    "hasBusinessHours": false,
+    "regionCode": "EC",
+    "warehouseHours": [
+      "Mon-Fri.  09:00AM - 08:30PM",
+      "Sat.  09:00AM - 07:00PM",
+      "Sun.  09:00AM - 07:00PM"
+    ],
+    "upcomingHolidays": [],
+    "gasStationHours": [
+      {
+        "title": "Mon-Fri. ",
+        "code": "open",
+        "time": "6:00am - 9:30pm"
+      },
+      {
+        "title": "Sat. ",
+        "code": "open",
+        "time": "6:00am - 8:30pm"
+      },
+      {
+        "title": "Sun. ",
+        "code": "open",
+        "time": "6:00am - 8:30pm"
+      }
+    ],
+    "tireCenterHours": [
+      {
+        "title": "Mon-Fri. ",
+        "code": "open",
+        "time": "9:00am - 8:30pm"
+      },
+      {
+        "title": "Sat. ",
+        "code": "open",
+        "time": "9:00am - 6:00pm"
+      },
+      {
+        "title": "Sun. ",
+        "code": "open",
+        "time": "9:00am - 6:00pm"
+      }
+    ],
+    "locationName": "Gloucester",
+    "isShipToWarehouse": true,
+    "isWarehousePickup": true,
+    "enableShipToHome": false
+  }
+]

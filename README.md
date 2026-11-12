@@ -8,7 +8,7 @@ and shows them on a map of nearby stations.
 | Project | What it does |
 |---|---|
 | `src/Essence.Data` | EF Core model, migrations, `StationKey` normalizer. Shared by every app. |
-| `src/Essence.Ingest` | Worker: polls the feed, archives each new file, diffs it against the database and writes only the changes. Backfills missed versions from the Régie's xlsx files. |
+| `src/Essence.Ingest` | Worker: polls the feed, archives each new file, diffs it against the database and writes only the changes. Backfills missed versions from the Régie's xlsx files. Fetches stations' opening hours once a week and matches them to the stations (see [Opening hours](#opening-hours)). |
 | `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. |
 | `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
 | `src/Essence.Contracts` | The API's response records and the release notes', shared by the API, the UI and the release tool. |
@@ -21,10 +21,10 @@ and shows them on a map of nearby stations.
 | `src/Essence.Web` | Blazor WebAssembly host for `Essence.UI`, served as static files by nginx. See [its README](src/Essence.Web/README.md). |
 | `src/Essence.Mobile` | The Android app: a .NET MAUI Blazor Hybrid host for `Essence.UI`, with home-screen widgets. Not in `Essence.slnx`: see [its README](src/Essence.Mobile/README.md). |
 | `tools/Essence.Release` | Run by the publish and Android workflows: dates each release by the day it landed on `main` and writes the apps' changelog (see [Versions](#versions)). |
-| `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. |
+| `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. The hours: Costco's locator against a trimmed real answer, the curated rules, days and times as the locators write them, matching, the gate, the weekly night schedule across daylight time and the retries, the rows' diff, the cache, the runs' history, the settings. |
 | `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM and Photon clients against stub servers; the address search's labels and filtering; Québec's boundary at its borders. |
 | `tests/Essence.Hours.Tests` | xUnit unit tests: the sources' hours, strict and lenient, what's refused and why, the canonical rule and its round trip, the week's groups; open, closing soon and closed, past midnight and across daylight time; the holidays, Easter and the cautions; the time zones at their borders, and Canada's rule against the system's zones. |
-| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs. |
+| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked). |
 | `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the station shown in Best near you and on the way, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations. |
 | `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
@@ -66,10 +66,12 @@ curl "localhost:8080/places/reverse?lat=45.4988&lon=-73.5666"
 curl localhost:8080/services
 curl "localhost:8080/prices/current?fuel=Régulier&limit=5"
 curl localhost:8080/imports
+curl localhost:8080/hours/sources
 ```
 
 Look at the data with `docker compose exec postgres psql -U essence_admin essence`, and at the raw archive with
-`docker compose exec ingest ls -R /data/archive`.
+`docker compose exec ingest ls -R /data/archive`, and at the hours sources' last downloads with
+`docker compose exec ingest ls -R /data/hours`.
 
 ## Develop
 
@@ -140,6 +142,62 @@ In the Development environment, logs are plain text and the ingest archive goes 
   it marks the fuel unavailable if the station currently has a price for it, and is ignored otherwise. With these rules the xlsx
   and the JSON of the same version produce no changes against each other.
 
+## Opening hours
+
+The feed says every station is "En opération", so whether one is open has to come from its hours. A second worker in the
+ingest (`src/Essence.Ingest/Hours`) fetches them from the brands, matches them to the feed's stations, and keeps one row per
+station and source. Every source's hours are put in OpenStreetMap's `opening_hours`, made canonical by `Essence.Hours`
+(`Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30`); hours a source writes in a way that can't be read for sure leave that station
+out, with a warning in the log, rather than being guessed. The API and the map don't use them yet.
+
+| Source | What it fetches | Matched to |
+|---|---|---|
+| `costco` | Costco's warehouse locator (`costco.ca/AjaxWarehouseBrowseLookupView`), asked from Montréal and from Québec City, each answering its 50 nearest warehouses: the gas bars' hours (`gasStationHours`) of the Québec warehouses that have one. | The feed's Costco stations within 600 m: the feed's point and the locator's can be 540 m apart, the gas bar being away from the warehouse. |
+| `curated` | [curated-hours.json](src/Essence.Ingest/Hours/curated-hours.json), shipped in the image: rules written by hand, each with the day it was checked and where. | A brand's rule: every station of the brand. A station's: its address and postal code, as in the feed. It beats the brand's. |
+
+- **Costco's terms of use ban automated collection.** The owner accepted that risk at two requests a week, one per point.
+  A request isn't repeated within a run (`Hours:RetryCount` 0), and a run that fails stops at the request that failed,
+  to be tried again later: a week without failures makes two requests, and while the locator fails, each retry (see
+  **When**) makes at most two more. Its holiday hours (`upcomingHolidays`) are the warehouse's, and whether the gas bar follows
+  them isn't known, so they're ignored for now. The curated rule (the same hours at all 18 Québec warehouses, checked
+  2026-11-11 and confirmed for Laval) serves when the locator can't be had: it's a source of its own, so a Costco station
+  has both rows, and which one counts is the API's choice.
+- **When.** Each source runs once every 7 days, at a minute drawn at random in that night's 01:00–05:00 (Québec time,
+  the window an hour shorter or longer on the nights the clocks change), drawn again each week. After a start, a source
+  that never succeeded runs a minute after the one before it, and `curated` runs on every start, so a new image's rules
+  are in at once. A failed or rejected run is tried again after 15 minutes, then 1 hour, then every 6 hours until one
+  succeeds.
+- **Matching.** A record only ever matches stations of its own brand (Esso and Mobil are one, Couche-Tard and Circle K
+  too): a station's own rule first, then the records with a point, then a brand's rule for the brand's stations left. A
+  match by distance is confirmed when the postal codes or the house numbers agree (Drummondville's two points, 540 m apart,
+  have other postal codes but the same number). Pairs are taken one to one, the confirmed first, then the
+  closest, and a pair that isn't confirmed is left out when the same record is within reach of another station, or the
+  same station within reach of another record with other hours: which is which can't be told then.
+- **Checks.** A run whose source gives no records, or that matches fewer stations than 80 % of the last good run, is
+  rejected: nothing is written, and the last good hours keep serving. `curated` is taken as written instead, fewer rules
+  or none included (a rule taken out of the file takes its rows with it), unless one of its rules is left out (it can't
+  be read, or it's there twice): then the whole file is rejected until it's fixed, and the rules before it keep serving.
+- **The last downloads.** Each source's last good download is kept in `/data/hours/<source>/` (`latest.raw`, the one
+  before as `previous.raw`, and `meta.json` with its version and when it was fetched), cut down to the fields read:
+  nobody's name or phone number. Every hour, when the feed's stations changed, they're matched again without asking the
+  sources, so a station added or moved gets its hours within the hour. Only the download whose rows are serving is
+  matched again: one left older on disk (keeping the newer one failed) waits for the next run.
+- **Tables.** `station_hours` has one row per station and source: the rule (null when a source has the place but not
+  its hours), the source's id for the place and a link, how it was matched (`natural_key`, `distance` or `brand`) and how
+  far, whether that's confirmed, whether the source says it's closed for now, when the source says it was checked, and
+  when it was fetched. `hours_imports` logs each source's runs: `succeeded`, `unchanged`, `rematched` (matched again from
+  the last download because the stations changed: nothing was fetched, so it's no success), `rejected`, `failed` or
+  `disabled` (see **Turning a source off**), with the version of the download (its SHA-256), its counts and the error.
+  The feed's `imports` is left alone: what reads it takes every success there for a version of the feed.
+- **Turning a source off.** On a start, the rows of a source that has run but is now off (`Hours:<Source>:Enabled`
+  `false`) or gone from the image are removed, since nothing refreshes them any more, and a `disabled` run is logged:
+  the source is no longer listed in `/hours/sources` or checked by `/health`. Turned on again, it starts over, as a new
+  source, and runs soon after the start. `Hours:Enabled` `false` only stops the worker: the rows stay as they are,
+  and go stale.
+- **Health.** `/hours/sources` says how each source is going, and `/health`'s `hours` check is `Degraded` when a source
+  that has run has had no success in `Health:HoursStaleAfterDays` (21) days, or none ever. Its hours still show then,
+  but are stale.
+
 ## API
 
 | Endpoint | |
@@ -155,7 +213,8 @@ In the Development environment, logs are plain text and the ingest archive goes 
 | `GET /stations/{id}/prices?fuel&from&to` | Price history overlapping a range (default: the last 30 days). |
 | `GET /prices/current?fuel&region&brand&sort=price&includeUnavailable&limit=50` | Current prices, cheapest first. |
 | `GET /imports?limit=20` | Recent imports with their statistics and `source` (`feed` or `xlsx`). |
-| `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. A routing or geocoding server that doesn't answer, or whose data is being built, makes it `Degraded`, still 200, with the build's stage and percent. |
+| `GET /hours/sources` | Each source of stations' opening hours: its last success and attempt, what came of it and why, its failures in a row, how many stations it has hours for, and the version of its data (see [Opening hours](#opening-hours)). |
+| `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. A routing or geocoding server that doesn't answer, or whose data is being built, makes it `Degraded`, still 200, with the build's stage and percent; so does an hours source without a success in 21 days, with each source's last success. |
 
 `/stations/best` ranks the operating stations with an available price for the fuel (Costco only with `costco=true`: it
 sells to members only) by what the fill-up costs once the drive there and back is counted: price ÷ 100 × (fill + km there
@@ -566,6 +625,18 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Backfill:MaxAge` | `01:10:00` | Older slots aren't requested (the server keeps the files about an hour). |
 | `Archive:Path` / `RetentionDays` | `/data/archive` / 30 | |
 | `Health:MaxImportAgeMinutes` | 15 | API `/health` threshold. |
+| `Health:HoursStaleAfterDays` | 21 | An hours source without a success for longer makes `/health`'s `hours` check `Degraded`. |
+| `Hours:Enabled` | `true` | The ingest's hours worker ([Opening hours](#opening-hours)). Off, the rows stay as they are. |
+| `Hours:CachePath` | `/data/hours` | Each source's last good download. |
+| `Hours:UserAgent` | `Essence-Ingest/1.0 (station hours)` | Sent to every source; a contact URL can go in the parentheses. |
+| `Hours:Every` / `NightStart` / `NightEnd` | 7 days / 01:00 / 05:00 | How often each source runs (at least a day apart), and the night it's drawn in, in Québec time. |
+| `Hours:Backoff` | 15 min, 1 h, 6 h | After a failed or rejected run, then after the next one, and so on; the last one repeats. |
+| `Hours:MinShareOfLastGood` | 0.8 | A run matching fewer stations than this share of the last good run's is rejected. |
+| `Hours:StaleAfter` | 21 days | Past this without a success, a failing source's log says its hours are stale. Keep it with `Health:HoursStaleAfterDays`. |
+| `Hours:RematchEvery` | 1 h | How often the last downloads are matched again, when the stations changed. |
+| `Hours:RequestTimeout` / `RetryCount` | 30 s / 0 | Per request; retries within a run. |
+| `Hours:Curated:Enabled` / `Hours:Costco:Enabled` | `true` | Each source. Turned off, its rows are removed at the next start. |
+| `Hours:Costco:Url` | Costco's locator | With `{lat}` and `{lon}` where each point goes. |
 | `Routing:BaseUrl` | `http://routing:5000/` | The routing server (OSRM), ending with `/`. 3 s per attempt and one retry. |
 | `Routing:StatusUrl` | `http://routing:9090/` | The routing container's status server, ending with `/`. |
 | `Geocoding:BaseUrl` | `http://geocoding:2322/` | The address search (Photon), ending with `/`. 1.5 s, no retry. |

@@ -203,3 +203,22 @@ public sealed record DataServicesStatus(ServiceReadiness Routing, ServiceReadine
 /// <param name="NextAttemptAt">While <c>waiting</c>: when it tries again.</param>
 public sealed record ServiceReadiness(
     string State, bool Ready, string? Stage, int? Percent, string? DataDate, string? LastError, DateTimeOffset? NextAttemptAt);
+
+/// <summary>Where stations' opening hours come from (<c>/hours/sources</c>), and how each source's runs are going.</summary>
+/// <param name="Source"><c>costco</c>, <c>curated</c>…</param>
+/// <param name="LastSuccessAt">When its hours were last fetched and written, changed or not; null when never.</param>
+/// <param name="LastAttemptAt">When it was last fetched, whatever came of it.</param>
+/// <param name="LastStatus">What came of that: <c>succeeded</c>, <c>unchanged</c>, <c>rejected</c> (the answer looked wrong, and the last good hours kept serving) or <c>failed</c>.</param>
+/// <param name="LastError">Why that failed or was rejected, in English; null when it didn't.</param>
+/// <param name="ConsecutiveFailures">Failed or rejected fetches in a row since the last success.</param>
+/// <param name="Stations">The stations it has hours for now.</param>
+/// <param name="DataVersion">The version (SHA-256) of the download those hours come from.</param>
+public sealed record HoursSourceStatus(
+    string Source,
+    DateTimeOffset? LastSuccessAt,
+    DateTimeOffset? LastAttemptAt,
+    string? LastStatus,
+    string? LastError,
+    int ConsecutiveFailures,
+    int Stations,
+    string? DataVersion);

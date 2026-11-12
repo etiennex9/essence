@@ -29,7 +29,8 @@ builder.Services.AddOpenApi();
 builder.Services.AddHealthChecks()
     .AddCheck<IngestHealthCheck>("ingest")
     .AddCheck<RoutingHealthCheck>("routing", HealthStatus.Degraded)
-    .AddCheck<GeocodingHealthCheck>("geocoding", HealthStatus.Degraded);
+    .AddCheck<GeocodingHealthCheck>("geocoding", HealthStatus.Degraded)
+    .AddCheck<HoursHealthCheck>("hours", HealthStatus.Degraded);
 builder.Services.AddPerIpRateLimiting(builder.Configuration);
 
 // Essence.Web's nginx forwards /api/ here with the client's address (for the rate limit) and the public scheme, host and
@@ -79,6 +80,7 @@ app.MapPlaceEndpoints();
 app.MapDataServiceEndpoints();
 app.MapPriceEndpoints();
 app.MapImportEndpoints();
+app.MapHoursEndpoints();
 
 app.Run();
 

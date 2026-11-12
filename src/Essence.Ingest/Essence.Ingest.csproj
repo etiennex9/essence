@@ -11,6 +11,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Essence.Data\Essence.Data.csproj" />
+    <ProjectReference Include="..\Essence.Hours\Essence.Hours.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Hours written down by hand (CuratedHoursSource): shipped in the assembly, so a new image brings new rules. -->
+    <EmbeddedResource Include="Hours\curated-hours.json" LogicalName="Essence.Ingest.Hours.curated-hours.json" />
   </ItemGroup>
 
 </Project>
