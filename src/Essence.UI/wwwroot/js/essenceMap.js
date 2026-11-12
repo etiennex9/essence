@@ -665,6 +665,7 @@ export function createMap(container, options, dotnet) {
     function renderMarker(element, model) {
         element.dataset.tone = model.tone;
         element.classList.toggle("is-unavailable", model.unavailable);
+        element.classList.toggle("is-closed", model.closed);
         element.classList.toggle("is-favorite", model.favorite);
         element.classList.toggle("is-selected", model.id === selectedId);
         applyEmphasis(element, model.id);

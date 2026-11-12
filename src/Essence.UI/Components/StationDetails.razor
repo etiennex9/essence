@@ -4,6 +4,8 @@
 @inject HistoryFuels ChartFuels
 @inject FavoriteStations Favorites
 @inject ComparedStations Comparison
+@inject StationHoursView HoursViews
+@inject TimeProvider Time
 @inject IStringLocalizer<Strings> L
 
 <Pane @ref="_pane" TitleId="ess-details-title" OnClose="OnClose">
@@ -59,6 +61,10 @@
                 {
                     <span> · @L["DistanceKm", km.ToString("0.0", CultureInfo.CurrentCulture)]</span>
                 }
+                @if (_hours.Status is { } status)
+                {
+                    <span> · <span class="hours @(_hours.Kind == HoursKind.ClosesSoon ? "is-soon" : null)">@status</span></span>
+                }
             </p>
             @if (!string.IsNullOrWhiteSpace(_station.Name) && !string.Equals(_station.Name, _station.Brand, StringComparison.OrdinalIgnoreCase))
             {
@@ -71,6 +77,10 @@
             else if (_station.Status != "En opération")
             {
                 <p class="notice">@_station.Status</p>
+            }
+            @if (_hours.HolidayCaution)
+            {
+                <p class="notice">@L["HolidayHoursMayDiffer"]</p>
             }
 
             <section aria-labelledby="ess-current-prices">
@@ -93,6 +103,11 @@
                         </li>
                     }
                 </ul>
+            </section>
+
+            <section aria-labelledby="ess-hours">
+                <h3 id="ess-hours">@L["Hours"]</h3>
+                <StationHours View="_hours" />
             </section>
 
             <section aria-labelledby="ess-price-history">
@@ -174,8 +189,16 @@
     private string? _shownFuel;
     private ApiError _historyError;
     private int _days = 30;
-    private DateTimeOffset _now = DateTimeOffset.UtcNow;
+    private DateTimeOffset _now;
     private BrandStyle _brand = BrandCatalog.For(null);
+
+    /// <summary>The station's hours now; shown again when that changes (<see cref="_hoursTimer"/>).</summary>
+    private HoursView _hours = HoursView.Unknown;
+
+    /// <summary>Fires when the hours shown change next: the station starts closing soon, closes or opens.</summary>
+    private ITimer? _hoursTimer;
+
+    private bool _disposed;
 
     /// <summary>When the prices shown were imported, as the API said with them.</summary>
     private DateTimeOffset? _shownDataAsOf;
@@ -212,6 +235,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _now = Time.GetUtcNow();
         Favorites.Changed += OnListsChanged;
         Comparison.Changed += OnListsChanged;
         await Favorites.LoadAsync();
@@ -252,7 +276,8 @@
         _station = null;
         _error = ApiError.None;
         _brand = BrandCatalog.For(null);
-        _now = DateTimeOffset.UtcNow;
+        _now = Time.GetUtcNow();
+        ShowHours();
 
         _stationCts?.Cancel();
         var cts = _stationCts = new CancellationTokenSource();
@@ -271,6 +296,7 @@
             if (_station is not null)
             {
                 _brand = BrandCatalog.For(_station.Brand);
+                ShowHours();
                 StateHasChanged();
                 await OnLoaded.InvokeAsync(_station);
                 await Favorites.RefreshAsync(_station);
@@ -305,7 +331,8 @@
             var pricesChanged = _station is null || !station.Prices.SequenceEqual(_station.Prices);
             _station = station;
             _shownDataAsOf = result.DataAsOf > DataAsOf ? result.DataAsOf : DataAsOf;
-            _now = DateTimeOffset.UtcNow;
+            _now = Time.GetUtcNow();
+            ShowHours();
             StateHasChanged();
             if (pricesChanged)
             {
@@ -358,6 +385,38 @@
 
     private void ShowHistory() => _shownHistory = _history is { } chart ? ChartFuels.Filter(chart, Fuel) : null;
 
+    /// <summary>
+    /// The station's hours as of now, and a timer for when they change next, which shows them again then: "Open until
+    /// 9:30 p.m." turns amber half an hour before, then "Closed · opens 6:00 a.m." at 9:30.
+    /// </summary>
+    private void ShowHours()
+    {
+        _hoursTimer?.Dispose();
+        _hoursTimer = null;
+        var now = Time.GetUtcNow();
+        _hours = _station is { } station ? HoursViews.Describe(station.Hours, station.Latitude, station.Longitude, now) : HoursView.Unknown;
+        if (_disposed || _hours.RefreshAt is not { } at)
+        {
+            return;
+        }
+
+        // A second past the change, so it's surely past it then; one already past runs at once.
+        var due = at - now + TimeSpan.FromSeconds(1);
+        _hoursTimer = Time.CreateTimer(_ => InvokeAsync(OnHoursChanged), null, due > TimeSpan.Zero ? due : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+    }
+
+    private void OnHoursChanged()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _now = Time.GetUtcNow();
+        ShowHours();
+        StateHasChanged();
+    }
+
     private async Task ToggleFuelAsync(string fuel)
     {
         if (await ChartFuels.ToggleAsync(fuel, Fuel))
@@ -407,9 +466,11 @@
 
     public void Dispose()
     {
+        _disposed = true;
         Favorites.Changed -= OnListsChanged;
         Comparison.Changed -= OnListsChanged;
         _stationCts?.Cancel();
         _historyCts?.Cancel();
+        _hoursTimer?.Dispose();
     }
 }

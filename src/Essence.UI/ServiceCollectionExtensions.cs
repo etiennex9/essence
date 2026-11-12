@@ -9,7 +9,7 @@ public static class ServiceCollectionExtensions
     /// <summary>
     /// Registers what the map page needs. The device services default to the browser ones; a host with better ones
     /// (e.g. native geolocation in MAUI) registers its own <see cref="IDeviceLocation"/>, <see cref="IPreferenceStore"/> or
-    /// <see cref="ISessionStore"/> first,
+    /// <see cref="ISessionStore"/> first, and its own <see cref="TimeProvider"/> (the web app's simulated time in Development),
     /// and likewise its own <see cref="IReleaseNotesSource"/> (release notes bundled with the app). A host whose API address
     /// isn't known at startup registers its own <see cref="EssenceApiClient"/> and leaves
     /// <see cref="EssenceUIOptions.ApiBaseUrl"/> out.
@@ -41,6 +41,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<PlaceSearch>();
         services.AddScoped<PlaceAddresses>();
         services.AddScoped<ServicesStatus>();
+        services.AddScoped<StationHoursView>();
         services.TryAddScoped<BrowserDevice>();
         services.TryAddScoped<IDeviceLocation>(sp => sp.GetRequiredService<BrowserDevice>());
         services.TryAddScoped<IPreferenceStore>(sp => sp.GetRequiredService<BrowserDevice>());

@@ -3,10 +3,12 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json .editorconfig ./
 COPY src/Essence.Contracts/Essence.Contracts.csproj src/Essence.Contracts/
+COPY src/Essence.Hours/Essence.Hours.csproj src/Essence.Hours/
 COPY src/Essence.UI/Essence.UI.csproj src/Essence.UI/
 COPY src/Essence.Web/Essence.Web.csproj src/Essence.Web/
 RUN dotnet restore src/Essence.Web/Essence.Web.csproj
 COPY src/Essence.Contracts/ src/Essence.Contracts/
+COPY src/Essence.Hours/ src/Essence.Hours/
 COPY src/Essence.UI/ src/Essence.UI/
 COPY src/Essence.Web/ src/Essence.Web/
 RUN dotnet publish src/Essence.Web/Essence.Web.csproj --configuration Release --no-restore --output /app \

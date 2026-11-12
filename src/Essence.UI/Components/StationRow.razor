@@ -1,3 +1,4 @@
+@inject StationHoursView HoursViews
 @inject IStringLocalizer<Strings> L
 
 @* A station in the favorites or the comparison: the row's main button, which opens its details. The parent puts it in a
@@ -20,7 +21,15 @@
     }
     else
     {
-        <span class="address">@(Station.Address + Distance)</span>
+        @* Closed, or closing soon, before the address: the address is what an end cut short loses. *@
+        <span class="address">
+            @if (_hours.Tag is { } tag)
+            {
+                <span class="hours @(_hours.Kind == HoursKind.ClosesSoon ? "is-soon" : null)">@tag</span>
+                @(" · ")
+            }
+            @(Station.Address + Distance)
+        </span>
     }
     @if (Hovering && Loaded)
     {
@@ -48,6 +57,9 @@
 @code {
     private BrandStyle _brand = BrandCatalog.For(null);
 
+    /// <summary>The saved station's hours (<see cref="SavedStation.Hours"/>) at <see cref="Now"/>: its row says when it's closed.</summary>
+    private HoursView _hours = HoursView.Unknown;
+
     [Parameter, EditorRequired]
     public SavedStation Station { get; set; } = null!;
 
@@ -73,7 +85,7 @@
     [Parameter]
     public decimal? HoveredPriceCents { get; set; }
 
-    /// <summary>For "Changed … ago".</summary>
+    /// <summary>For "Changed … ago", and whether it's open.</summary>
     [Parameter]
     public DateTimeOffset Now { get; set; }
 
@@ -90,5 +102,9 @@
         ? $" · {Geo.DistanceKm(user, new GeoPoint(lat, lon)).ToString("0.0", CultureInfo.CurrentCulture)} km"
         : "";
 
-    protected override void OnParametersSet() => _brand = BrandCatalog.For(Station.Brand);
+    protected override void OnParametersSet()
+    {
+        _brand = BrandCatalog.For(Station.Brand);
+        _hours = HoursViews.Describe(Station.Hours, Station.Latitude, Station.Longitude, Now);
+    }
 }

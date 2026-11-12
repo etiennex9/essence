@@ -1,3 +1,4 @@
+using Essence.Contracts;
 using Essence.UI.Services;
 using static Essence.UI.Tests.TestStations;
 
@@ -72,6 +73,33 @@ public class FavoriteStationsTests
         var reloaded = new FavoriteStations(_preferences);
         await reloaded.LoadAsync();
         Assert.Equal("Esso", Assert.Single(reloaded.Favorites).Brand);
+    }
+
+    [Fact]
+    public async Task Refresh_keeps_the_station_s_latest_hours_for_its_row()
+    {
+        var favorites = new FavoriteStations(_preferences);
+        await favorites.AddAsync(Station(1));
+        var hours = new StationHours("Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30", "costco", Trusted: true, Confirmed: true, null, null);
+
+        await favorites.RefreshAsync(Detail(1) with { Hours = hours });
+
+        var reloaded = new FavoriteStations(_preferences);
+        await reloaded.LoadAsync();
+        Assert.Equal(hours, Assert.Single(reloaded.Favorites).Hours);
+    }
+
+    [Fact]
+    public async Task Favorites_saved_before_there_were_hours_still_read()
+    {
+        await _preferences.SetAsync(FavoriteStations.StorageKey, """
+            [{"id":1,"brand":"Shell","name":"Shell 1","address":"1 rue Principale","region":"Montréal","latitude":45.5,"longitude":-73.56}]
+            """);
+        var favorites = new FavoriteStations(_preferences);
+
+        await favorites.LoadAsync();
+
+        Assert.Equal(Station(1), Assert.Single(favorites.Favorites));
     }
 
     [Fact]

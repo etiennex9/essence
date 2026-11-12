@@ -21,6 +21,13 @@ public static class StationEndpoints
     internal const double MaxLitresPer100Km = 40;
     internal const double MaxDetourMinutes = 120;
 
+    private const string HoursDescription =
+        "`hours` is the station's opening hours, null when no source has them: `rule` in OpenStreetMap's `opening_hours` "
+        + "(`Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30`, `24/7`), in the station's time zone, and its `source`. Costco's own hours "
+        + "(`costco`) beat the hours Essence checked (`curated`), which beat Couche-Tard's (`circlek`), Ultramar's and Shell's, "
+        + "then OpenStreetMap's (`osm`, confirmed first); a source without a success in 21 days comes after the others and "
+        + "isn't `trusted`, nor is OpenStreetMap.";
+
     private static readonly Expression<Func<Station, StationSummary>> ToSummary = s => new StationSummary(
         s.Id, s.Name, s.Brand, s.Status, s.Address, s.PostalCode, s.Region, s.Latitude, s.Longitude, s.IsActive);
 
@@ -32,6 +39,7 @@ public static class StationEndpoints
             .WithDescription("Filters combine with AND. `q` searches the name, and the address and postal code ignoring case and accents.");
         group.MapGet("/nearby", Nearby)
             .WithSummary("Active stations near a point, closest first")
+            .WithDescription(HoursDescription)
             .WithDataVersion();
         group.MapGet("/best", Best)
             .WithSummary("Where to fill up near a point")
@@ -46,7 +54,8 @@ public static class StationEndpoints
                 + "else returns the closest at any distance.")
             .WithDataVersion();
         group.MapGet("/{id:long}", GetStation)
-            .WithSummary("A station with its current prices")
+            .WithSummary("A station with its current prices and opening hours")
+            .WithDescription(HoursDescription)
             .WithDataVersion();
         group.MapGet("/{id:long}/prices", GetPriceHistory)
             .WithSummary("Price history of a station")
@@ -114,6 +123,7 @@ public static class StationEndpoints
 
     private static async Task<Results<Ok<StationDetail>, NotFound>> GetStation(
         EssenceDbContext db,
+        StationSnapshot snapshot,
         long id,
         CancellationToken cancellationToken)
     {
@@ -125,13 +135,21 @@ public static class StationEndpoints
                 s.CurrentPrices
                     .OrderBy(p => p.FuelTypeId)
                     .Select(p => new CurrentPriceDto(p.FuelType.Code, p.PriceCents, p.IsAvailable, p.Since))
-                    .ToList()))
+                    .ToList(),
+                null))
             .FirstOrDefaultAsync(cancellationToken);
-        return station is null ? TypedResults.NotFound() : TypedResults.Ok(station);
+        if (station is null)
+        {
+            return TypedResults.NotFound();
+        }
+
+        var hours = (await snapshot.GetAsync(db, cancellationToken)).Hours;
+        return TypedResults.Ok(station with { Hours = hours.GetValueOrDefault(id)?.Dto });
     }
 
     private static async Task<Results<Ok<List<NearbyStation>>, ValidationProblem>> Nearby(
         EssenceDbContext db,
+        StationSnapshot snapshot,
         [Description("Latitude of the centre, in degrees.")] double lat,
         [Description("Longitude of the centre, in degrees.")] double lon,
         CancellationToken cancellationToken,
@@ -187,6 +205,7 @@ public static class StationEndpoints
                     .ToList(),
             })
             .ToDictionaryAsync(s => s.Id, cancellationToken);
+        var hours = (await snapshot.GetAsync(db, cancellationToken)).Hours;
 
         var result = hits
             .Where(h => stations.ContainsKey(h.Id))
@@ -195,7 +214,7 @@ public static class StationEndpoints
                 var s = stations[h.Id];
                 return new NearbyStation(
                     s.Id, s.Name, s.Brand, s.Address, s.PostalCode, s.Region, s.Latitude!.Value, s.Longitude!.Value,
-                    Math.Round(h.DistanceMeters / 1000, 3), s.Prices);
+                    Math.Round(h.DistanceMeters / 1000, 3), s.Prices, hours.GetValueOrDefault(s.Id)?.Dto);
             })
             .ToList();
         return TypedResults.Ok(result);

@@ -29,6 +29,19 @@ public class ServiceCollectionTests
     }
 
     [Fact]
+    public void A_host_s_own_clock_is_kept()
+    {
+        // The web app's simulated time, in Development.
+        var clock = new Microsoft.Extensions.Time.Testing.FakeTimeProvider();
+        using var services = new ServiceCollection()
+            .AddSingleton<TimeProvider>(clock)
+            .AddEssenceUI(new EssenceUIOptions { ApiBaseUrl = new Uri("https://example.com/api") })
+            .BuildServiceProvider();
+
+        Assert.Same(clock, services.GetRequiredService<TimeProvider>());
+    }
+
+    [Fact]
     public void Without_an_api_nor_a_client_it_says_what_s_missing()
     {
         var error = Assert.Throws<InvalidOperationException>(() => new ServiceCollection().AddEssenceUI(new EssenceUIOptions()));
