@@ -64,6 +64,15 @@
     color: var(--ess-warning-text);
 }
 
+.address .hours {
+    color: var(--ess-text);
+    font-weight: 500;
+}
+
+.address .hours.is-soon {
+    color: var(--ess-warning-text);
+}
+
 .price {
     grid-area: price;
     justify-self: end;

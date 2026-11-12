@@ -39,13 +39,46 @@ public static class Formatting
             : rest == 0 ? string.Create(culture, $"{hours} h") : string.Create(culture, $"{hours} h {rest} min");
     }
 
-    /// <summary>The time of day in the culture's short style ("8:10 a.m.", "08 h 10"), in the device's time zone.</summary>
+    /// <summary>The time of day in the culture's short style ("8:10 a.m.", "8 h 10"; <see cref="ShortTime"/>), in the zone given.</summary>
     public static string TimeOfDay(DateTimeOffset at, TimeZoneInfo zone, IFormatProvider culture) =>
-        TimeZoneInfo.ConvertTime(at, zone).ToString("t", culture);
+        ShortTime(TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, zone).DateTime), culture);
 
     /// <summary>The day in the culture's month-and-day style ("November 7", "7 novembre"), in the device's time zone.</summary>
     public static string MonthDay(DateTimeOffset at, TimeZoneInfo zone, IFormatProvider culture) =>
         TimeZoneInfo.ConvertTime(at, zone).ToString("M", culture);
+
+    /// <summary>The month in the culture's month-and-year style ("November 2025", "novembre 2025"), in the zone given.</summary>
+    public static string MonthYear(DateTimeOffset at, TimeZoneInfo zone, IFormatProvider culture) =>
+        TimeZoneInfo.ConvertTime(at, zone).ToString("Y", culture);
+
+    /// <summary>
+    /// A station's clock time, in its own time zone (<c>QuebecTime.ZoneFor</c>), never the device's: "9:30 p.m.", "6:00 a.m.",
+    /// "21 h 30", "6 h" (<see cref="ShortTime"/>).
+    /// </summary>
+    /// <param name="midnight">What 00:00 is called, "midnight": "12:00 a.m." and "0 h" read as the start of the day.</param>
+    public static string Clock(DateTimeOffset at, TimeZoneInfo zone, IFormatProvider culture, string midnight) =>
+        Clock(TimeOnly.FromDateTime(TimeZoneInfo.ConvertTime(at, zone).DateTime), culture, midnight);
+
+    /// <inheritdoc cref="Clock(DateTimeOffset, TimeZoneInfo, IFormatProvider, string)"/>
+    public static string Clock(TimeOnly time, IFormatProvider culture, string midnight) =>
+        time == TimeOnly.MinValue ? midnight : ShortTime(time, culture);
+
+    /// <summary>
+    /// The culture's short time ("8:10 a.m."), but Québec French's as the OQLF writes it, "8 h 10" and "6 h", where .NET's
+    /// gives "08 h 10" and "06 h 00": the app writes every clock time one way.
+    /// </summary>
+    private static string ShortTime(TimeOnly time, IFormatProvider culture)
+    {
+        // fr-CA's "HH 'h' mm".
+        if (DateTimeFormatInfo.GetInstance(culture).ShortTimePattern.Contains("'h'", StringComparison.Ordinal))
+        {
+            return time.Minute == 0
+                ? string.Create(culture, $"{time.Hour} h")
+                : string.Create(culture, $"{time.Hour} h {time.Minute:00}");
+        }
+
+        return time.ToString("t", culture);
+    }
 
     /// <summary>The unit and count for "… ago": minutes under an hour, hours under two days, then days.</summary>
     public static (AgoUnit Unit, int Value) Ago(TimeSpan elapsed) => elapsed switch

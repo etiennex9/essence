@@ -5,11 +5,15 @@ using Essence.Contracts;
 namespace Essence.UI.Services;
 
 /// <summary>What the favorites and the comparison show of a station before its prices load, saved when it's added.</summary>
+/// <param name="Hours">
+/// Its opening hours as of when its details last loaded (<see cref="FavoriteStations.RefreshAsync"/>), so a row can say it's
+/// closed; null when unknown, and in what was saved before there were hours.
+/// </param>
 public sealed record SavedStation(
-    long Id, string? Brand, string? Name, string Address, string Region, double? Latitude, double? Longitude)
+    long Id, string? Brand, string? Name, string Address, string Region, double? Latitude, double? Longitude, StationHours? Hours = null)
 {
     public static SavedStation From(StationDetail station) => new(
-        station.Id, station.Brand, station.Name, station.Address, station.Region, station.Latitude, station.Longitude);
+        station.Id, station.Brand, station.Name, station.Address, station.Region, station.Latitude, station.Longitude, station.Hours);
 }
 
 /// <summary>Saves lists of stations as JSON in an <see cref="IPreferenceStore"/>. Entries can be null (the comparison's empty slots).</summary>

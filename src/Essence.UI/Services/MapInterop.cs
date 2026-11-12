@@ -11,6 +11,7 @@ public sealed record MapOptions(string StyleUrl, string DarkStyleUrl, double Cen
 /// <param name="Z">Stacking order; higher draws on top (<see cref="PillPlacement"/>).</param>
 /// <param name="Favorite">Draws a star on the marker.</param>
 /// <param name="PillFrom">The zoom from which it shows its price; below, it's a brand dot. 0: always (<see cref="PillPlacement"/>).</param>
+/// <param name="Closed">Its hours say it's closed now, or the source that it's closed for now: a grey pill (<see cref="StationHoursView.StateAt"/>).</param>
 public sealed record MarkerModel(
     long Id,
     double Lat,
@@ -25,7 +26,8 @@ public sealed record MarkerModel(
     string Background,
     string Foreground,
     string? LogoUrl,
-    double PillFrom = 0);
+    double PillFrom = 0,
+    bool Closed = false);
 
 /// <summary>What the page keeps across a reload for a new release, besides the map's view.</summary>
 /// <param name="StationPushed">The page pushed the <c>?station=</c> history entry (MapPage), so closing still goes back.</param>

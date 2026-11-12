@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject ComparedStations Comparison
 @inject HistoryCache History
+@inject TimeProvider Time
 @inject IStringLocalizer<Strings> L
 
 @* The compared stations' prices for the map's fuel, in a chart over the stations, cheapest first. The rows are the
@@ -87,7 +88,7 @@
     private bool _ready;
     private int _days;
     private string? _shownFuel;
-    private DateTimeOffset _now = DateTimeOffset.UtcNow;
+    private DateTimeOffset _now;
 
     /// <summary>One line per compared station with prices in the period; null until their histories are in.</summary>
     private PriceChartData? _chart;
@@ -117,6 +118,7 @@
     {
         // Set before awaiting: the saved comparison coming in raises Changed, which mustn't fetch without a period.
         _days = Comparison.ChartDays;
+        _now = Time.GetUtcNow();
         Comparison.Changed += OnComparisonChanged;
         await Comparison.LoadAsync();
         _ready = true;
@@ -212,7 +214,7 @@
             }
         }
 
-        _now = DateTimeOffset.UtcNow;
+        _now = Time.GetUtcNow();
         Rebuild();
     }
 
@@ -224,7 +226,7 @@
             return;
         }
 
-        var to = _histories.Count == 0 ? DateTimeOffset.UtcNow : _histories.Values.Max(h => h.To);
+        var to = _histories.Count == 0 ? Time.GetUtcNow() : _histories.Values.Max(h => h.To);
         var sources = Comparison.Stations
             .Where(c => _histories.ContainsKey(c.Station.Id))
             .Select(c => new SeriesSource(Key(c.Station.Id), StationRow.NameOf(c.Station, L), c.Color, _histories[c.Station.Id].Rows));

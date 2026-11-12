@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using Essence.Contracts;
 using Essence.UI.Services;
 
 namespace Essence.UI.Tests;
@@ -13,6 +14,16 @@ public class EssenceApiClientTests
           "latitude":45.5155,"longitude":-73.5617,"distanceKm":1.234,
           "prices":[{"fuel":"Régulier","priceCents":167.3,"isAvailable":true,"since":"2026-10-12T19:05:01+00:00"}]}]
         """;
+
+    /// <summary>Hours as the API writes them: Costco's, checked by Essence, temporarily closed left at its default.</summary>
+    private const string HoursJson = """
+        {"rule":"Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30","source":"curated","trusted":true,"confirmed":true,
+         "checkedAt":"2026-11-11T00:00:00-05:00","link":"https://www.costco.ca/w/-/locations"}
+        """;
+
+    private static readonly StationHours Hours = new(
+        "Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30", "curated", Trusted: true, Confirmed: true,
+        new DateTimeOffset(2026, 11, 11, 0, 0, 0, TimeSpan.FromHours(-5)), "https://www.costco.ca/w/-/locations");
 
     [Fact]
     public async Task A_place_search_sends_what_was_typed_near_the_user_in_the_language()
@@ -73,6 +84,36 @@ public class EssenceApiClientTests
         Assert.Equal(42, station.Id);
         Assert.Equal(167.3m, station.Prices[0].PriceCents);
         Assert.Equal(new DateTimeOffset(2026, 10, 12, 19, 5, 1, TimeSpan.Zero), station.Prices[0].Since);
+        // An API from before the hours sends none: unknown.
+        Assert.Null(station.Hours);
+    }
+
+    [Fact]
+    public async Task Nearby_reads_the_stations_hours()
+    {
+        var (client, _) = Client(_ => Json(NearbyJson.Replace("\"distanceKm\":1.234,", $"\"distanceKm\":1.234,\"hours\":{HoursJson},")));
+
+        var result = await client.GetNearbyAsync(45.5, -73.56, 3, "Régulier", 20, TestContext.Current.CancellationToken);
+
+        Assert.Equal(Hours, Assert.Single(result.Value!).Hours);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task A_station_s_details_read_with_their_hours_or_without(bool withHours)
+    {
+        var json = $$"""
+            {"id":42,"name":"Costco Laval","brand":"Costco","status":"En opération","address":"1 rue Principale",
+             "postalCode":"H7T0A1","region":"Laval","latitude":45.5699,"longitude":-73.7469,"isActive":true,
+             "firstSeenAt":"2026-10-01T00:00:00Z","lastSeenAt":"2026-11-11T00:00:00Z","updatedAt":"2026-11-11T00:00:00Z",
+             "prices":[]{{(withHours ? $",\"hours\":{HoursJson}" : "")}}}
+            """;
+        var (client, _) = Client(_ => Json(json));
+
+        var result = await client.GetStationAsync(42, TestContext.Current.CancellationToken);
+
+        Assert.Equal(withHours ? Hours : null, result.Value!.Hours);
     }
 
     [Fact]

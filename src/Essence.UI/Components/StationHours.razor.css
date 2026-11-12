@@ -1,0 +1,51 @@
+.week {
+    margin: 0;
+    padding: 4px 12px;
+    border: 0.5px solid var(--ess-border);
+    border-radius: 10px;
+}
+
+.week div {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+    font-size: 14px;
+}
+
+.week div + div {
+    border-top: 0.5px solid var(--ess-border);
+}
+
+.week dt {
+    flex: none;
+    color: var(--ess-text-muted);
+}
+
+.week dd {
+    margin: 0;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+
+.week .is-today dt,
+.week .is-today dd {
+    color: var(--ess-text);
+    font-weight: 600;
+}
+
+.source,
+.unknown {
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: var(--ess-text-muted);
+}
+
+.unknown {
+    margin: 0;
+    font-size: 14px;
+}
+
+.source a {
+    color: inherit;
+}
