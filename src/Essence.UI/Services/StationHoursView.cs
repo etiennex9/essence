@@ -63,10 +63,120 @@ public sealed record HoursView(
         Kind == HoursKind.Open && ClosesAt is { } closes ? closes - StationHoursView.ClosesSoonWithin : ChangesAt;
 }
 
+/// <summary>What the driver finds on getting to a station, as the app says it.</summary>
+public enum ArrivalKind
+{
+    /// <summary>No hours, or a rule this app can't read: nothing is said.</summary>
+    Unknown,
+
+    /// <summary>Open, and not closing soon after (or open 24/7).</summary>
+    Open,
+
+    /// <summary>Open, but it closes within <see cref="StationHoursView.ClosesSoonWithin"/> after the arrival.</summary>
+    ClosesSoon,
+
+    /// <summary>Open now, but it closes before the driver gets there.</summary>
+    ClosesBefore,
+
+    /// <summary>Closed now, and still closed when the driver gets there.</summary>
+    Closed,
+
+    /// <summary>The source says it's closed for now, whatever its hours.</summary>
+    TemporarilyClosed,
+}
+
 /// <summary>
-/// A station's hours from the API (<see cref="StationHours"/>), against the clock: open, closing soon or closed now, its
-/// week, and where the hours come from, in the UI's language. Always in the station's time zone
-/// (<see cref="QuebecTime.ZoneFor"/>): a phone set to another zone still sees Laval's 9:30 p.m. Pure: the moment is given.
+/// A station's hours at the driver's arrival (<see cref="StationHoursView.Arrive"/>), with the texts Best near you, Best on
+/// the way, their rows and the Go links say of them, ready to show in the UI's language and the station's time zone.
+/// </summary>
+/// <param name="ArriveAt">When the driver gets there: now plus how long getting there takes.</param>
+/// <param name="ClosesAt">When it closes: after the arrival when it's open then, before it with <see cref="ArrivalKind.ClosesBefore"/>.</param>
+/// <param name="OpensAt">When it next opens after the arrival, when it's <see cref="ArrivalKind.Closed"/>.</param>
+/// <param name="Suffix">The hero's address line's ending, closing soon: "Closes 9:30 p.m.".</param>
+/// <param name="Why">What the hero's explanation starts with, closing soon: "Closes at 9:30 p.m., about 8 min after you get there."</param>
+/// <param name="Blocked">The hero's headline instead of its saving, closed then: "Closed by the time you get there (closes 9:30 p.m.)."</param>
+/// <param name="Tag">A row's or a tile's tag: "Closes 9:30 p.m.", "Closed", "Temporarily closed".</param>
+/// <param name="DialogTitle">The Go link's warning (ClosingDialog): "Costco closes at 9:30 p.m."; null when it goes straight to Google Maps.</param>
+/// <param name="DialogLines">What the warning says under its title: "You’d get there around 9:22 p.m."…</param>
+public sealed record ArrivalView(
+    ArrivalKind Kind,
+    DateTimeOffset ArriveAt,
+    DateTimeOffset? ClosesAt,
+    DateTimeOffset? OpensAt,
+    string? Suffix,
+    string? Why,
+    string? Blocked,
+    string? Tag,
+    string? DialogTitle,
+    IReadOnlyList<string> DialogLines)
+{
+    public static ArrivalView Unknown(DateTimeOffset arriveAt) => new(ArrivalKind.Unknown, arriveAt, null, null, null, null, null, null, null, []);
+
+    /// <summary>It closes soon after the arrival or is closed then: the Go link asks first.</summary>
+    public bool Warns => DialogTitle is not null;
+
+    /// <summary>
+    /// What a screen reader hears when the station is chosen (BestPanel's role="status" line): "Shown above: Costco. Saves
+    /// $3.10. Closes at 9:30 p.m., about 8 min after you get there."; closed then, the headline it says is
+    /// <see cref="Blocked"/>.
+    /// </summary>
+    /// <param name="shown">"Shown above: Costco."</param>
+    /// <param name="hero">The hero's texts without the arrival (<see cref="Apply"/>).</param>
+    public string Announcement(string shown, (string? Saves, string? Tone, string? Why) hero) =>
+        string.Join(" ", new[] { shown, Apply(hero).Saves is { } saves ? Sentence(saves) : null, Why }.OfType<string>());
+
+    /// <summary>
+    /// When what's said of it changes next as time goes by, the time there staying the same: it starts closing soon, closes
+    /// before the arrival, or opens by then; closing soon, every minute too ("about 8 min after"). Null when it can't change
+    /// (unknown hours, open 24/7, closed for now).
+    /// </summary>
+    public DateTimeOffset? RefreshAt(DateTimeOffset now)
+    {
+        // Thresholds on the arrival, moved back to now: the arrival is now plus the same time there.
+        DateTimeOffset? OnArrival(DateTimeOffset? at) => at is { } moment ? now + (moment - ArriveAt) : null;
+        return Kind switch
+        {
+            ArrivalKind.Open => OnArrival(ClosesAt - StationHoursView.ClosesSoonWithin),
+            ArrivalKind.ClosesSoon => Earliest(OnArrival(ClosesAt), now + TimeSpan.FromMinutes(1)),
+            ArrivalKind.ClosesBefore => Earliest(ClosesAt, OnArrival(OpensAt)),
+            ArrivalKind.Closed => OnArrival(OpensAt),
+            _ => null,
+        };
+    }
+
+    /// <summary>The earliest of the moments given, ignoring nulls.</summary>
+    public static DateTimeOffset? Earliest(params DateTimeOffset?[] moments)
+    {
+        DateTimeOffset? earliest = null;
+        foreach (var moment in moments)
+        {
+            if (moment is { } m && (earliest is not { } e || m < e))
+            {
+                earliest = m;
+            }
+        }
+
+        return earliest;
+    }
+
+    /// <summary>The text ending with a period, once.</summary>
+    private static string Sentence(string text) => text.EndsWith('.') ? text : $"{text}.";
+
+    /// <summary>
+    /// The hero's headline, its tone and its explanation (BestPanel's), with the arrival: closing soon, the explanation
+    /// starts with it; closed then, the headline says so instead of the saving, in amber (<c>is-blocked</c>).
+    /// </summary>
+    public (string? Saves, string? Tone, string? Why) Apply((string? Saves, string? Tone, string? Why) hero) => (
+        Blocked ?? hero.Saves,
+        Blocked is not null ? "is-blocked" : hero.Tone,
+        Why is null ? hero.Why : hero.Why is null ? Why : $"{Why} {hero.Why}");
+}
+
+/// <summary>
+/// A station's hours from the API (<see cref="StationHours"/>), against the clock: open, closing soon or closed now, or when
+/// the driver gets there (<see cref="Arrive"/>), its week, and where the hours come from, in the UI's language. Always in the
+/// station's time zone (<see cref="QuebecTime.ZoneFor"/>): a phone set to another zone still sees Laval's 9:30 p.m. Pure: the
+/// moment is given.
 /// </summary>
 public sealed class StationHoursView(IStringLocalizer<Strings> l)
 {
@@ -172,6 +282,112 @@ public sealed class StationHoursView(IStringLocalizer<Strings> l)
         return new HoursView(
             kind, closesAt, closesAt, check.HolidayCaution, until, closes, kind == HoursKind.ClosesSoon ? closes : null, week, source, link);
     }
+
+    /// <summary>
+    /// How long driving a straight-line distance takes, as the API estimates it when it can't route (Essence.Ranking's
+    /// <c>NearYou.Estimate</c>): roads 1.3 times longer, driven at 40 km/h. For the details' Go link, when they weren't
+    /// opened from Best near you or the trip, which know it by road.
+    /// </summary>
+    public static double EstimatedMinutes(double straightKm) => straightKm * EstimatedRoadFactor / EstimatedSpeedKmh * 60;
+
+    private const double EstimatedRoadFactor = 1.3;
+    private const double EstimatedSpeedKmh = 40;
+
+    /// <summary>
+    /// The station's hours when the driver gets there, <paramref name="etaMinutes"/> after <paramref name="now"/>, in the
+    /// current culture: open, closing soon after (within <see cref="ClosesSoonWithin"/>, the owner's warning), closed
+    /// by then, or closed now and still then. Unknown hours say nothing; a holiday's caution isn't part of it (the details
+    /// say it).
+    /// </summary>
+    /// <param name="etaMinutes">How long getting there takes; null when it isn't known, and the arrival is now.</param>
+    /// <param name="name">The station's name in the Go link's warning: its brand, or "Independent".</param>
+    public ArrivalView Arrive(StationHours? hours, double? latitude, double? longitude, DateTimeOffset now, double? etaMinutes, string name)
+    {
+        var arriveAt = now.AddMinutes(Math.Max(0, etaMinutes ?? 0));
+        if (hours is null || Read(hours.Rule) is not { } rule)
+        {
+            return ArrivalView.Unknown(arriveAt);
+        }
+
+        var culture = CultureInfo.CurrentCulture;
+        var zone = QuebecTime.ZoneFor(latitude, longitude);
+        string? arrive = etaMinutes is null ? null : l["ClosingDialogArrive", Clock(arriveAt, zone, culture)].Value;
+        // "around 9:20 p.m.." ends once: a time can end with a period, and so does the sentence.
+        IReadOnlyList<string> Lines(params string?[] lines) =>
+            [.. lines.OfType<string>().Select(line => line.EndsWith("..", StringComparison.Ordinal) ? line[..^1] : line)];
+        if (hours.TemporarilyClosed)
+        {
+            string closed = l["TemporarilyClosed"];
+            return new ArrivalView(
+                ArrivalKind.TemporarilyClosed, arriveAt, null, null, null, null, closed, closed, l["ClosingDialogClosed", name],
+                Lines(l["ClosingDialogTemporarily"]));
+        }
+
+        var check = HoursEvaluator.OnArrival(rule, zone, arriveAt, ClosesSoonWithin);
+        switch (check.State)
+        {
+            case Arrival.Open:
+                return new ArrivalView(ArrivalKind.Open, arriveAt, check.ClosesAt, null, null, null, null, null, null, []);
+
+            case Arrival.ClosesSoon when check.ClosesAt is { } closesAt:
+            {
+                var time = Clock(closesAt, zone, culture);
+                string closes = l["ClosesAt", time];
+                var minutes = Math.Max(1, (int)Math.Round((closesAt - arriveAt).TotalMinutes));
+                return new ArrivalView(
+                    ArrivalKind.ClosesSoon, arriveAt, closesAt, null, closes, l["ClosesSoonAfterArrival", time, minutes], null, closes,
+                    l["ClosingDialogTitle", name, time], Lines(arrive));
+            }
+
+            case Arrival.Closed when HoursEvaluator.At(rule, zone, now) is { IsOpen: true, ChangesAt: { } closedAt }:
+            {
+                // Open now: it closes on the way.
+                var time = Clock(closedAt, zone, culture);
+                return new ArrivalView(
+                    ArrivalKind.ClosesBefore, arriveAt, closedAt, check.OpensAt, null, null, l["ClosedOnArrival", time], l["HoursClosedDay"],
+                    l["ClosingDialogTitle", name, time], Lines(arrive));
+            }
+
+            case Arrival.Closed:
+            {
+                var opens = check.OpensAt is { } opensAt ? Opens(opensAt, now, zone, culture) : null;
+                return new ArrivalView(
+                    ArrivalKind.Closed, arriveAt, null, check.OpensAt, null, null,
+                    opens is null ? l["HoursClosedDay"] : l["ClosedOnArrivalOpens", opens], l["HoursClosedDay"],
+                    l["ClosingDialogClosed", name], Lines(arrive, opens is null ? null : l["ClosingDialogOpens", opens].Value));
+            }
+
+            default:
+                // Closing soon at a time past the days laid out: it can't be.
+                return new ArrivalView(ArrivalKind.Open, arriveAt, check.ClosesAt, null, null, null, null, null, null, []);
+        }
+    }
+
+    /// <summary>
+    /// Why Best near you or Best on the way left a station out (<see cref="LeftOutStation"/>), at <paramref name="now"/>:
+    /// "Costco left out: closed by the time you’d get there (closes 9:30 p.m.)." Null when its hours no longer say it's
+    /// closed then (it opened since the answer): the app doesn't contradict itself.
+    /// </summary>
+    public string? LeftOut(LeftOutStation station, string name, DateTimeOffset now)
+    {
+        var arrival = Arrive(station.Hours, station.Latitude, station.Longitude, now, station.EtaMin, name);
+        var zone = QuebecTime.ZoneFor(station.Latitude, station.Longitude);
+        var culture = CultureInfo.CurrentCulture;
+        return arrival switch
+        {
+            { Kind: ArrivalKind.TemporarilyClosed } => l["LeftOutTemporarilyClosed", name].Value,
+            { Kind: ArrivalKind.ClosesBefore, ClosesAt: { } closesAt } => l["LeftOutClosed", name, Clock(closesAt, zone, culture)].Value,
+            { Kind: ArrivalKind.Closed, OpensAt: { } opensAt } => l["LeftOutClosedOpens", name, Opens(opensAt, now, zone, culture)].Value,
+            { Kind: ArrivalKind.Closed } => l["LeftOutClosedNow", name].Value,
+            _ => null,
+        };
+    }
+
+    /// <summary>"6:00 a.m." or "Mon 7:00 a.m." (fr "à 6 h", "lun. à 7 h"): when it opens, its day once it's a day away.</summary>
+    private string Opens(DateTimeOffset opensAt, DateTimeOffset now, TimeZoneInfo zone, CultureInfo culture) =>
+        Soon(opensAt, now)
+            ? l["OpensTime", Clock(opensAt, zone, culture)]
+            : l["OpensDayTime", Day(opensAt, zone, culture), Clock(opensAt, zone, culture)];
 
     /// <summary>The rule read, or null when it can't be: a newer API's, say. Read once per text.</summary>
     private static OpeningHours? Read(string? rule)

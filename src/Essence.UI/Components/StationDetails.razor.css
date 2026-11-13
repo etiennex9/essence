@@ -189,7 +189,8 @@
     margin-top: 20px;
 }
 
-.directions,
+/* Directions: a GoLink (its own component), so reached through ::deep. */
+.actions ::deep .directions,
 .compare {
     flex: 1 1 140px;
     display: flex;
@@ -203,13 +204,13 @@
     cursor: pointer;
 }
 
-.directions {
+.actions ::deep .directions {
     border: 0;
     background: var(--ess-accent);
     color: var(--ess-on-accent);
 }
 
-.directions:hover {
+.actions ::deep .directions:hover {
     filter: brightness(1.08);
 }
 

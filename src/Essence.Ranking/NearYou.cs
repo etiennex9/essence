@@ -84,23 +84,40 @@ public static class NearYou
 
     /// <summary>
     /// The stations worth measuring by road, at most <see cref="MaxByRoad"/>: the <see cref="NearestByRoad"/> nearest, then
-    /// every one cheaper than the dearest of them, nearest first. The closest by road, which the savings are counted
+    /// every one cheaper than the dearest of them, in that priority and returned nearest first. The closest by road, which the savings are counted
     /// against, is one of the nearest, though not always the nearest in a straight line (a river between): a farther
     /// station that costs more than every one of them can't be the pick.
     /// </summary>
-    public static List<T> SelectByRoad<T>(IReadOnlyCollection<T> stations, Func<T, double> straightKm, Func<T, decimal> priceCents)
+    /// <param name="likelyLeftOut">
+    /// A station that will likely be left out (<see cref="Arrivals.LeaveOutClosed"/>, closed by the time the driver gets
+    /// there): it doesn't count among the nearest, so the closest open one is measured, though it's still measured when it's
+    /// cheaper, to be named among those left out. When every station is likely left out, the nearest are taken anyway.
+    /// </param>
+    public static List<T> SelectByRoad<T>(
+        IReadOnlyCollection<T> stations, Func<T, double> straightKm, Func<T, decimal> priceCents, Func<T, bool>? likelyLeftOut = null)
     {
         var nearestFirst = stations.OrderBy(straightKm).ToList();
-        var nearest = nearestFirst.Take(NearestByRoad).ToList();
-        if (nearest.Count == 0)
+        var nearestAt = Enumerable.Range(0, nearestFirst.Count)
+            .Where(i => likelyLeftOut?.Invoke(nearestFirst[i]) != true)
+            .Take(NearestByRoad)
+            .ToList();
+        if (nearestAt.Count == 0)
         {
-            return nearest;
+            nearestAt = [.. Enumerable.Range(0, Math.Min(NearestByRoad, nearestFirst.Count))];
         }
 
-        var dearestNearby = nearest.Max(priceCents);
-        return [.. nearest
-            .Concat(nearestFirst.Skip(NearestByRoad).Where(s => priceCents(s) < dearestNearby))
-            .Take(MaxByRoad)];
+        if (nearestAt.Count == 0)
+        {
+            return [];
+        }
+
+        var dearestNearby = nearestAt.Max(i => priceCents(nearestFirst[i]));
+        var chosen = new HashSet<int>(nearestAt);
+        return [.. nearestAt
+            .Concat(Enumerable.Range(0, nearestFirst.Count).Where(i => !chosen.Contains(i) && priceCents(nearestFirst[i]) < dearestNearby))
+            .Take(MaxByRoad)
+            .Order()
+            .Select(i => nearestFirst[i])];
     }
 
     /// <summary>

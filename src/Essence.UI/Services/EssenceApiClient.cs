@@ -47,28 +47,51 @@ public sealed class EssenceApiClient(HttpClient http)
             EssenceJsonContext.Default.ListNearbyStation,
             cancellationToken);
 
+    /// <summary>The most station ids <c>ignoreHours</c> takes (the API's limit).</summary>
+    public const int MaxIgnoredHours = 50;
+
     /// <summary>Where to fill up around a point, for a car (<c>/stations/best</c>).</summary>
     public Task<ApiResult<BestNearby>> GetBestAsync(BestQuery query, CancellationToken cancellationToken) =>
+        GetBestAsync(query, [], cancellationToken);
+
+    /// <inheritdoc cref="GetBestAsync(BestQuery, CancellationToken)"/>
+    /// <param name="ignoreHours">
+    /// Stations whose hours the device corrected: the API never leaves them out for its own hours. None sends no parameter;
+    /// past <see cref="MaxIgnoredHours"/>, the first ones.
+    /// </param>
+    public Task<ApiResult<BestNearby>> GetBestAsync(BestQuery query, IReadOnlyCollection<long> ignoreHours, CancellationToken cancellationToken) =>
         GetAsync(
             string.Create(
                 CultureInfo.InvariantCulture,
                 $"stations/best?lat={query.Latitude:0.######}&lon={query.Longitude:0.######}&fuel={Uri.EscapeDataString(query.Fuel)}"
                 + $"&fillL={query.FillLitres:0.##}&per100Km={query.LitresPer100Km:0.##}&costco={(query.CostcoMember ? "true" : "false")}"
-                + $"&maxDetourMin={query.MaxDetourMinutes}"),
+                + $"&maxDetourMin={query.MaxDetourMinutes}{IgnoreHours(ignoreHours)}"),
             EssenceJsonContext.Default.BestNearby,
             cancellationToken);
 
     /// <summary>Where to fill up on the way to a destination, for a car (<c>/trips/best</c>).</summary>
     public Task<ApiResult<TripPlan>> GetTripAsync(TripQuery query, CancellationToken cancellationToken) =>
+        GetTripAsync(query, [], cancellationToken);
+
+    /// <inheritdoc cref="GetTripAsync(TripQuery, CancellationToken)"/>
+    /// <param name="ignoreHours">Stations whose hours the device corrected, as for <see cref="GetBestAsync(BestQuery, IReadOnlyCollection{long}, CancellationToken)"/>.</param>
+    public Task<ApiResult<TripPlan>> GetTripAsync(TripQuery query, IReadOnlyCollection<long> ignoreHours, CancellationToken cancellationToken) =>
         GetAsync(
             string.Create(
                 CultureInfo.InvariantCulture,
                 $"trips/best?fromLat={query.FromLatitude:0.######}&fromLon={query.FromLongitude:0.######}"
                 + $"&toLat={query.ToLatitude:0.######}&toLon={query.ToLongitude:0.######}&fuel={Uri.EscapeDataString(query.Fuel)}"
                 + $"&fillL={query.FillLitres:0.##}&per100Km={query.LitresPer100Km:0.##}&costco={(query.CostcoMember ? "true" : "false")}"
-                + $"&maxDetourMin={query.MaxDetourMinutes}{(query.RangeKm is { } range ? $"&rangeKm={range}" : "")}&spareKm={query.SpareKm}"),
+                + $"&maxDetourMin={query.MaxDetourMinutes}{(query.RangeKm is { } range ? $"&rangeKm={range}" : "")}&spareKm={query.SpareKm}"
+                + $"{IgnoreHours(ignoreHours)}"),
             EssenceJsonContext.Default.TripPlan,
             cancellationToken);
+
+    /// <summary>"&amp;ignoreHours=42,7", the ids once each, at most <see cref="MaxIgnoredHours"/>; "" for none.</summary>
+    private static string IgnoreHours(IReadOnlyCollection<long> ids) =>
+        ids.Count == 0
+            ? ""
+            : "&ignoreHours=" + string.Join(',', ids.Distinct().Take(MaxIgnoredHours).Select(id => id.ToString(CultureInfo.InvariantCulture)));
 
     /// <summary>
     /// Places in Québec matching what was typed (<c>/places/search</c>), those near <paramref name="near"/> first. The

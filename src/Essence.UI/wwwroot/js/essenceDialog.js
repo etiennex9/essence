@@ -1,10 +1,12 @@
-// The About dialog behind AboutDialog.razor: a native modal <dialog>, which closes by itself on Esc and on Android's Back,
-// plus a click on the backdrop for browsers without closedby="any". Its changelog loads a month at a time: when the
-// "Older versions" button at the end of the list comes near the bottom of the view, .NET is asked for the next month.
+// The app's native modal <dialog>s, which close by themselves on Esc and on Android's Back, plus a click on the backdrop
+// for browsers without closedby="any". About's (AboutDialog.razor, attachDialog) loads its changelog a month at a time:
+// when the "Older versions" button at the end of the list comes near the bottom of the view, .NET is asked for the next
+// month. The warning before Go when a station closes soon (ClosingDialog.razor, attachModal) only opens and closes.
 
 const LOAD_AHEAD_PX = 200;
 
-export function attachDialog(dialog, scroller, more, dotnet) {
+// A click on the backdrop closes the dialog; returns what removes the listeners.
+function closeOnBackdrop(dialog) {
     let pressedOutside = false;
 
     // The dialog element itself is the target of clicks on its backdrop, but also on its own edges: compare with its box.
@@ -26,6 +28,15 @@ export function attachDialog(dialog, scroller, more, dotnet) {
         pressedOutside = false;
     }
 
+    dialog.addEventListener("pointerdown", onPointerDown);
+    dialog.addEventListener("click", onClick);
+    return () => {
+        dialog.removeEventListener("pointerdown", onPointerDown);
+        dialog.removeEventListener("click", onClick);
+    };
+}
+
+export function attachDialog(dialog, scroller, more, dotnet) {
     // Also called after each render: the observer only reports changes, and a short month can leave the button in view.
     function check() {
         if (!dialog.open || more.hidden || more.getAttribute("aria-busy") === "true") {
@@ -45,8 +56,7 @@ export function attachDialog(dialog, scroller, more, dotnet) {
         },
         { root: scroller, rootMargin: `0px 0px ${LOAD_AHEAD_PX}px 0px` });
     observer.observe(more);
-    dialog.addEventListener("pointerdown", onPointerDown);
-    dialog.addEventListener("click", onClick);
+    const detach = closeOnBackdrop(dialog);
 
     return {
         open() {
@@ -64,8 +74,24 @@ export function attachDialog(dialog, scroller, more, dotnet) {
         refresh: check,
         dispose() {
             observer.disconnect();
-            dialog.removeEventListener("pointerdown", onPointerDown);
-            dialog.removeEventListener("click", onClick);
+            detach();
         },
+    };
+}
+
+export function attachModal(dialog) {
+    const detach = closeOnBackdrop(dialog);
+    return {
+        open() {
+            if (!dialog.open) {
+                dialog.showModal();
+            }
+        },
+        close() {
+            if (dialog.open) {
+                dialog.close();
+            }
+        },
+        dispose: detach,
     };
 }
