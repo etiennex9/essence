@@ -114,7 +114,7 @@
     @if (Station is { } stationId)
     {
         <StationDetails @ref="_details" StationId="stationId" Fuel="@_fuel" UserLocation="_userLocation" DataAsOf="_dataAsOf" OnClose="CloseDetailsAsync"
-                        OnLoaded="OnStationLoadedAsync" />
+                        OnLoaded="OnStationLoadedAsync" EtaMinutes="EtaFromBest(stationId)" />
     }
     else if (View == FavoritesView)
     {
@@ -1505,6 +1505,15 @@
         _centerOnStation = true;
         Navigation.NavigateTo(Navigation.GetUriWithQueryParameter("station", id));
     }
+
+    /// <summary>
+    /// How long getting to the station takes by Best near you's or the trip's reckoning, when its details are open over that
+    /// pane and it's the station shown on top (their Details): Directions warns by it when the station closes soon after.
+    /// </summary>
+    private double? EtaFromBest(long id) =>
+        View == BestView && Best.Shown is { } shown && shown.Id == id ? shown.EtaMin
+        : View == TripView && Trips.Shown is { } stop && stop.Id == id ? stop.ToMin
+        : null;
 
     /// <summary>
     /// The details of the station Best near you or the trip shows on top: they open over the pane like a list's, but the map

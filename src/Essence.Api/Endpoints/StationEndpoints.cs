@@ -21,12 +21,24 @@ public static class StationEndpoints
     internal const double MaxLitresPer100Km = 40;
     internal const double MaxDetourMinutes = 120;
 
-    private const string HoursDescription =
+    internal const string HoursDescription =
         "`hours` is the station's opening hours, null when no source has them: `rule` in OpenStreetMap's `opening_hours` "
         + "(`Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30`, `24/7`), in the station's time zone, and its `source`. Costco's own hours "
         + "(`costco`) beat the hours Essence checked (`curated`), which beat Couche-Tard's (`circlek`), Ultramar's and Shell's, "
         + "then OpenStreetMap's (`osm`, confirmed first); a source without a success in 21 days comes after the others and "
         + "isn't `trusted`, nor is OpenStreetMap.";
+
+    /// <summary>How Best near you and Best on the way leave out stations closed on arrival (TripEndpoints' too).</summary>
+    internal const string LeftOutDescription =
+        "Before ranking, a station whose hours are `trusted` and either say it's closed on arrival (now plus `etaMin`, or "
+        + "`toMin` on a trip; not on a holiday whose hours the rule doesn't state) or say it's `temporarilyClosed` is left out, "
+        + "unless its id is in `ignoreHours`; other hours never leave a station out, and when leaving out would leave none, all "
+        + "are kept. Stations likely closed then don't count among the closest measured by road. `leftOut` lists at most 2 "
+        + "of those left out, only those cheaper per litre than the pick. No 304 once the data is more than 10 minutes old: "
+        + "the answer depends on the time.";
+
+    internal const string IgnoreHoursDescription =
+        "Ids of stations whose hours the device corrected, separated by commas (at most 50): never left out for their hours.";
 
     private static readonly Expression<Func<Station, StationSummary>> ToSummary = s => new StationSummary(
         s.Id, s.Name, s.Brand, s.Status, s.Address, s.PostalCode, s.Region, s.Latitude, s.Longitude, s.IsActive);
@@ -51,8 +63,8 @@ public static class StationEndpoints
                 + "them, at most 200). When the routing server is down, or the point is more than 1 km from a road, they're "
                 + "estimated instead (`byRoad` false): straight line × 1.3, driven at 40 km/h, and a farther station must also "
                 + "save with roads twice the straight line. Looks within `radiusKm`, widened to 25 km with fewer than 5 stations, "
-                + "else returns the closest at any distance.")
-            .WithDataVersion();
+                + "else returns the closest at any distance. " + LeftOutDescription + " " + HoursDescription)
+            .WithDataVersion(clockDependent: true);
         group.MapGet("/{id:long}", GetStation)
             .WithSummary("A station with its current prices and opening hours")
             .WithDescription(HoursDescription)
@@ -225,6 +237,7 @@ public static class StationEndpoints
         StationSnapshot snapshot,
         OsrmClient osrm,
         DataServiceMonitor services,
+        TimeProvider time,
         ILoggerFactory loggers,
         HttpContext http,
         [Description("Latitude of the driver, in degrees.")] double lat,
@@ -236,8 +249,10 @@ public static class StationEndpoints
         [Description("true to include Costco, which sells to members only.")] bool costco = false,
         [Description("The longest detour: how many minutes longer than the closest's a station's round trip may take to be picked.")]
         double maxDetourMin = 10,
-        [Description("Search radius in kilometres (max 25).")] double radiusKm = SearchArea.DefaultRadiusKm)
+        [Description("Search radius in kilometres (max 25).")] double radiusKm = SearchArea.DefaultRadiusKm,
+        [Description(IgnoreHoursDescription)] string? ignoreHours = null)
     {
+        var ignored = IgnoredHours.Parse(ignoreHours);
         var errors = new QueryErrors()
             .Require(lat is >= -90 and <= 90, nameof(lat), "Must be between -90 and 90.")
             .Require(lon is >= -180 and <= 180, nameof(lon), "Must be between -180 and 180.")
@@ -245,15 +260,17 @@ public static class StationEndpoints
             .Require(fillL is > 0 and <= MaxFillLitres, nameof(fillL), $"Must be more than 0 and at most {MaxFillLitres}.")
             .Require(per100Km is > 0 and <= MaxLitresPer100Km, nameof(per100Km), $"Must be more than 0 and at most {MaxLitresPer100Km}.")
             .Require(maxDetourMin is >= 0 and <= MaxDetourMinutes, nameof(maxDetourMin), $"Must be between 0 and {MaxDetourMinutes}.")
-            .Require(radiusKm is > 0 and <= SearchArea.MaxRadiusKm, nameof(radiusKm), $"Must be more than 0 and at most {SearchArea.MaxRadiusKm}.");
+            .Require(radiusKm is > 0 and <= SearchArea.MaxRadiusKm, nameof(radiusKm), $"Must be more than 0 and at most {SearchArea.MaxRadiusKm}.")
+            .Require(ignored is not null, nameof(ignoreHours), IgnoredHours.Error);
         var fuelType = await ResolveFuelAsync(db, fuel, errors, cancellationToken);
-        if (errors.Any || fuelType is null)
+        if (errors.Any || fuelType is null || ignored is null)
         {
             return errors.ToProblem();
         }
 
         var fuelId = fuelType.Id;
-        var stations = (await snapshot.GetAsync(db, cancellationToken)).Stations
+        var current = await snapshot.GetAsync(db, cancellationToken);
+        var stations = current.Stations
             .Select(s => (Station: s, Price: s.Prices.FirstOrDefault(p => p.FuelTypeId == fuelId)))
             .Where(x => x.Price is { } price
                 && Eligibility.IsEligible(x.Station.Status, price.IsAvailable, price.PriceCents, x.Station.MembersOnly, costco))
@@ -265,12 +282,25 @@ public static class StationEndpoints
         var (area, areaRadiusKm) = SearchArea.Select(stations, s => s.Km, radiusKm);
 
         // By road when the routing server answers; road and estimated figures are never mixed in one ranking.
+        // Stations closed when the driver gets there are left out first: the closest the savings are counted against is
+        // then one that's open. Those likely closed at the estimate's arrival don't count among the nearest measured by
+        // road, so the open ones beyond them are measured too.
+        var now = time.GetUtcNow();
+        bool LikelyLeftOut((SnapshotStation Station, decimal PriceCents, double Km) s) =>
+            !ignored.Contains(s.Station.Id)
+            && Arrivals.IsClosed(
+                current.Hours.GetValueOrDefault(s.Station.Id)?.Arrival,
+                now.AddMinutes(EtaMinutes(NearYou.Estimate(s.Station.Id, s.PriceCents, s.Km))));
+
         var car = new Car((decimal)fillL, (decimal)per100Km);
-        var byRoad = await services.NotServingAsync(DataService.Routing, cancellationToken) is null
-            ? await RankByRoadAsync(osrm, services, loggers, http, new LatLon(lat, lon), area, car, maxDetourMin, cancellationToken)
+        var roadCandidates = await services.NotServingAsync(DataService.Routing, cancellationToken) is null
+            ? await CandidatesByRoadAsync(osrm, services, loggers, http, new LatLon(lat, lon), area, LikelyLeftOut, cancellationToken)
             : Estimated(http);
-        var ranking = byRoad
-            ?? NearYou.Rank(area.Select(s => NearYou.Estimate(s.Station.Id, s.PriceCents, s.Km)).ToList(), car, maxDetourMin, byRoad: false);
+        var candidates = roadCandidates ?? [.. area.Select(s => NearYou.Estimate(s.Station.Id, s.PriceCents, s.Km))];
+
+        var (kept, leftOut) = Arrivals.LeaveOutClosed(
+            candidates, c => current.Hours.GetValueOrDefault(c.Id)?.Arrival, c => now.AddMinutes(EtaMinutes(c)), ignored, c => c.Id);
+        var ranking = NearYou.Rank(kept, car, maxDetourMin, byRoad: roadCandidates is not null);
         if (ranking is null)
         {
             return TypedResults.Ok(new BestNearby(null, null, null, null, [], areaRadiusKm, ByRoad: false));
@@ -284,40 +314,48 @@ public static class StationEndpoints
                 station.Id, station.Name, station.Brand, station.Address, station.Latitude, station.Longitude,
                 ranked.Candidate.PriceCents, Math.Round(ranked.Candidate.DistanceKm, 2),
                 ranked.Candidate.DurationMinutes is { } minutes ? Math.Round(minutes, 1) : null, ranked.Cost, ranked.Saves,
-                station.MembersOnly, ranked.OverDetourLimit, ranked.SavingUncertain);
+                station.MembersOnly, ranked.OverDetourLimit, ranked.SavingUncertain, current.Hours.GetValueOrDefault(station.Id)?.Dto,
+                Math.Round(EtaMinutes(ranked.Candidate), 1));
         }
 
+        var pick = ToRanked(ranking.Pick);
         return TypedResults.Ok(new BestNearby(
-            ToRanked(ranking.Pick), ranking.Reference.Id, ranking.Reference.Id, ranking.Cheapest.Id,
-            ranking.Listed.Select(ToRanked).ToList(), areaRadiusKm, ByRoad: byRoad is not null));
+            pick, ranking.Reference.Id, ranking.Reference.Id, ranking.Cheapest.Id,
+            ranking.Listed.Select(ToRanked).ToList(), areaRadiusKm, ByRoad: roadCandidates is not null,
+            LeftOutStations.Of(
+                leftOut.Select(c => new LeftOutCandidate(byId[c.Id], c.PriceCents, Costs.Fill(c.PriceCents, car, c.ExtraKm), EtaMinutes(c))),
+                current.Hours,
+                pick.PriceCents)));
     }
 
+    /// <summary>How long getting to the station takes, one way: by road, or the estimate's (half its round trip).</summary>
+    private static double EtaMinutes(Candidate candidate) => candidate.DurationMinutes ?? candidate.ExtraMinutes / 2;
+
     /// <summary>The routing data is being built or loaded: the estimate, not cached, as when the server is down.</summary>
-    private static NearbyRanking? Estimated(HttpContext http)
+    private static List<Candidate>? Estimated(HttpContext http)
     {
         DataVersion.DontCache(http);
         return null;
     }
 
     /// <summary>
-    /// Best near you by road: the stations snapped to their own roads, then one table from the driver to them and one
-    /// back, the driver on any road (an autoroute included). Null, for the estimate instead, when the routing server fails,
-    /// the driver is more than <see cref="NearYou.MaxDriverSnapMeters"/> from a road, or no station has a road there and back.
-    /// An estimate the server's failure forced isn't cached: the same request asks again. A server that doesn't answer may
-    /// have just stopped for new data: its status is asked again, so the next requests don't call it meanwhile.
+    /// Best near you's candidates by road: the stations snapped to their own roads, then one table from the driver to them
+    /// and one back, the driver on any road (an autoroute included). Null, for the estimate instead, when the routing server
+    /// fails, the driver is more than <see cref="NearYou.MaxDriverSnapMeters"/> from a road, or no station has a road there
+    /// and back. An estimate the server's failure forced isn't cached: the same request asks again. A server that doesn't
+    /// answer may have just stopped for new data: its status is asked again, so the next requests don't call it meanwhile.
     /// </summary>
-    private static async Task<NearbyRanking?> RankByRoadAsync(
+    private static async Task<List<Candidate>?> CandidatesByRoadAsync(
         OsrmClient osrm,
         DataServiceMonitor services,
         ILoggerFactory loggers,
         HttpContext http,
         LatLon driver,
         IReadOnlyCollection<(SnapshotStation Station, decimal PriceCents, double Km)> area,
-        Car car,
-        double maxDetourMin,
+        Func<(SnapshotStation Station, decimal PriceCents, double Km), bool> likelyLeftOut,
         CancellationToken cancellationToken)
     {
-        var measured = NearYou.SelectByRoad(area, s => s.Km, s => s.PriceCents);
+        var measured = NearYou.SelectByRoad(area, s => s.Km, s => s.PriceCents, likelyLeftOut);
         if (measured.Count == 0)
         {
             return null;
@@ -342,7 +380,7 @@ public static class StationEndpoints
 
             var back = await osrm.TableAsync(points, stations, [0], anyRoad: true, cancellationToken);
             var candidates = NearYou.ByRoad([.. onRoads.Select(s => (s.Station.Station.Id, s.Station.PriceCents))], outbound, back);
-            return NearYou.Rank(candidates, car, maxDetourMin, byRoad: true);
+            return candidates.Count > 0 ? candidates : null;
         }
         catch (OsrmException ex)
         {

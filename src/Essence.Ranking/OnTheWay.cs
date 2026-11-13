@@ -116,7 +116,13 @@ public static class OnTheWay
     /// cheapest, taken a round at a time across the stretches so every stretch gets its first ones; then the cheapest of
     /// the rest.
     /// </summary>
-    public static List<RouteStation> SelectCandidates(IReadOnlyCollection<RouteStation> stations, double? maxKmAlong)
+    /// <param name="likelyLeftOut">
+    /// A station that will likely be left out (<see cref="Arrivals.LeaveOutClosed"/>, closed by the time the car gets
+    /// there): a stretch's closest are taken among the others first, so the first reached by road is an open one. It still
+    /// counts among the cheapest, to be named among those left out.
+    /// </param>
+    public static List<RouteStation> SelectCandidates(
+        IReadOnlyCollection<RouteStation> stations, double? maxKmAlong, Func<RouteStation, bool>? likelyLeftOut = null)
     {
         var alongFirst = stations.OrderBy(s => s.KmAlong).ThenBy(s => s.Id).ToList();
         var inRange = maxKmAlong is { } limit
@@ -127,7 +133,7 @@ public static class OnTheWay
             .GroupBy(s => (int)Math.Floor(s.KmAlong / BinKm))
             .OrderBy(g => g.Key)
             .Select(g => (
-                Closest: g.OrderBy(s => s.OffKm).ThenBy(s => s.Id).Take(ClosestPerBin).ToList(),
+                Closest: g.OrderBy(s => likelyLeftOut?.Invoke(s) == true).ThenBy(s => s.OffKm).ThenBy(s => s.Id).Take(ClosestPerBin).ToList(),
                 Cheapest: g.OrderBy(s => s.PriceCents).ThenBy(s => s.OffKm).ThenBy(s => s.Id).Take(CheapestPerBin).ToList()))
             .ToList();
 

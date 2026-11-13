@@ -150,8 +150,8 @@ public enum WidgetProblem
 /// <summary>A station on a widget, ready to show.</summary>
 /// <param name="Name">The brand, or "Independent".</param>
 /// <param name="Detail">
-/// What sets it apart: its distance and saving, its detour, or its address (after "Closes 9:30 p.m." or "Closed · opens
-/// 6:00 a.m." when that's so).
+/// What sets it apart: its distance and saving, or its detour, then "Closes 9:30 p.m." or "Closed · opens 6:00 a.m."
+/// when that's so; or a favorite's address, after that note.
 /// </param>
 /// <param name="Price">Cents per litre ("164.9"), or a dash.</param>
 /// <param name="Tap">The page's path a tap opens (MapPage's query parameters).</param>

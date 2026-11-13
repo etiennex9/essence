@@ -219,11 +219,88 @@ public class EssenceApiClientTests
             Assert.Null(best.Pick.DurationMin);
             Assert.Null(best.RadiusKm);
             Assert.Equal(1, best.ReferenceId);
+
+            // An older API's: no hours, ETA, or stations left out.
+            Assert.Null(best.Pick.Hours);
+            Assert.Null(best.Pick.EtaMin);
+            Assert.Null(best.LeftOut);
         }
         finally
         {
             CultureInfo.CurrentCulture = previous;
         }
+    }
+
+    [Fact]
+    public async Task Best_reads_the_hours_the_ETA_and_the_stations_left_out()
+    {
+        var json = $$"""
+            {"pick":{"id":1,"name":null,"brand":"Ultramar","address":"1 rue Principale","latitude":45.5,"longitude":-73.56,
+              "priceCents":164.9,"distanceKm":1.2,"durationMin":3.1,"costDollars":66.01,"savesDollars":0,"membersOnly":false,
+              "overDetourLimit":false,"savingUncertain":false,"hours":{{HoursJson}},"etaMin":3.1},
+             "referenceId":1,"closestId":1,"cheapestId":1,"stations":[],"radiusKm":10,"byRoad":true,
+             "leftOut":[{"id":2,"name":"Costco Laval","brand":"Costco","address":"2999 Autoroute Chomedey","latitude":45.5699,
+               "longitude":-73.7469,"priceCents":153.9,"hours":{{HoursJson}},"etaMin":12.4}]}
+            """;
+        var (client, _) = Client(_ => Json(json));
+
+        var best = (await client.GetBestAsync(new BestQuery(45.5, -73.56, "Régulier", 40, 8.5m, true, 10), TestContext.Current.CancellationToken)).Value!;
+
+        Assert.Equal((Hours, (double?)3.1), (best.Pick!.Hours, best.Pick.EtaMin));
+        Assert.Equal(
+            new LeftOutStation(2, "Costco Laval", "Costco", "2999 Autoroute Chomedey", 45.5699, -73.7469, 153.9m, Hours, 12.4),
+            Assert.Single(best.LeftOut!));
+    }
+
+    [Fact]
+    public async Task A_trip_reads_each_station_s_hours_and_time_from_the_start_or_none_from_an_older_API()
+    {
+        const string station = """
+            {"id":3,"name":null,"brand":"Petro-Canada","address":"1 boul. Saint-Joseph","latitude":45.88,"longitude":-72.48,
+             "priceCents":159.9,"kmAlong":105,"distanceKm":107,"detourKm":4,"detourMin":5,"costDollars":64.50,"savesDollars":1.26,
+             "membersOnly":false,"reachable":true,"overDetourLimit":false
+            """;
+        const string plan = """
+            {"path":[[-73.5673,45.5017],[-71.208,46.8139]],"distanceKm":250.3,"durationMin":155.2,"halfWidthKm":5,"longTrip":true,
+             "stopBeforeKm":null,"lowFuel":false,"stations":[STATION],"pickId":3,"referenceId":3,"referenceOnTheWay":true,
+             "biggestSavingId":nullMORE}
+            """;
+        var newer = plan
+            .Replace("STATION", $$"""{{station}},"hours":{{HoursJson}},"toMin":61.5}""")
+            .Replace("MORE", $$""","leftOut":[{"id":6,"name":null,"brand":"Costco","address":"a","latitude":46,"longitude":-72,"priceCents":154.9,"hours":{{HoursJson}},"etaMin":130}]""");
+        var older = plan.Replace("STATION", station + "}").Replace("MORE", "");
+        var query = new TripQuery(45.5017, -73.5673, 46.8139, -71.208, "Régulier", 40, 8.5m, false, 10, null, 30);
+
+        var (newClient, _) = Client(_ => Json(newer));
+        var (oldClient, _) = Client(_ => Json(older));
+        var trip = (await newClient.GetTripAsync(query, TestContext.Current.CancellationToken)).Value!;
+        var old = (await oldClient.GetTripAsync(query, TestContext.Current.CancellationToken)).Value!;
+
+        Assert.Equal((Hours, (double?)61.5), (trip.Stations[0].Hours, trip.Stations[0].ToMin));
+        Assert.Equal((6L, 130.0), (Assert.Single(trip.LeftOut!).Id, trip.LeftOut![0].EtaMin));
+        Assert.Null(old.Stations[0].Hours);
+        Assert.Null(old.Stations[0].ToMin);
+        Assert.Null(old.LeftOut);
+    }
+
+    [Fact]
+    public async Task The_stations_whose_hours_to_ignore_are_sent_once_each_and_none_sends_nothing()
+    {
+        var (client, requests) = Client(_ => Json("{}"));
+        var best = new BestQuery(45.5017, -73.5673, "Régulier", 40, 8.5m, false, 10);
+        var trip = new TripQuery(45.5017, -73.5673, 46.8139, -71.208, "Régulier", 40, 8.5m, false, 10, null, 30);
+
+        await client.GetBestAsync(best, [42, 7, 42], TestContext.Current.CancellationToken);
+        await client.GetBestAsync(best, [], TestContext.Current.CancellationToken);
+        await client.GetTripAsync(trip, [42], TestContext.Current.CancellationToken);
+        await client.GetTripAsync(trip, TestContext.Current.CancellationToken);
+        await client.GetBestAsync(best, [.. Enumerable.Range(1, 60).Select(i => (long)i)], TestContext.Current.CancellationToken);
+
+        Assert.EndsWith("&maxDetourMin=10&ignoreHours=42,7", requests[0].RequestUri!.Query);
+        Assert.DoesNotContain("ignoreHours", requests[1].RequestUri!.Query);
+        Assert.EndsWith("&spareKm=30&ignoreHours=42", requests[2].RequestUri!.Query);
+        Assert.DoesNotContain("ignoreHours", requests[3].RequestUri!.Query);
+        Assert.EndsWith($"&ignoreHours={string.Join(',', Enumerable.Range(1, 50))}", requests[4].RequestUri!.Query);
     }
 
     [Fact]

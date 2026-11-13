@@ -23,7 +23,11 @@ public sealed record SnapshotPrice(short FuelTypeId, decimal? PriceCents, bool I
 
 /// <summary>A station's hours as the API serves them (<see cref="HoursPrecedence"/>'s choice), read and in its time zone.</summary>
 /// <param name="Zone">The station's (<see cref="QuebecTime.ZoneFor"/>): its hours are in it.</param>
-public sealed record SnapshotHours(StationHours Dto, OpeningHours Hours, TimeZoneInfo Zone);
+public sealed record SnapshotHours(StationHours Dto, OpeningHours Hours, TimeZoneInfo Zone)
+{
+    /// <summary>As the rankings read them, to leave out a station closed on arrival (<see cref="Arrivals.LeaveOutClosed"/>).</summary>
+    public ArrivalHours Arrival => new(Hours, Zone, Dto.Trusted, Dto.TemporarilyClosed);
+}
 
 /// <summary>A row of <c>station_hours</c>, with where its station is (for its time zone).</summary>
 public sealed record SnapshotHoursRow(HoursRow Row, double? Latitude, double? Longitude);

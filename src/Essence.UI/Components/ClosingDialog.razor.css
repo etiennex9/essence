@@ -1,0 +1,94 @@
+/* Centered over a dimmed map, at most 360 px wide, like About. Closed, it's the browser's display: none. */
+.closing {
+    box-sizing: border-box;
+    width: min(360px, calc(100vw - 32px));
+    padding: 18px 16px 16px;
+    border: 0.5px solid var(--ess-border);
+    border-radius: 14px;
+    background: var(--ess-surface);
+    color: var(--ess-text);
+    box-shadow: var(--ess-shadow-lg);
+    font-family: var(--ess-font);
+}
+
+.closing[open] {
+    animation: closing-in 160ms ease-out;
+}
+
+.closing::backdrop {
+    background: rgba(0, 0, 0, 0.35);
+}
+
+@keyframes closing-in {
+    from {
+        transform: translateY(12px);
+        opacity: 0;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .closing[open] {
+        animation: none;
+    }
+}
+
+h2 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    line-height: 1.3;
+}
+
+p {
+    margin: 8px 0 0;
+    font-size: 14px;
+    line-height: 1.45;
+    color: var(--ess-text-muted);
+}
+
+.buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.cancel,
+.anyway {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 12px;
+    box-sizing: border-box;
+    border-radius: 10px;
+    font: 600 15px/1.2 var(--ess-font);
+    text-decoration: none;
+    cursor: pointer;
+}
+
+.cancel {
+    border: 0.5px solid var(--ess-border-strong);
+    background: var(--ess-surface);
+    color: var(--ess-text);
+}
+
+.cancel:hover {
+    background: var(--ess-hover);
+}
+
+.anyway {
+    border: 0;
+    background: var(--ess-accent);
+    color: var(--ess-on-accent);
+}
+
+.anyway:hover {
+    filter: brightness(1.08);
+}
+
+button:focus-visible,
+a:focus-visible {
+    outline: 2px solid var(--ess-accent);
+    outline-offset: 2px;
+}

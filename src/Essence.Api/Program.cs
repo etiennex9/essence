@@ -17,7 +17,8 @@ if (string.IsNullOrWhiteSpace(connectionString))
 
 // Connects as the read-only essence_reader role.
 builder.Services.AddEssenceDbContext(connectionString, o => o.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking));
-builder.Services.AddSingleton(TimeProvider.System);
+// In Development, Clock:Now starts the clock at another moment, to check which stations are left out at another time of day.
+builder.Services.AddSingleton(SimulatedTime.For(builder.Environment.IsDevelopment(), builder.Configuration[SimulatedTime.ConfigKey]));
 builder.Services.AddSingleton<StationSnapshot>();
 builder.Services.AddOsrmRouting(builder.Configuration);
 builder.Services.AddPhotonGeocoding(builder.Configuration);
