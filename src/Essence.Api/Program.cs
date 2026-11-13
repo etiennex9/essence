@@ -82,6 +82,7 @@ app.MapDataServiceEndpoints();
 app.MapPriceEndpoints();
 app.MapImportEndpoints();
 app.MapHoursEndpoints();
+app.MapClientConfigEndpoints();
 
 app.Run();
 

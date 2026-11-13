@@ -85,6 +85,9 @@
                 }
             }
 
+            @* The OpenStreetMap account the hours corrections can go to, when the server has an application for it. *@
+            <OsmAccountLine Heading="true" Why="true" />
+
             <h3>@L["WhatsNew"]</h3>
             @if (Notes.Release is { Unreleased.Count: > 0 } unreleased)
             {

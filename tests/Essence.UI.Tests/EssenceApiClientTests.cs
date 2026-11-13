@@ -116,6 +116,41 @@ public class EssenceApiClientTests
         Assert.Equal(withHours ? Hours : null, result.Value!.Hours);
     }
 
+    [Theory]
+    [InlineData(",\"osmElement\":\"way/456\"", "way/456")]
+    [InlineData(",\"osmElement\":null", null)]
+    [InlineData("", null)]
+    public async Task A_station_s_details_read_its_OpenStreetMap_element_or_none_from_an_older_API(string field, string? element)
+    {
+        var json = $$"""
+            {"id":42,"name":"Costco Laval","brand":"Costco","status":"En opération","address":"1 rue Principale",
+             "postalCode":"H7T0A1","region":"Laval","latitude":45.5699,"longitude":-73.7469,"isActive":true,
+             "firstSeenAt":"2026-10-01T00:00:00Z","lastSeenAt":"2026-11-11T00:00:00Z","updatedAt":"2026-11-11T00:00:00Z",
+             "prices":[],"hours":null{{field}}}
+            """;
+        var (client, _) = Client(_ => Json(json));
+
+        var result = await client.GetStationAsync(42, TestContext.Current.CancellationToken);
+
+        Assert.Equal(element, result.Value!.OsmElement);
+    }
+
+    [Fact]
+    public async Task The_server_s_settings_name_its_OpenStreetMap_application_and_an_older_server_has_none()
+    {
+        var (client, requests) = Client(r => r.RequestUri!.AbsolutePath == "/client-config"
+            ? Json("""{"osmClientId":"abc123","osmAuthUrl":"https://www.openstreetmap.org","osmApiUrl":"https://api.openstreetmap.org"}""")
+            : new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        var config = await client.GetClientConfigAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(new ClientConfig("abc123", "https://www.openstreetmap.org", "https://api.openstreetmap.org"), config.Value);
+        Assert.Equal("/client-config", Assert.Single(requests).RequestUri!.AbsolutePath);
+
+        var (older, _) = Client(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        Assert.Equal(ApiError.NotFound, (await older.GetClientConfigAsync(TestContext.Current.CancellationToken)).Error);
+    }
+
     [Fact]
     public async Task Last_modified_is_when_the_data_was_imported()
     {

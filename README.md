@@ -24,8 +24,8 @@ and shows them on a map of nearby stations.
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. The hours: Costco's locator against a trimmed real answer, the curated rules, days and times as the locators write them, matching, the gate, the weekly night schedule across daylight time and the retries, the rows' diff, the cache, the runs' history, the settings. |
 | `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM and Photon clients against stub servers; the address search's labels and filtering; Québec's boundary at its borders; which source's hours a station shows, stale sources and what's trusted; the stations left out because they'd be closed on arrival (trusted hours only, holidays, corrected hours, everything closed), and the rankings' reference and first station reached once they are. |
 | `tests/Essence.Hours.Tests` | xUnit unit tests: the sources' hours, strict and lenient, what's refused and why, the canonical rule and its round trip, the week's groups; open, closing soon and closed, past midnight and across daylight time; the holidays, Easter and the cautions; the time zones at their borders, and Canada's rule against the system's zones. |
-| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked); the stations' hours as served, when the snapshot loads them again, and the 304 rule with the hours; `ignoreHours`, the stations said to be left out, the 304 rule of an answer that depends on the clock, and the Development clock (`Clock:Now`). |
-| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the station shown in Best near you and on the way, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations; stations' hours as shown (open, closing soon, closed, the week, the source) in the station's time zone, closed markers, the hours on the Favorites widget and rows; what Best near you, Best on the way and their Go links say of a station closing soon after the driver gets there or closed then, the stations left out, the hours on the Best near a place and frequent route widgets, `ignoreHours` sent, and plans read and restored without the new fields. |
+| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked); the stations' hours as served, when the snapshot loads them again, and the 304 rule with the hours; `ignoreHours`, the stations said to be left out, the 304 rule of an answer that depends on the clock, and the Development clock (`Clock:Now`); `/client-config` with and without an OpenStreetMap application, and the stations' OpenStreetMap elements. |
+| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the station shown in Best near you and on the way, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations; stations' hours as shown (open, closing soon, closed, the week, the source) in the station's time zone, closed markers, the hours on the Favorites widget and rows; what Best near you, Best on the way and their Go links say of a station closing soon after the driver gets there or closed then, the stations left out, the hours on the Best near a place and frequent route widgets, `ignoreHours` sent, and plans read and restored without the new fields; hours corrected on the device (kept per server, read leniently, winning everywhere, `ignoreHours` asked again with them), the editor's week and rule, and OpenStreetMap: the edit sent against a stub API (only the hours changed, escaping, ways, a version conflict, the changeset always closed, brand hours never sent on their own), linking with PKCE and the state checked, and the Android app's `essence://` links. |
 | `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
 The full design and its rationale are in [docs/PLAN.md](docs/PLAN.md).
@@ -274,13 +274,41 @@ per station (see **Which hours show**), and the app shows them.
   Go anyway as the real link. The arrival is worked out again at each render, and the pane renders again when time
   moves a shown station to closing soon or closed, so a plan kept in the tab doesn't go stale; the details use Best's ETA when they were opened from it, or the straight line's estimate. The Best near a place
   and frequent route widgets say when the pick closes or that it's closed when you get there, as the Favorites widget does.
+- **Corrections on the device.** Under a station's hours, **These hours are wrong** (or **Add the hours**, when they're
+  unknown) opens an editor: each day closed or open from one time to another (a closing time earlier than the opening is
+  the next day's; the same time twice, all day), or **Open 24 hours**, starting from the hours shown. Saved, the hours
+  are kept on the device (`essence.hours`, per server, as favorites are: a station's id is its row in that server's
+  database), and **the device's hours always win**: the details ("Your hours" as their source), the map's pill,
+  Favorites and the comparison, Best's arrival texts and the Go links' warning, and the widgets go by them. Best near you
+  and Best on the way send the corrected stations' ids as `ignoreHours` (the latest 50), so the server never leaves out
+  one the user says is open, and check the arrival on the device with the user's hours: one they say will be closed
+  then shows so (in amber, and Go asks first), as a closed station the server couldn't leave out does. Saving or undoing a
+  correction asks Best again (in the background) and plans an open trip again. **Use the station's hours** forgets it.
+- **Sending the correction to OpenStreetMap.** With the deployment's OpenStreetMap application set (`Osm:ClientId`, see
+  [OpenStreetMap edits](#openstreetmap-edits)), the editor and About offer to link the user's **own** OpenStreetMap
+  account: OpenStreetMap's rules want edits from the person who makes them, so there's no shared account. The link is
+  OAuth 2 with PKCE, from the app itself (a window of its own on the web, a browser tab on Android), and the token stays
+  on the device (localStorage on the web, Android's secure storage, left out of its backups): the Essence server never
+  sees it, and there are still no Essence accounts. Once linked, and when the station was matched to an OpenStreetMap
+  node or way (`osmElement`), **Also update OpenStreetMap** sends the hours on Save: the element as it is now, a changeset
+  (`created_by=Essence <version>`, the comment "Update opening hours of <name>", and `source=survey` only when **I
+  checked these at the station** is ticked), the element with only `opening_hours` and `check_date:opening_hours` (today,
+  in the station's zone) changed, every other tag as it was, then the changeset closed, which happens whatever went wrong
+  once it was open. A version conflict (someone edited it meanwhile) fetches it again and tries once more. The app then
+  says "Sent to OpenStreetMap" with a link to the changeset, or OpenStreetMap's reason; the correction stays saved on the
+  device either way. **A brand's hours are never sent on their own:** hours equal to the ones shown from a brand (or
+  Essence's own) leave the box unticked, and can't be sent until the user says they checked them at the station; equal to
+  OpenStreetMap's own, sending only says when they were checked, so the box starts unticked. A relation isn't edited
+  (the editor links to OpenStreetMap's own editor instead), and a station without an element gets **Add it on
+  OpenStreetMap**, a link to the map at that spot: the app never creates one, to avoid duplicates. Other devices get the
+  fix at the next weekly OpenStreetMap run, where no brand's hours outrank it.
 
 ## API
 
 | Endpoint | |
 |---|---|
 | `GET /stations?region&brand&active&q&page&pageSize` | Stations, paged. `q` searches the name, address and postal code. |
-| `GET /stations/{id}` | One station with its current prices and opening hours (`hours`, null when unknown). |
+| `GET /stations/{id}` | One station with its current prices, opening hours (`hours`, null when unknown) and OpenStreetMap element (`osmElement`: `node/123`, `way/456`, `relation/789`, its hours or not; null when it wasn't matched to one). |
 | `GET /stations/nearby?lat&lon&radiusKm=5&fuel&limit=20` | Active stations within a radius, closest first, with their opening hours. |
 | `GET /stations/best?lat&lon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&radiusKm=10&ignoreHours` | Where to fill up near a point: the pick, the closest, the cheapest and a few others that save, and the stations left out because they'd be closed on arrival (see below). |
 | `GET /trips/best?fromLat&fromLon&toLat&toLon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&rangeKm&spareKm=30&ignoreHours` | Where to fill up on the way to a destination: the route, where to stop, the stations along it ranked by detour, and those left out because they'd be closed on arrival (see below). |
@@ -291,6 +319,7 @@ per station (see **Which hours show**), and the app shows them.
 | `GET /prices/current?fuel&region&brand&sort=price&includeUnavailable&limit=50` | Current prices, cheapest first. |
 | `GET /imports?limit=20` | Recent imports with their statistics and `source` (`feed` or `xlsx`). |
 | `GET /hours/sources` | Each source of stations' opening hours: its last success and attempt, what came of it and why, its failures in a row, how many stations it has hours for, and the version of its data (see [Opening hours](#opening-hours)). |
+| `GET /client-config` | What the apps need of the deployment's settings: its OpenStreetMap application's client id (`osmClientId`, null when editing OpenStreetMap is off), and where it signs in and edits (`osmAuthUrl`, `osmApiUrl`). The Android app picks its server at run time, so it reads them here. See [OpenStreetMap edits](#openstreetmap-edits). |
 | `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. A routing or geocoding server that doesn't answer, or whose data is being built, makes it `Degraded`, still 200, with the build's stage and percent; so does an hours source without a success in 21 days, with each source's last success. |
 
 `/stations/best` ranks the operating stations with an available price for the fuel (Costco only with `costco=true`: it
@@ -475,6 +504,43 @@ gets an `@autodeploy-<time>` snapshot first (the last 10 are kept).
   cron job leaves a stopped app alone. Starting it on `latest` instead would run the new migration again.
 - **To update the script**, look at what changed in `deploy/truenas-autodeploy.py`, since root runs it, then run the
   `curl` command again.
+
+### OpenStreetMap edits
+
+The apps send hours corrections to OpenStreetMap with each user's own account ([Opening hours](#opening-hours)), through
+one OAuth 2 application that the deployment registers on openstreetmap.org. It's a public client (no secret: the app
+proves itself with PKCE), so only its client id is configured, and the token each device gets never reaches the server.
+
+1. Sign in to <https://www.openstreetmap.org>, then **My Settings → OAuth 2 applications → Register new application**.
+2. Name it (Essence, or the deployment's name), and give it both redirect URIs, one per line:
+   `https://<your domain>/osm-auth.html` (the web app) and `essence://osm-auth` (the Android app). OpenStreetMap compares
+   them exactly: no trailing slash on the second.
+3. Untick **Confidential application?** (a public client), and tick only **Modify the map** (`write_api`) and **Read user
+   preferences** (`read_prefs`, which says who's linked). Register.
+4. Copy its **Client ID** into the api's `Osm__ClientId` ([deploy/truenas.yaml](deploy/truenas.yaml), or `OSM_CLIENT_ID`
+   in `.env` for Compose) and restart the api. `/api/client-config` then names it, and the editor and About offer to link
+   an account.
+
+**To test** without touching the real map, do the same on OpenStreetMap's development server,
+<https://master.apis.dev.openstreetmap.org> (an account of its own; its data is a sandbox), and set `Osm__AuthUrl` and
+`Osm__ApiUrl` to `https://master.apis.dev.openstreetmap.org` as well as its client id. Set both: the api doesn't start
+with one on the development server and the other on OpenStreetMap's, nor with an address that isn't https (plain http
+only on the machine itself), since the apps send a token only to its own OpenStreetMap's API and refuse a server that
+names another. A token is kept with the OpenStreetMap and the API it's for, so switching the api between the two asks
+each device to link again. Production OpenStreetMap is never used for tests.
+
+To link from the web app on your machine, add its local redirect URIs too: `http://127.0.0.1:5173/osm-auth.html` for
+`dotnet watch` and `http://127.0.0.1:8081/osm-auth.html` for Compose. OpenStreetMap takes plain http only for 127.0.0.1 and
+::1, not `localhost` (nor a LAN address), and the sign-in comes back to the page's own origin, so open the app at
+<http://127.0.0.1:5173> (or <http://127.0.0.1:8081>) to link. With `dotnet watch`, the api must allow that origin: set
+`CORS_ORIGIN=http://127.0.0.1:5173` in `.env` for the api in Compose (an api run in Development allows both). A deployment
+links only from the origin it registered, its https domain: not from its LAN address.
+
+On the web, the sign-in opens in a window of its own, which comes back to `osm-auth.html` next to the page: OpenStreetMap
+sends `Cross-Origin-Opener-Policy: same-origin`, which cuts that window off from the page, so the page hands the code back
+through a `BroadcastChannel` of the app's origin (the page checks the state it sent before trading the code). The web
+container doesn't log `/osm-auth.html`, whose query string has the code. The browser must let the window open: a blocked
+one says so.
 
 ### Routing and address search
 
@@ -747,6 +813,8 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Geocoding:BaseUrl` | `http://geocoding:2322/` | The address search (Photon), ending with `/`. 1.5 s, no retry. |
 | `Geocoding:StatusUrl` | `http://geocoding:9090/` | The geocoding container's status server, ending with `/`. |
 | `Clock:Now` | (none) | Development only: the API's clock starts at this moment (ISO 8601 with its offset) and moves on with the real one, to see which stations Best near you and Best on the way leave out at another time of day. Ignored in any other environment. |
+| `Osm:ClientId` | (none) | The client id of the deployment's OpenStreetMap OAuth 2 application ([OpenStreetMap edits](#openstreetmap-edits)), served by `/client-config`. Empty: the apps don't offer to send corrections to OpenStreetMap. |
+| `Osm:AuthUrl` / `ApiUrl` | `https://www.openstreetmap.org` / `https://api.openstreetmap.org` | Where that application signs in and where edits go: `https://master.apis.dev.openstreetmap.org` for both, to test against OpenStreetMap's development server with an application registered there. |
 | `RateLimiting:PermitLimit` / `WindowSeconds` | 120 / 60 | Requests per client IP and window, the address search's aside. |
 | `RateLimiting:Search:PermitLimit` / `WindowSeconds` | 60 / 60 | `/places/` requests per client IP and window. |
 

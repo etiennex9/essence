@@ -49,3 +49,22 @@
 .source a {
     color: inherit;
 }
+
+/* "These hours are wrong", "Add the hours": a link-like button with a 44 px target. */
+.correct {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    margin-top: 2px;
+    padding: 0;
+    border: 0;
+    background: none;
+    color: var(--ess-accent);
+    font: 500 14px var(--ess-font);
+    cursor: pointer;
+}
+
+.correct:focus-visible {
+    outline: 2px solid var(--ess-accent);
+    outline-offset: 2px;
+}

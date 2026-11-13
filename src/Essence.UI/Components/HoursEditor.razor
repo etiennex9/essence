@@ -1,0 +1,444 @@
+@implements IAsyncDisposable
+@inject StationHoursOverrides Overrides
+@inject StationHoursView HoursViews
+@inject OsmAccount Osm
+@inject ReleaseNotes Notes
+@inject NavigationManager Navigation
+@inject TimeProvider Time
+@inject IJSRuntime JS
+@inject IStringLocalizer<Strings> L
+@inject IServiceProvider Services
+
+@* Corrects a station's hours on the device, from its details ("These hours are wrong", "Add the hours"): seven days, each
+   closed or open from one time to another, or open 24 hours, starting from the hours shown (HoursDraft). Saved, they're
+   the app's for that station (StationHoursOverrides), and with an OpenStreetMap account linked and the station's element
+   known, they can go to OpenStreetMap too, in the user's name (OsmAccount): never a brand's hours on their own, only once
+   the user says they checked them. A native modal dialog opened from JS (essenceDialog.js, as ClosingDialog's): Esc,
+   Android's Back and its own buttons close it, never a tap beside it, which would throw away the week typed. *@
+<dialog class="editor" @ref="_dialog" aria-labelledby="@_titleId" closedby="closerequest" @onclose="OnClosed">
+    <h2 id="@_titleId">@(_known ? L["HoursEditorTitle"] : L["AddHours"])</h2>
+    <p class="station">@Name · @Station.Address</p>
+
+    @if (_draft is { } draft)
+    {
+        var built = draft.TryBuild(out var hours, out _) ? hours : null;
+        var (allowed, ticked) = built is null ? (true, true) : HoursDraft.OsmChoice(Station.Hours, built, _surveyed);
+        var sends = allowed && (_osmUpdate ?? ticked);
+        var editing = _phase == Phase.Editing;
+
+        <fieldset class="week" disabled="@(!editing)">
+            <legend class="visually-hidden">@L["Hours"]</legend>
+            <label class="check always">
+                <input type="checkbox" checked="@draft.AlwaysOpen" @onchange="e => draft.AlwaysOpen = e.Value is true" />
+                @L["Open24h"]
+            </label>
+            @if (!draft.AlwaysOpen)
+            {
+                <div class="days">
+                    @foreach (var day in draft.Days)
+                    {
+                        <div class="day @(day.Closed ? "is-closed" : null) @(_invalid == day.Day ? "is-invalid" : null)" role="group"
+                             aria-label="@DayName(day.Day)" @key="day.Day">
+                            <span class="name" aria-hidden="true">@ShortDayName(day.Day)</span>
+                            <label class="check closed">
+                                <input type="checkbox" checked="@day.Closed" @onchange="e => SetClosed(day, e.Value is true)" />
+                                @L["HoursClosedDay"]
+                            </label>
+                            <input type="time" step="60" value="@day.Opens" disabled="@day.Closed" aria-label="@L["HoursOpens"]"
+                                   aria-invalid="@(_invalid == day.Day && day.Opens.Length == 0 ? "true" : null)"
+                                   @onchange="e => SetTime(draft, day, opens: true, e.Value as string)" />
+                            <span class="to" aria-hidden="true">@L["HoursTo"]</span>
+                            <input type="time" step="60" value="@day.Closes" disabled="@day.Closed" aria-label="@L["HoursCloses"]"
+                                   aria-invalid="@(_invalid == day.Day && day.Closes.Length == 0 ? "true" : null)"
+                                   @onchange="e => SetTime(draft, day, opens: false, e.Value as string)" />
+                        </div>
+                    }
+                </div>
+                <p class="hint">@L["HoursOvernight"]</p>
+                @if (draft.KeepsStretches)
+                {
+                    <p class="hint">@L["HoursStretchesKept"]</p>
+                }
+            }
+            @if (_invalid is { } invalid)
+            {
+                <p class="problem" role="alert">@L["HoursDayIncomplete", DayName(invalid)]</p>
+            }
+        </fieldset>
+        <p class="hint">@L["HoursEditorNote"]</p>
+
+        @if (Osm.Settings is { } osm)
+        {
+            <section class="osm" aria-labelledby="@_osmTitleId">
+                <h3 id="@_osmTitleId">OpenStreetMap</h3>
+                @if (_element is { IsEditable: true })
+                {
+                    @if (Osm.IsLinked)
+                    {
+                        <fieldset class="osm-choices" disabled="@(!editing)" aria-labelledby="@_osmTitleId">
+                            <label class="check">
+                                <input type="checkbox" checked="@_surveyed" @onchange="e => _surveyed = e.Value is true" />
+                                @L["OsmSurveyed"]
+                            </label>
+                            <label class="check">
+                                <input type="checkbox" checked="@sends" disabled="@(!allowed)" @onchange="e => _osmUpdate = e.Value is true" />
+                                @L["OsmAlsoUpdate"]
+                            </label>
+                        </fieldset>
+                        @if (built is not null && Station.Hours is { } server && HoursDraft.SameAs(server, built))
+                        {
+                            <p class="hint">@(HoursDraft.IsBrand(server) ? L["OsmBrandHours", Name] : L["OsmSameHours"])</p>
+                        }
+                    }
+                    <OsmAccountLine Why="true" />
+                }
+                else if (_element is { } relation)
+                {
+                    <p class="hint"><a href="@osm.EditorFor(relation)" target="_blank" rel="noopener">@L["OsmEditThere"]</a></p>
+                }
+                else if (Station is { Latitude: { } lat, Longitude: { } lon })
+                {
+                    <p class="hint">
+                        @L["OsmNoPlace"]
+                        <a href="@osm.MapAt(lat, lon)" target="_blank" rel="noopener">@L["OsmAddPlace"]</a>
+                    </p>
+                }
+            </section>
+        }
+
+        <div class="outcome" role="status">
+            @if (_phase == Phase.Sending)
+            {
+                <p>@L["OsmSending"]</p>
+            }
+            else if (_phase == Phase.Done)
+            {
+                @if (_sentPage is { } changesetPage)
+                {
+                    <p class="sent">@L["OsmSent"] · <a href="@changesetPage" target="_blank" rel="noopener">@L["OsmSeeChange"]</a></p>
+                }
+                else if (_failure is not null || _editThere is not null)
+                {
+                    <p class="problem">
+                        @_failure
+                        @if (_editThere is { } there)
+                        {
+                            <a href="@there" target="_blank" rel="noopener">@L["OsmEditThere"]</a>
+                        }
+                    </p>
+                }
+                <p>@L["HoursSavedOnDevice"]</p>
+            }
+        </div>
+
+        <div class="buttons">
+            @if (_phase == Phase.Done)
+            {
+                <button type="button" class="primary" @ref="_close" @onclick="CloseAsync">@L["Close"]</button>
+            }
+            else
+            {
+                @if (Overrides.Has(Station.Id))
+                {
+                    <button type="button" class="secondary reset" disabled="@(!editing)" @onclick="ResetAsync">@L["HoursReset"]</button>
+                }
+                <button type="button" class="secondary" disabled="@(!editing)" @onclick="CloseAsync">@L["Cancel"]</button>
+                <button type="button" class="primary" disabled="@(!editing)" @onclick="() => SaveAsync(sends)">@L["Save"]</button>
+            }
+        </div>
+    }
+</dialog>
+
+@code {
+    private const string ModulePath = "./_content/Essence.UI/js/essenceDialog.js";
+
+    private static int _count;
+
+    private readonly string _titleId;
+    private readonly string _osmTitleId;
+    private ElementReference _dialog;
+
+    /// <summary>Close, once the change was sent or not: focused, so what came of it is in view and read out.</summary>
+    private ElementReference _close;
+
+    private bool _focusClose;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _instance;
+    private bool _open;
+    private bool _disposed;
+
+    /// <summary>The week being edited; null until the dialog first opens.</summary>
+    private HoursDraft? _draft;
+
+    /// <summary>Hours were shown when it opened: "Correct the hours", else "Add the hours".</summary>
+    private bool _known;
+
+    /// <summary>The station's OpenStreetMap element, when it has one (<see cref="StationDetail.OsmElement"/>).</summary>
+    private OsmElementRef? _element;
+
+    /// <summary>The first day whose times are missing, after a Save that couldn't be.</summary>
+    private DayOfWeek? _invalid;
+
+    /// <summary>"I checked these at the station".</summary>
+    private bool _surveyed;
+
+    /// <summary>"Also update OpenStreetMap" as the user set it; null until they do, and it's ticked as <see cref="HoursDraft.OsmChoice"/> says.</summary>
+    private bool? _osmUpdate;
+
+    private Phase _phase;
+    private Uri? _sentPage;
+
+    /// <summary>Why the change didn't go to OpenStreetMap, in the user's language.</summary>
+    private string? _failure;
+
+    /// <summary>OpenStreetMap's editor on the element, when it's the place to change these hours (ones the app can't read).</summary>
+    private Uri? _editThere;
+
+    public HoursEditor()
+    {
+        var n = Interlocked.Increment(ref _count);
+        (_titleId, _osmTitleId) = ($"ess-hours-editor-{n}", $"ess-hours-editor-osm-{n}");
+    }
+
+    private enum Phase { Editing, Sending, Done }
+
+    [Parameter, EditorRequired]
+    public StationDetail Station { get; set; } = null!;
+
+    /// <summary>The station's name as its details title it: its brand, or "Independent".</summary>
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = "";
+
+    protected override void OnInitialized()
+    {
+        Navigation.LocationChanged += OnLocationChanged;
+        Osm.Changed += OnOsmChanged;
+        // The server's OpenStreetMap settings, and the sign-in's script, before the click that would need them.
+        _ = Osm.LoadAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_focusClose)
+        {
+            return;
+        }
+
+        _focusClose = false;
+        try
+        {
+            await _close.FocusAsync();
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page is going away.
+        }
+    }
+
+    /// <summary>
+    /// Opens the editor on the hours shown now: the user's correction, else the station's. Closed while its change was on
+    /// its way to OpenStreetMap, it opens on that, to say what came of it.
+    /// </summary>
+    public async Task ShowAsync()
+    {
+        if (_phase != Phase.Sending)
+        {
+            var shown = HoursViews.HoursOf(Station.Id, Station.Hours);
+            var hours = shown is not null && Essence.Hours.OpeningHours.TryParse(shown.Rule, lenient: true, out var read, out _) ? read : null;
+            _draft = HoursDraft.From(hours);
+            _known = hours is not null;
+            _element = OsmElementRef.TryParse(Station.OsmElement, out var element) ? element : null;
+            (_invalid, _surveyed, _osmUpdate, _phase, _sentPage, _failure, _editThere) = (null, false, null, Phase.Editing, null, null, null);
+            StateHasChanged();
+        }
+
+        try
+        {
+            _module ??= await JS.InvokeAsync<IJSObjectReference>("import", ModulePath);
+            // No click outside: it would throw away the week being typed.
+            _instance ??= await _module.InvokeAsync<IJSObjectReference>("attachModal", _dialog, false);
+            if (_disposed)
+            {
+                await DetachAsync();
+                return;
+            }
+
+            _open = true;
+            await _instance.InvokeVoidAsync("open");
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page is going away.
+        }
+    }
+
+    private static void SetClosed(HoursDraftDay day, bool closed) => day.Closed = closed;
+
+    private void SetTime(HoursDraft draft, HoursDraftDay day, bool opens, string? value)
+    {
+        if (opens)
+        {
+            draft.SetOpens(day.Day, value ?? "");
+        }
+        else
+        {
+            draft.SetCloses(day.Day, value ?? "");
+        }
+
+        if (_invalid == day.Day && day.Opens.Length > 0 && day.Closes.Length > 0)
+        {
+            _invalid = null;
+        }
+    }
+
+    /// <summary>
+    /// Saves the hours on the device at once, then, when asked to, sends them to OpenStreetMap, saying how that went: the
+    /// correction stays saved either way.
+    /// </summary>
+    private async Task SaveAsync(bool sendToOsm)
+    {
+        if (_draft is not { } draft || _phase != Phase.Editing)
+        {
+            return;
+        }
+
+        if (!draft.TryBuild(out var hours, out var invalid))
+        {
+            _invalid = invalid;
+            return;
+        }
+
+        _invalid = null;
+        await Overrides.SaveAsync(Station.Id, hours, Name, Station.Address);
+        if (!sendToOsm || _element is not { IsEditable: true } element || !Osm.IsLinked)
+        {
+            await CloseAsync();
+            return;
+        }
+
+        _phase = Phase.Sending;
+        StateHasChanged();
+        try
+        {
+            // Not cancelled if the details close meanwhile: the user asked for it to be sent.
+            var changeset = await Osm.SendHoursAsync(
+                new OsmHoursEdit(element, hours.ToRule(), Today(), await CreatedByAsync(), L["OsmChangesetComment", Name], _surveyed),
+                CancellationToken.None);
+            _sentPage = Osm.Settings?.ChangesetPage(changeset);
+        }
+        catch (OsmEditException ex)
+        {
+            // Said in the user's language; only OpenStreetMap's own reason for refusing it is in its words.
+            _failure = ex.Failure switch
+            {
+                OsmEditFailure.Refused => L["OsmFailed", ex.Message].Value,
+                OsmEditFailure.Unreachable => L["OsmUnreachable"].Value,
+                OsmEditFailure.Deleted => L["OsmDeleted"].Value,
+                OsmEditFailure.DetailedHours => L["OsmDetailedHours"].Value,
+                OsmEditFailure.NotLinked => L["OsmNotLinked"].Value,
+                OsmEditFailure.NotEditable => null,
+                _ => L["OsmBadAnswer"].Value,
+            };
+            _editThere = ex.Failure is OsmEditFailure.DetailedHours or OsmEditFailure.NotEditable ? Osm.Settings?.EditorFor(element) : null;
+        }
+
+        _phase = Phase.Done;
+        _focusClose = true;
+        if (!_disposed)
+        {
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>"Use the station's hours": the correction is forgotten, and the station's hours show again.</summary>
+    private async Task ResetAsync()
+    {
+        await Overrides.ResetAsync(Station.Id);
+        await CloseAsync();
+    }
+
+    /// <summary>Today in the station's zone, for <c>check_date:opening_hours</c>.</summary>
+    private DateOnly Today() =>
+        DateOnly.FromDateTime(TimeZoneInfo.ConvertTime(Time.GetUtcNow(), Essence.Hours.QuebecTime.ZoneFor(Station.Latitude, Station.Longitude)).DateTime);
+
+    /// <summary>The changeset's <c>created_by</c>: <c>Essence 2026.11.13</c>, the Android app's version name or the web's day.</summary>
+    private async Task<string> CreatedByAsync()
+    {
+        var version = Services.GetService<IAppHost>()?.VersionName;
+        if (version is null)
+        {
+            await Notes.LoadReleaseAsync();
+            version = Notes.Release?.Version is { } day ? ReleaseNotes.VersionName(day) : null;
+        }
+
+        return version is null ? "Essence" : $"Essence {version}";
+    }
+
+    /// <summary>"Monday", "Lundi": the day's group, as a screen reader says it.</summary>
+    private static string DayName(DayOfWeek day) => Capitalized(CultureInfo.CurrentCulture.DateTimeFormat.GetDayName(day));
+
+    /// <summary>"Mon", "Lun.": the day's row.</summary>
+    private static string ShortDayName(DayOfWeek day) => Capitalized(CultureInfo.CurrentCulture.DateTimeFormat.GetAbbreviatedDayName(day));
+
+    private static string Capitalized(string name) =>
+        name.Length == 0 ? name : char.ToUpper(name[0], CultureInfo.CurrentCulture) + name[1..];
+
+    private async Task CloseAsync()
+    {
+        try
+        {
+            if (_instance is not null)
+            {
+                await _instance.InvokeVoidAsync("close");
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page is going away; the dialog goes with it.
+        }
+    }
+
+    private void OnClosed() => _open = false;
+
+    private void OnOsmChanged() => _ = InvokeAsync(StateHasChanged);
+
+    /// <summary>Back or a link while it's open: it goes with the page it was on.</summary>
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        if (_open)
+        {
+            _ = InvokeAsync(CloseAsync);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        _disposed = true;
+        Navigation.LocationChanged -= OnLocationChanged;
+        Osm.Changed -= OnOsmChanged;
+        await DetachAsync();
+    }
+
+    private async ValueTask DetachAsync()
+    {
+        try
+        {
+            if (_instance is not null)
+            {
+                await _instance.InvokeVoidAsync("dispose");
+                await _instance.DisposeAsync();
+                _instance = null;
+            }
+
+            if (_module is not null)
+            {
+                await _module.DisposeAsync();
+                _module = null;
+            }
+        }
+        catch (JSDisconnectedException)
+        {
+            // The page is going away.
+        }
+    }
+}

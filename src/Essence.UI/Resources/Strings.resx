@@ -1140,4 +1140,118 @@
   <data name="GoAnyway" xml:space="preserve">
     <value>Go anyway</value>
   </data>
+  <data name="HoursWrong" xml:space="preserve">
+    <value>These hours are wrong</value>
+  </data>
+  <data name="AddHours" xml:space="preserve">
+    <value>Add the hours</value>
+  </data>
+  <data name="HoursEditorTitle" xml:space="preserve">
+    <value>Correct the hours</value>
+  </data>
+  <data name="HoursEditorNote" xml:space="preserve">
+    <value>Kept on this device: the app goes by them for this station from now on, instead of the station’s.</value>
+  </data>
+  <data name="HoursOpens" xml:space="preserve">
+    <value>Opens</value>
+  </data>
+  <data name="HoursCloses" xml:space="preserve">
+    <value>Closes</value>
+  </data>
+  <data name="HoursTo" xml:space="preserve">
+    <value>to</value>
+  </data>
+  <data name="HoursOvernight" xml:space="preserve">
+    <value>A closing time earlier than the opening is the next day’s; the same time is all day.</value>
+  </data>
+  <data name="HoursStretchesKept" xml:space="preserve">
+    <value>A day with a break shows from its opening to its closing, and keeps the break unless you change that day.</value>
+  </data>
+  <data name="HoursDayIncomplete" xml:space="preserve">
+    <value>{0}: give when it opens and when it closes, or tick Closed.</value>
+  </data>
+  <data name="HoursReset" xml:space="preserve">
+    <value>Use the station’s hours</value>
+  </data>
+  <data name="HoursFromDevice" xml:space="preserve">
+    <value>Your hours</value>
+  </data>
+  <data name="HoursSavedOnDevice" xml:space="preserve">
+    <value>Your hours are saved on this device.</value>
+  </data>
+  <data name="OsmAlsoUpdate" xml:space="preserve">
+    <value>Also update OpenStreetMap</value>
+  </data>
+  <data name="OsmSurveyed" xml:space="preserve">
+    <value>I checked these at the station</value>
+  </data>
+  <data name="OsmBrandHours" xml:space="preserve">
+    <value>These are {0}’s own hours: they go to OpenStreetMap only once you’ve checked them at the station.</value>
+  </data>
+  <data name="OsmSameHours" xml:space="preserve">
+    <value>OpenStreetMap already has these hours: sending them only says when you checked them.</value>
+  </data>
+  <data name="OsmLink" xml:space="preserve">
+    <value>Link an OpenStreetMap account</value>
+  </data>
+  <data name="OsmLinkWhy" xml:space="preserve">
+    <value>To send your corrections to OpenStreetMap too, in your own name. The account stays on this device.</value>
+  </data>
+  <data name="OsmLinkedAs" xml:space="preserve">
+    <value>Linked as {0}</value>
+  </data>
+  <data name="OsmLinked" xml:space="preserve">
+    <value>Account linked</value>
+  </data>
+  <data name="OsmUnlink" xml:space="preserve">
+    <value>Unlink</value>
+  </data>
+  <data name="OsmLinking" xml:space="preserve">
+    <value>Finish signing in to OpenStreetMap in the window that opened.</value>
+  </data>
+  <data name="OsmLinkBlocked" xml:space="preserve">
+    <value>The sign-in window was blocked: allow pop-ups for this site, then try again.</value>
+  </data>
+  <data name="OsmLinkFailed" xml:space="preserve">
+    <value>Couldn’t link the account. Try again.</value>
+  </data>
+  <data name="OsmSending" xml:space="preserve">
+    <value>Sending to OpenStreetMap…</value>
+  </data>
+  <data name="OsmSent" xml:space="preserve">
+    <value>Sent to OpenStreetMap</value>
+  </data>
+  <data name="OsmSeeChange" xml:space="preserve">
+    <value>See the change</value>
+  </data>
+  <data name="OsmFailed" xml:space="preserve">
+    <value>OpenStreetMap refused the change: {0}</value>
+  </data>
+  <data name="OsmUnreachable" xml:space="preserve">
+    <value>OpenStreetMap can’t be reached for now.</value>
+  </data>
+  <data name="OsmDeleted" xml:space="preserve">
+    <value>This station is no longer on OpenStreetMap.</value>
+  </data>
+  <data name="OsmDetailedHours" xml:space="preserve">
+    <value>Its hours on OpenStreetMap say more than the app can (dates, holidays, a comment…), so they were left as they are.</value>
+  </data>
+  <data name="OsmNotLinked" xml:space="preserve">
+    <value>Your OpenStreetMap account needs to be linked again.</value>
+  </data>
+  <data name="OsmBadAnswer" xml:space="preserve">
+    <value>OpenStreetMap gave an answer the app didn’t expect. Try again later.</value>
+  </data>
+  <data name="OsmNoPlace" xml:space="preserve">
+    <value>This station isn’t on OpenStreetMap yet.</value>
+  </data>
+  <data name="OsmAddPlace" xml:space="preserve">
+    <value>Add it on OpenStreetMap</value>
+  </data>
+  <data name="OsmEditThere" xml:space="preserve">
+    <value>Edit it on OpenStreetMap</value>
+  </data>
+  <data name="OsmChangesetComment" xml:space="preserve">
+    <value>Update opening hours of {0}</value>
+  </data>
 </root>

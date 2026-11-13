@@ -36,7 +36,9 @@ public sealed record BestOrigin(GeoPoint Point, OriginKind Kind = OriginKind.Dev
 /// changes. A scoped service, so the result outlives the pane: a station's details opening over it, or the phone chip
 /// while it's closed. It refreshes by itself when the next prices should be in (<see cref="RefreshSchedule"/>, on its own
 /// data's time: the map's refresh stops below zoom 9), and not while the page is hidden. It also keeps the station the
-/// pane shows on top (<see cref="StationChoice"/>), so it's still chosen when the details close.
+/// pane shows on top (<see cref="StationChoice"/>), so it's still chosen when the details close. The stations whose hours
+/// the user corrected go with each request (<c>ignoreHours</c>), so the API never leaves one out for its own hours, and a
+/// correction saved asks again, in the background.
 /// </summary>
 public sealed class BestNearYou : IDisposable
 {
@@ -46,19 +48,26 @@ public sealed class BestNearYou : IDisposable
     private readonly EssenceApiClient _api;
     private readonly CarProfiles _cars;
     private readonly TimeProvider _time;
+    private readonly StationHoursOverrides? _overrides;
     private CancellationTokenSource? _fetchCts;
     private CancellationTokenSource? _refreshCts;
-    private (BestQuery Query, DateTimeOffset At)? _lastFetch;
+    private (BestQuery Query, IReadOnlyList<long> IgnoreHours, DateTimeOffset At)? _lastFetch;
     private DateTimeOffset? _refreshDueAt;
     private int _lateRefreshes;
     private bool _hidden;
 
-    public BestNearYou(EssenceApiClient api, CarProfiles cars, TimeProvider time)
+    /// <param name="overrides">The hours corrected on the device; none when null (the tests').</param>
+    public BestNearYou(EssenceApiClient api, CarProfiles cars, TimeProvider time, StationHoursOverrides? overrides = null)
     {
         _api = api;
         _cars = cars;
         _time = time;
+        _overrides = overrides;
         _cars.Changed += OnCarsChanged;
+        if (_overrides is not null)
+        {
+            _overrides.Changed += OnOverridesChanged;
+        }
     }
 
     /// <summary>Raised after the result, the error or the progress changed.</summary>
@@ -163,10 +172,12 @@ public sealed class BestNearYou : IDisposable
         }
 
         await _cars.LoadAsync();
+        var ignoreHours = await IgnoreHoursAsync();
         var car = _cars.Active;
         var query = BestQuery.For(origin.Point, Fuel, car);
         var now = _time.GetUtcNow();
-        var fresh = _lastFetch is { } last && last.Query == query && (Loading || (now - last.At < Freshness && Error == ApiError.None));
+        var fresh = _lastFetch is { } last && last.Query == query && last.IgnoreHours.SequenceEqual(ignoreHours)
+                    && (Loading || (now - last.At < Freshness && Error == ApiError.None));
         if (!background && fresh)
         {
             return;
@@ -175,7 +186,7 @@ public sealed class BestNearYou : IDisposable
         _fetchCts?.Cancel();
         CancelRefresh();
         var cts = _fetchCts = new CancellationTokenSource();
-        _lastFetch = (query, now);
+        _lastFetch = (query, ignoreHours, now);
         if (!background)
         {
             Loading = true;
@@ -185,7 +196,7 @@ public sealed class BestNearYou : IDisposable
         ApiResult<BestNearby> result;
         try
         {
-            result = await _api.GetBestAsync(query, cts.Token);
+            result = await _api.GetBestAsync(query, ignoreHours, cts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -271,9 +282,39 @@ public sealed class BestNearYou : IDisposable
     /// <summary>Another car, or the car's settings: rank again.</summary>
     private void OnCarsChanged() => _ = FetchAsync();
 
+    /// <summary>The stations whose hours the device corrected, once they're read; none without corrections.</summary>
+    private async Task<IReadOnlyList<long>> IgnoreHoursAsync()
+    {
+        if (_overrides is null)
+        {
+            return [];
+        }
+
+        await _overrides.LoadAsync();
+        return _overrides.StationIds;
+    }
+
+    /// <summary>
+    /// A correction saved or undone: once something was asked, asked again with the stations it names, in the background
+    /// when there's a result (it stays shown meanwhile). The corrections coming in at the start change nothing: the first
+    /// request waits for them.
+    /// </summary>
+    private void OnOverridesChanged()
+    {
+        if (Origin is not null && _lastFetch is { } last && !last.IgnoreHours.SequenceEqual(_overrides!.StationIds))
+        {
+            _ = FetchAsync(background: Result is not null);
+        }
+    }
+
     public void Dispose()
     {
         _cars.Changed -= OnCarsChanged;
+        if (_overrides is not null)
+        {
+            _overrides.Changed -= OnOverridesChanged;
+        }
+
         _fetchCts?.Cancel();
         _refreshCts?.Cancel();
     }

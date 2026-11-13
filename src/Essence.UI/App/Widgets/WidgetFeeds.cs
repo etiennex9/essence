@@ -12,7 +12,9 @@ namespace Essence.UI.App.Widgets;
 /// and Best on a frequent route send the same questions as Best near you and Best on the way (<see cref="BestQuery.For"/>,
 /// <see cref="TripQuery.For"/>). Where you are is the device's latest fix (<see cref="LastLocation"/>), whose time shows once
 /// it's old; <c>access</c> and <c>locationOn</c> (the device's location setting) only say what to ask for when there's none,
-/// or why it can't be updated. The texts are ready to show, in the UI's language.
+/// or why it can't be updated. The hours the user corrected on the device (<see cref="StationHoursOverrides"/>, the same
+/// preferences) win over the server's, and go with Best's and trips' requests (<c>ignoreHours</c>), as on the page. The texts
+/// are ready to show, in the UI's language.
 /// </summary>
 public sealed class WidgetFeeds(
     IPreferenceStore preferences,
@@ -34,7 +36,13 @@ public sealed class WidgetFeeds(
     /// </summary>
     private static readonly TimeSpan ClosesSoonOnWidget = TimeSpan.FromMinutes(90);
 
-    private readonly StationHoursView _hours = new(l);
+    /// <summary>The hours the user corrected on the device, read with the rest (<see cref="LoadAsync"/>).</summary>
+    private readonly StationHoursOverrides _overrides = new(preferences, time);
+
+    private StationHoursView? _hoursView;
+
+    /// <summary>The hours' texts, with the device's corrections (<see cref="StationHoursView.HoursOf"/>).</summary>
+    private StationHoursView Hours => _hoursView ??= new StationHoursView(l, _overrides);
 
     /// <summary>The station Best near you would pick from <paramref name="origin"/>, with what it saves.</summary>
     public async Task<WidgetView> BestNearAsync(WidgetPlaceRef origin, CancellationToken cancellationToken)
@@ -47,7 +55,7 @@ public sealed class WidgetFeeds(
             return Problem(title, fuel, NotFound(origin), tap);
         }
 
-        var result = await api.GetBestAsync(BestQuery.For(start.Point, fuel, car), cancellationToken);
+        var result = await api.GetBestAsync(BestQuery.For(start.Point, fuel, car), _overrides.StationIds, cancellationToken);
         if (!result.IsSuccess || result.Value is not { } best)
         {
             return Problem(title, fuel, WidgetProblem.Failed, tap, start.Fix);
@@ -63,7 +71,7 @@ public sealed class WidgetFeeds(
             ? l["Closest"].Value
             : l["Saves", Formatting.Money(pick.SavesDollars, culture)].Value;
         var distance = l[best.ByRoad ? "DistanceByRoad" : "DistanceApprox", Formatting.Km(pick.DistanceKm, culture)];
-        var detail = WithHours($"{distance} · {saving}", ArrivalNote(pick.Hours, pick.Latitude, pick.Longitude, pick.EtaMin));
+        var detail = WithHours($"{distance} · {saving}", ArrivalNote(Hours.HoursOf(pick.Id, pick.Hours), pick.Latitude, pick.Longitude, pick.EtaMin));
         return View(title, fuel, [Line(pick.Id, pick.Brand, detail, pick.PriceCents, $"/?station={pick.Id}")], tap, start.Fix);
     }
 
@@ -136,7 +144,7 @@ public sealed class WidgetFeeds(
             return null;
         }
 
-        var view = _hours.Describe(station.Hours, station.Latitude, station.Longitude, now);
+        var view = Hours.Describe(Hours.HoursOf(station.Id, station.Hours), station.Latitude, station.Longitude, now);
         return view.IsClosed ? view.Status
             : view.ClosesAt - now <= ClosesSoonOnWidget ? view.Closes
             : null;
@@ -151,13 +159,13 @@ public sealed class WidgetFeeds(
     private string? ArrivalNote(StationHours? hours, double latitude, double longitude, double? etaMinutes)
     {
         var now = time.GetUtcNow();
-        var arrival = _hours.Arrive(hours, latitude, longitude, now, etaMinutes, name: "");
+        var arrival = Hours.Arrive(hours, latitude, longitude, now, etaMinutes, name: "");
         return arrival.Kind switch
         {
-            ArrivalKind.Closed or ArrivalKind.TemporarilyClosed => _hours.Describe(hours, latitude, longitude, now).Status,
-            ArrivalKind.ClosesBefore => _hours.Describe(hours, latitude, longitude, now).Closes,
+            ArrivalKind.Closed or ArrivalKind.TemporarilyClosed => Hours.Describe(hours, latitude, longitude, now).Status,
+            ArrivalKind.ClosesBefore => Hours.Describe(hours, latitude, longitude, now).Closes,
             ArrivalKind.Open or ArrivalKind.ClosesSoon when arrival.ClosesAt - now <= ClosesSoonOnWidget =>
-                _hours.Describe(hours, latitude, longitude, arrival.ArriveAt).Closes,
+                Hours.Describe(hours, latitude, longitude, arrival.ArriveAt).Closes,
             _ => null,
         };
     }
@@ -195,7 +203,8 @@ public sealed class WidgetFeeds(
             return Problem(title, fuel, WidgetProblem.AtDestination, "/?view=best", fix);
         }
 
-        var result = await api.GetTripAsync(TripQuery.For(start.Point, destination.Point, fuel, car, rangeKm: null), cancellationToken);
+        var result = await api.GetTripAsync(
+            TripQuery.For(start.Point, destination.Point, fuel, car, rangeKm: null), _overrides.StationIds, cancellationToken);
         if (!result.IsSuccess || result.Value is not { } plan)
         {
             return Problem(title, fuel, result.Error switch
@@ -218,7 +227,7 @@ public sealed class WidgetFeeds(
         var detail = pick.Id == plan.ReferenceId || pick.SavesDollars <= 0
             ? where
             : $"{where} · {l["Saves", Formatting.Money(pick.SavesDollars, culture)]}";
-        detail = WithHours(detail, ArrivalNote(pick.Hours, pick.Latitude, pick.Longitude, pick.ToMin));
+        detail = WithHours(detail, ArrivalNote(Hours.HoursOf(pick.Id, pick.Hours), pick.Latitude, pick.Longitude, pick.ToMin));
         var line = TripLink(from, to, places, pick.Id);
         return View(title, fuel, [Line(pick.Id, pick.Brand, detail, pick.PriceCents, line)], line, start.Fix);
     }
@@ -279,6 +288,7 @@ public sealed class WidgetFeeds(
         await cars.LoadAsync();
         var places = new SavedPlaces(preferences);
         await places.LoadAsync();
+        await _overrides.LoadAsync();
         return (fuel, cars.Active, places);
     }
 

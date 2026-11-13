@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Android's backup, up to Android 11: everything but the device's locations (MauiPreferenceStore.LocationSharedName), which
-     go to the server and nowhere else, and the page's session (NativeSessionStore), which lasts a day. Android 12 and later
-     read data_extraction_rules.xml. -->
+     go to the server and nowhere else, the page's session (NativeSessionStore), which lasts a day, and the secure storage
+     (MAUI's SecureStorage: the linked OpenStreetMap account, SecureOsmTokenStore), whose key stays on the device, so a copy
+     elsewhere couldn't be read. Android 12 and later read data_extraction_rules.xml. -->
 <full-backup-content>
     <exclude domain="sharedpref" path="essence.location.xml" />
     <exclude domain="sharedpref" path="essence.session.xml" />
+    <exclude domain="sharedpref" path="io.github.etiennex9.essence.microsoft.maui.essentials.preferences.xml" />
 </full-backup-content>

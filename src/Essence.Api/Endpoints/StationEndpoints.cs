@@ -68,7 +68,9 @@ public static class StationEndpoints
             .WithDataVersion(clockDependent: true);
         group.MapGet("/{id:long}", GetStation)
             .WithSummary("A station with its current prices and opening hours")
-            .WithDescription(HoursDescription)
+            .WithDescription(
+                HoursDescription + " `osmElement` is the OpenStreetMap element the station was matched to, its hours or not "
+                + "(`node/123`, `way/456`, `relation/789`): where the app sends a correction of them. Null when none was.")
             .WithDataVersion();
         group.MapGet("/{id:long}/prices", GetPriceHistory)
             .WithSummary("Price history of a station")
@@ -156,8 +158,8 @@ public static class StationEndpoints
             return TypedResults.NotFound();
         }
 
-        var hours = (await snapshot.GetAsync(db, cancellationToken)).Hours;
-        return TypedResults.Ok(station with { Hours = hours.GetValueOrDefault(id)?.Dto });
+        var current = await snapshot.GetAsync(db, cancellationToken);
+        return TypedResults.Ok(station with { Hours = current.Hours.GetValueOrDefault(id)?.Dto, OsmElement = current.OsmElementOf(id) });
     }
 
     private static async Task<Results<Ok<List<NearbyStation>>, ValidationProblem>> Nearby(

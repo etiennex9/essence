@@ -78,6 +78,10 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       TZ: UTC
       ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_reader;Password=CHANGE_ME_READER_PASSWORD;GSS Encryption Mode=Disable
+      # Optional: the client id of the OpenStreetMap OAuth 2 application registered for <your domain> (README → Deploy →
+      # OpenStreetMap edits), so users can send their hours corrections to OpenStreetMap with their own account. Empty:
+      # the apps don't offer it.
+      Osm__ClientId: ""
     depends_on:
       migrate:
         condition: service_completed_successfully
