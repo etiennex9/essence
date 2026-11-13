@@ -13,6 +13,9 @@
 # TrueNAS offers Update once a day when one changed. To roll out each push within about 10 minutes instead, run
 # deploy/truenas-autodeploy.py from a cron job (README → Deploy).
 #
+# To be alerted when the feed or an hours source keeps failing, point an Uptime Kuma monitor (TrueNAS's apps catalog) at
+# http://<NAS address>:30180/api/health/sources (README → Deploy → Alerts).
+#
 # Routing and the address search keep their data in the named volumes at the end, which Docker creates (in the apps
 # pool's ix-apps dataset) and which they fill themselves: rebuildable caches, deleted with the app.
 

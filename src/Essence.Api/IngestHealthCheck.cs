@@ -11,14 +11,12 @@ public sealed class IngestHealthCheck(EssenceDbContext db, TimeProvider timeProv
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
-        var maxAge = TimeSpan.FromMinutes(configuration.GetValue("Health:MaxImportAgeMinutes", 15));
+        var maxAge = MaxImportAge(configuration);
 
         DateTimeOffset? lastImportAt;
         try
         {
-            lastImportAt = await db.Imports
-                .Where(i => i.Status == ImportStatus.Succeeded)
-                .MaxAsync(i => (DateTimeOffset?)i.FetchedAt, cancellationToken);
+            lastImportAt = await LastImportAtAsync(db, cancellationToken);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -30,17 +28,31 @@ public sealed class IngestHealthCheck(EssenceDbContext db, TimeProvider timeProv
             return HealthCheckResult.Unhealthy("No successful import yet.");
         }
 
-        var age = timeProvider.GetUtcNow() - last;
+        var now = timeProvider.GetUtcNow();
+        var age = now - last;
         var data = new Dictionary<string, object>
         {
             ["lastImportAt"] = last,
             ["ageMinutes"] = Math.Round(age.TotalMinutes, 1),
             ["maxAgeMinutes"] = maxAge.TotalMinutes,
         };
-        return age <= maxAge
+        return IsRecent(last, now, maxAge)
             ? HealthCheckResult.Healthy("The last import is recent.", data)
             : HealthCheckResult.Unhealthy("The last successful import is too old.", data: data);
     }
+
+    /// <summary><c>Health:MaxImportAgeMinutes</c> (15, about 3 of the feed's versions): the oldest the last successful import may be.</summary>
+    public static TimeSpan MaxImportAge(IConfiguration configuration) =>
+        TimeSpan.FromMinutes(configuration.GetValue("Health:MaxImportAgeMinutes", 15));
+
+    /// <summary>When the latest successful import of the feed was fetched; null when none ever was.</summary>
+    public static Task<DateTimeOffset?> LastImportAtAsync(EssenceDbContext db, CancellationToken cancellationToken) =>
+        db.Imports
+            .Where(i => i.Status == ImportStatus.Succeeded)
+            .MaxAsync(i => (DateTimeOffset?)i.FetchedAt, cancellationToken);
+
+    /// <summary>Whether an import fetched at <paramref name="lastImportAt"/> is recent enough: at most <paramref name="maxAge"/> old.</summary>
+    public static bool IsRecent(DateTimeOffset lastImportAt, DateTimeOffset now, TimeSpan maxAge) => now - lastImportAt <= maxAge;
 
     /// <summary>JSON body for <c>/health</c>. Exceptions are logged, not returned.</summary>
     public static Task WriteResponseAsync(HttpContext context, HealthReport report) =>

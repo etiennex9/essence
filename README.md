@@ -24,7 +24,7 @@ and shows them on a map of nearby stations.
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. The hours: Costco's locator against a trimmed real answer, the curated rules, days and times as the locators write them, matching, the gate, the weekly night schedule across daylight time and the retries, the rows' diff, the cache, the runs' history, the settings. |
 | `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM and Photon clients against stub servers; the address search's labels and filtering; Québec's boundary at its borders; which source's hours a station shows, stale sources and what's trusted; the stations left out because they'd be closed on arrival (trusted hours only, holidays, corrected hours, everything closed), and the rankings' reference and first station reached once they are. |
 | `tests/Essence.Hours.Tests` | xUnit unit tests: the sources' hours, strict and lenient, what's refused and why, the canonical rule and its round trip, the week's groups; open, closing soon and closed, past midnight and across daylight time; the holidays, Easter and the cautions; the time zones at their borders, and Canada's rule against the system's zones. |
-| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked); the stations' hours as served, when the snapshot loads them again, and the 304 rule with the hours; `ignoreHours`, the stations said to be left out, the 304 rule of an answer that depends on the clock, and the Development clock (`Clock:Now`); `/client-config` with and without an OpenStreetMap application, and the stations' OpenStreetMap elements. |
+| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked); the stations' hours as served, when the snapshot loads them again, and the 304 rule with the hours; `ignoreHours`, the stations said to be left out, the 304 rule of an answer that depends on the clock, and the Development clock (`Clock:Now`); `/client-config` with and without an OpenStreetMap application, and the stations' OpenStreetMap elements; `/health/sources`, each source's verdict from runs given (failures in a row, rejected runs, re-matches, successes, staleness, never succeeded, the feed's age, sources turned off), its settings and JSON, and the endpoint with its database unreachable, HEAD and no rate limit. |
 | `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the station shown in Best near you and on the way, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations; stations' hours as shown (open, closing soon, closed, the week, the source) in the station's time zone, closed markers, the hours on the Favorites widget and rows; what Best near you, Best on the way and their Go links say of a station closing soon after the driver gets there or closed then, the stations left out, the hours on the Best near a place and frequent route widgets, `ignoreHours` sent, and plans read and restored without the new fields; hours corrected on the device (kept per server, read leniently, winning everywhere, `ignoreHours` asked again with them), the editor's week and rule, and OpenStreetMap: the edit sent against a stub API (only the hours changed, escaping, ways, a version conflict, the changeset always closed, brand hours never sent on their own), linking with PKCE and the state checked, and the Android app's `essence://` links. |
 | `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
@@ -58,6 +58,7 @@ at other copies of the downloads.
 
 ```bash
 curl localhost:8080/health
+curl localhost:8080/health/sources
 curl "localhost:8080/stations/nearby?lat=45.5017&lon=-73.5673&radiusKm=3&fuel=Diesel"
 curl "localhost:8080/stations/best?lat=45.5017&lon=-73.5673&fuel=Regulier"
 curl "localhost:8080/trips/best?fromLat=45.5017&fromLon=-73.5673&toLat=46.8139&toLon=-71.208&fuel=Regulier&rangeKm=180"
@@ -243,7 +244,8 @@ per station (see **Which hours show**), and the app shows them.
   and go stale.
 - **Health.** `/hours/sources` says how each source is going, and `/health`'s `hours` check is `Degraded` when a source
   that has run has had no success in `Health:HoursStaleAfterDays` (21) days, or none ever. Its hours still show then,
-  but are stale.
+  but are stale. `/health/sources` fails a source after 3 failed or rejected runs in a row, for a monitor to alert on
+  ([Alerts](#alerts)).
 - **Which hours show.** The API keeps each station's chosen hours with its snapshot of the stations (`HoursPrecedence`
   in `src/Essence.Ranking`): Costco's own, then `curated`, then Ultramar's and Shell's forecourts' (`ultramar`,
   `shell`), then Couche-Tard's stores' (`circlek`: a Couche-Tard that sells Shell's gas shows the pumps' hours), then
@@ -321,6 +323,7 @@ per station (see **Which hours show**), and the app shows them.
 | `GET /hours/sources` | Each source of stations' opening hours: its last success and attempt, what came of it and why, its failures in a row, how many stations it has hours for, and the version of its data (see [Opening hours](#opening-hours)). |
 | `GET /client-config` | What the apps need of the deployment's settings: its OpenStreetMap application's client id (`osmClientId`, null when editing OpenStreetMap is off), and where it signs in and edits (`osmAuthUrl`, `osmApiUrl`). The Android app picks its server at run time, so it reads them here. See [OpenStreetMap edits](#openstreetmap-edits). |
 | `GET /health` | 200 when the database answers and the last successful import is under 15 min old, else 503. A routing or geocoding server that doesn't answer, or whose data is being built, makes it `Degraded`, still 200, with the build's stage and percent; so does an hours source without a success in 21 days, with each source's last success. |
+| `GET /health/sources` | For a monitor to alert on ([Alerts](#alerts)): 200 when every source the ingest reads is fine, 503 when one isn't (the feed without a successful import in 15 min; an hours source after 3 failed or rejected runs in a row, or without a success in 21 days), or the database can't be read (`reason`: `database unreachable`). Each source with `ok`, `reason`, `consecutiveFailures`, `lastError`, `lastSuccessAt` and `lastAttemptAt`. Routing and geocoding don't count. HEAD gives the status alone. |
 
 `/stations/best` ranks the operating stations with an available price for the fuel (Costco only with `costco=true`: it
 sells to members only) by what the fill-up costs once the drive there and back is counted: price ÷ 100 × (fill + km there
@@ -385,7 +388,8 @@ and `temporarilyClosed`.
 
 Fuel names accept or omit accents (`Regulier` = `Régulier`). Errors are ProblemDetails. Requests are rate limited per client IP
 (`RateLimiting:PermitLimit` per `RateLimiting:WindowSeconds`, 120/60 s by default); `/places/` has a window of its own
-(`RateLimiting:Search:PermitLimit` per `RateLimiting:Search:WindowSeconds`, 60/60 s), so typing doesn't eat the rest. The `X-Forwarded-For`, `-Proto` and `-Prefix`
+(`RateLimiting:Search:PermitLimit` per `RateLimiting:Search:WindowSeconds`, 60/60 s), so typing doesn't eat the rest.
+`/health`, `/health/sources` and `/alive` aren't limited, so that a monitor never reads a 429 as the app failing. The `X-Forwarded-For`, `-Proto` and `-Prefix`
 headers are trusted from private networks only, where the web container that forwards `/api/` lives; that container in turn
 takes the client's address from a reverse proxy on a private network. Allowed CORS origins come from `Cors:AllowedOrigins`:
 in Compose, `CORS_ORIGIN` from `.env`. The web container needs none, since the map calls the API through its own `/api/`.
@@ -504,6 +508,61 @@ gets an `@autodeploy-<time>` snapshot first (the last 10 are kept).
   cron job leaves a stopped app alone. Starting it on `latest` instead would run the new migration again.
 - **To update the script**, look at what changed in `deploy/truenas-autodeploy.py`, since root runs it, then run the
   `curl` command again.
+
+### Alerts
+
+To be told when a source the ingest reads keeps failing, the app decides and a monitor sends the alert:
+[Uptime Kuma](https://github.com/louislam/uptime-kuma), a self-hosted app in TrueNAS's catalog, asks the api every few
+minutes and notifies you when the answer turns bad, then again when it's good. Essence keeps no notification secrets,
+and a monitor apart from the app can also tell when the app itself is down.
+
+**What it asks.** `/api/health/sources` answers 200 while every source is fine, and 503 as soon as one isn't, with
+each source's state (`source`, `ok`, `reason`, `consecutiveFailures`, `lastError`'s first line, `lastSuccessAt`,
+`lastAttemptAt`):
+
+- **The feed** (`feed`) fails when no import has succeeded in `Health:MaxImportAgeMinutes` (15 minutes, about 3 of the
+  Régie's versions in a row), as `/health` does: `feed stale`, or `never succeeded`.
+- **Each hours source** that has run and isn't turned off fails after `Health:HoursAlertAfterFailures` (3) failed or
+  rejected runs in a row (`failing`, or `never succeeded` for one that never had a success): with the retries after
+  15 minutes and 1 hour, about 1¼ hours after its weekly run went wrong. An `unchanged` run is a success, so it clears
+  the count; a `rematched` one fetched nothing, so it neither counts nor clears. A source also fails when it has had no
+  success in `Health:HoursStaleAfterDays` (21) days though it ran before (`stale`): it stopped running, as all of them do
+  with `Hours:Enabled` `false` (turn them off one by one instead, `Hours:<Source>:Enabled`, to stop checking them).
+- **A source clears at its next success**, and Uptime Kuma then says it's up again.
+- **When the database can't be read**, it's a 503 with `reason` `database unreachable` and no sources; the error itself
+  only goes to the api's log.
+- **It's apart from `/health`**, whose routing and geocoding checks are `Degraded` while they build their data, so a
+  build never alerts, **and from `/alive`**, which the containers' healthchecks ask, so a failing source never restarts
+  anything. It isn't rate limited, and answers HEAD with the status alone.
+
+**Setting it up on TrueNAS:**
+
+1. **Apps → Discover Apps**, find **Uptime Kuma**, and install it. Open it from **Apps** (**Web UI**) and create its
+   account.
+2. **Add New Monitor**:
+   - **Monitor Type**: **HTTP(s)**
+   - **Friendly Name**: `Essence sources`
+   - **URL**: `http://<nas-address>:<web port>/api/health/sources`, the web container's port (30180 in
+     [deploy/truenas.yaml](deploy/truenas.yaml)). The NAS's own address rather than the public one, so that the reverse
+     proxy being down doesn't look like a source failing.
+   - **Heartbeat Interval**: `300` (every 5 minutes).
+   - **Retries**: `2`, and **Heartbeat Retry Interval**: `60`, set after the interval, since Uptime Kuma changes the
+     retry interval along with it when they were equal. The app's wait for 3 failures in a row only covers the
+     sources: each deploy stops and starts the whole app (the autodeploy redeploys every push), and a check that lands
+     then gets no answer, a 502, or a 503 `database unreachable` while postgres comes back. Two retries a minute apart
+     ride that out (Uptime Kuma shows the monitor as pending and notifies nobody), and hold a real alert back by only
+     2 minutes.
+   - **Accepted Status Codes** (under **Advanced**): `200-299`, the default.
+3. Under **Notifications**, **Setup Notification**, and pick how to be told: **ntfy** for push notifications on Android
+   (install ntfy's app, subscribe to a topic named so that nobody would guess it, since anyone can read a topic on
+   ntfy.sh, and give Uptime Kuma the same server and topic), or email (SMTP), Telegram, Discord, and many others.
+   **Test** sends one; **Save**. The alert gives the status code: `/api/health/sources` says which source fails and why.
+4. Optionally, a second **HTTP(s)** monitor on the public `https://<your domain>/api/alive`, which answers 200 whenever
+   the api does through the web container: it tells when the app or the reverse proxy is down. Give it the same
+   **Retries** (`2`) and **Heartbeat Retry Interval** (`60`), since it also gets a 502 while a deploy restarts the app.
+
+Uptime Kuma on the same NAS can't tell you that the NAS itself is down: that takes a monitor that runs elsewhere (on
+another machine, or a hosted uptime service) on that public `/api/alive`.
 
 ### OpenStreetMap edits
 
@@ -785,8 +844,9 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Backfill:BaseUrl` | `https://regieessencequebec.ca/data/` | Folder of the xlsx files, ending with `/`. |
 | `Backfill:MaxAge` | `01:10:00` | Older slots aren't requested (the server keeps the files about an hour). |
 | `Archive:Path` / `RetentionDays` | `/data/archive` / 30 | |
-| `Health:MaxImportAgeMinutes` | 15 | API `/health` threshold. |
-| `Health:HoursStaleAfterDays` | 21 | An hours source without a success for longer makes `/health`'s `hours` check `Degraded`. |
+| `Health:MaxImportAgeMinutes` | 15 | API `/health` threshold, and the feed's in `/health/sources`. |
+| `Health:HoursStaleAfterDays` | 21 | An hours source without a success for longer makes `/health`'s `hours` check `Degraded`, and fails it in `/health/sources` (`stale`). |
+| `Health:HoursAlertAfterFailures` | 3 | Failed or rejected runs in a row of an hours source that fail it in `/health/sources` ([Alerts](#alerts)); at least 1. Read by the API, beside the other thresholds. |
 | `Hours:Enabled` | `true` | The ingest's hours worker ([Opening hours](#opening-hours)). Off, the rows stay as they are. |
 | `Hours:CachePath` | `/data/hours` | Each source's last good download. |
 | `Hours:UserAgent` | `Essence-Ingest/1.0 (station hours)` | Sent to every source; a contact URL can go in the parentheses. |
