@@ -1,0 +1,889 @@
+{
+  "success": true,
+  "data": [
+    {
+      "market": "CA",
+      "country": "CA",
+      "locationId": "1581",
+      "locationType": "Retail",
+      "coordinates": {
+        "latitude": "46.786362",
+        "longitude": "-71.3017014"
+      },
+      "siteStatus": "active",
+      "siteAddressLine1": "2631 Bd du Versant N",
+      "siteAddressLine2": null,
+      "siteAddressLine3": "Capitale-Nationale",
+      "siteCity": "QUÉBEC",
+      "siteStateProvince": "QC",
+      "sitePostalCode": "G1V 1A3",
+      "siteCountry": "CA",
+      "siteTwentyFourSeven": false,
+      "siteRegularHours": [
+        {
+          "closeTime": "22:00",
+          "dayOfWeek": "Monday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "22:00",
+          "dayOfWeek": "Tuesday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "22:00",
+          "dayOfWeek": "Wednesday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "22:00",
+          "dayOfWeek": "Thursday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "22:00",
+          "dayOfWeek": "Friday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "22:00",
+          "dayOfWeek": "Saturday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "22:00",
+          "dayOfWeek": "Sunday",
+          "openTime": "06:00"
+        }
+      ],
+      "updatedAt": "2026-11-12T15.26.17.864474Z",
+      "siteNumber": "41685",
+      "services": [
+        {
+          "serviceType": "Forecourt",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": false,
+          "serviceRegularHours": [
+            {
+              "closeTime": "22:00",
+              "dayOfWeek": "Monday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "22:00",
+              "dayOfWeek": "Tuesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "22:00",
+              "dayOfWeek": "Wednesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "22:00",
+              "dayOfWeek": "Thursday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "22:00",
+              "dayOfWeek": "Friday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "22:00",
+              "dayOfWeek": "Saturday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "22:00",
+              "dayOfWeek": "Sunday",
+              "openTime": "06:00"
+            }
+          ],
+          "serviceBrand": "Ultramar"
+        }
+      ]
+    },
+    {
+      "market": "CA",
+      "country": "CA",
+      "locationId": "1399",
+      "locationType": "Retail",
+      "coordinates": {
+        "latitude": "46.6797317",
+        "longitude": "-71.3445667"
+      },
+      "siteStatus": "active",
+      "siteAddressLine1": "1220 Chemin Olivier",
+      "siteAddressLine2": null,
+      "siteAddressLine3": "Chaudière-Appalaches",
+      "siteCity": "SAINT-NICOLAS",
+      "siteStateProvince": "QC",
+      "sitePostalCode": "G7A 2M5",
+      "siteCountry": "CA",
+      "siteTwentyFourSeven": true,
+      "siteRegularHours": [
+        {
+          "closeTime": "23:59",
+          "dayOfWeek": "Monday",
+          "openTime": "00:00"
+        },
+        {
+          "closeTime": "23:59",
+          "dayOfWeek": "Tuesday",
+          "openTime": "00:00"
+        },
+        {
+          "closeTime": "23:59",
+          "dayOfWeek": "Wednesday",
+          "openTime": "00:00"
+        },
+        {
+          "closeTime": "23:59",
+          "dayOfWeek": "Thursday",
+          "openTime": "00:00"
+        },
+        {
+          "closeTime": "23:59",
+          "dayOfWeek": "Friday",
+          "openTime": "00:00"
+        },
+        {
+          "closeTime": "23:59",
+          "dayOfWeek": "Saturday",
+          "openTime": "00:00"
+        },
+        {
+          "closeTime": "23:59",
+          "dayOfWeek": "Sunday",
+          "openTime": "00:00"
+        }
+      ],
+      "updatedAt": "2026-11-12T15.26.17.864474Z",
+      "siteNumber": "41487",
+      "services": [
+        {
+          "serviceType": "Forecourt",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": true,
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Monday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Tuesday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Wednesday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Thursday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Friday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Saturday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Sunday",
+              "openTime": "00:00"
+            }
+          ],
+          "serviceBrand": "Ultramar"
+        },
+        {
+          "serviceType": "CStore",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": true,
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Monday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Tuesday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Wednesday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Thursday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Friday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Saturday",
+              "openTime": "00:00"
+            },
+            {
+              "closeTime": "23:59",
+              "dayOfWeek": "Sunday",
+              "openTime": "00:00"
+            }
+          ],
+          "serviceBrand": "Marché Express"
+        }
+      ]
+    },
+    {
+      "market": "CA",
+      "country": "CA",
+      "locationId": "1689",
+      "locationType": "Retail",
+      "coordinates": {
+        "latitude": "46.5397684",
+        "longitude": "-72.7463738"
+      },
+      "siteStatus": "temporary closure",
+      "siteAddressLine1": "313 4e Rue de la Pointe",
+      "siteAddressLine2": null,
+      "siteAddressLine3": "Mauricie",
+      "siteCity": "SHAWINIGAN",
+      "siteStateProvince": "QC",
+      "sitePostalCode": "G9N 1G6",
+      "siteCountry": "CA",
+      "siteTwentyFourSeven": false,
+      "siteRegularHours": [
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Monday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Tuesday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Wednesday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Thursday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Friday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Saturday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Sunday",
+          "openTime": "07:00"
+        }
+      ],
+      "updatedAt": "2026-11-12T15.26.17.864474Z",
+      "siteNumber": "41796",
+      "services": [
+        {
+          "serviceType": "CStore",
+          "serviceStatus": "temporary closure",
+          "serviceTwentyFourSeven": false,
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Monday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Tuesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Wednesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Thursday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Friday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Saturday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Sunday",
+              "openTime": "07:00"
+            }
+          ],
+          "serviceBrand": "Bannière Indépendante"
+        },
+        {
+          "serviceType": "Forecourt",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": false,
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Monday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Tuesday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Wednesday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Thursday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Friday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Saturday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "07:00",
+              "dayOfWeek": "Sunday"
+            }
+          ],
+          "serviceBrand": "Ultramar"
+        }
+      ]
+    },
+    {
+      "market": "CA",
+      "country": "CA",
+      "locationId": "1375",
+      "locationType": "Retail",
+      "coordinates": {
+        "latitude": "46.854661",
+        "longitude": "-71.41185039999999"
+      },
+      "siteStatus": "active",
+      "siteAddressLine1": "1031 Bd Pie-XI S",
+      "siteAddressLine2": null,
+      "siteAddressLine3": "Capitale-Nationale",
+      "siteCity": "QUÉBEC",
+      "siteStateProvince": "QC",
+      "sitePostalCode": "G3K 1L2",
+      "siteCountry": "CA",
+      "siteTwentyFourSeven": true,
+      "siteRegularHours": [
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Monday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Tuesday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Wednesday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Thursday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Friday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Saturday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Sunday",
+          "openTime": "06:00"
+        }
+      ],
+      "updatedAt": "2026-11-12T15.26.17.864474Z",
+      "siteNumber": "41463",
+      "services": [
+        {
+          "serviceType": "Forecourt",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": true,
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Monday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Tuesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Wednesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Thursday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Friday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Saturday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Sunday",
+              "openTime": "06:00"
+            }
+          ],
+          "serviceBrand": "Ultramar"
+        },
+        {
+          "serviceType": "QSR",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": true,
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Monday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Tuesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Wednesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Thursday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Friday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Saturday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Sunday",
+              "openTime": "06:00"
+            }
+          ],
+          "serviceBrand": "Transit Coffee & Bakery"
+        },
+        {
+          "serviceType": "CStore",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": true,
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Monday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Tuesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Wednesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Thursday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Friday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Saturday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Sunday",
+              "openTime": "06:00"
+            }
+          ],
+          "serviceBrand": "Marché Express"
+        }
+      ]
+    },
+    {
+      "market": "CA",
+      "country": "CA",
+      "locationId": "1716",
+      "locationType": "Retail",
+      "coordinates": {
+        "latitude": "45.553826",
+        "longitude": "-73.7631534"
+      },
+      "siteStatus": "active",
+      "siteAddressLine1": "1890 Bd du Curé-Labelle",
+      "siteAddressLine2": null,
+      "siteAddressLine3": "Laval",
+      "siteCity": "LAVAL",
+      "siteStateProvince": "QC",
+      "sitePostalCode": "H7T 1L2",
+      "siteCountry": "CA",
+      "siteTwentyFourSeven": false,
+      "siteRegularHours": [
+        {
+          "closeTime": "20:00",
+          "dayOfWeek": "Monday",
+          "openTime": "07:00"
+        },
+        {
+          "closeTime": "20:00",
+          "dayOfWeek": "Tuesday",
+          "openTime": "07:00"
+        },
+        {
+          "closeTime": "20:00",
+          "dayOfWeek": "Wednesday",
+          "openTime": "07:00"
+        },
+        {
+          "closeTime": "20:00",
+          "dayOfWeek": "Thursday",
+          "openTime": "07:00"
+        },
+        {
+          "closeTime": "20:00",
+          "dayOfWeek": "Friday",
+          "openTime": "07:00"
+        },
+        {
+          "closeTime": "20:00",
+          "dayOfWeek": "Saturday",
+          "openTime": "08:00"
+        },
+        {
+          "closeTime": "12:00",
+          "dayOfWeek": "Sunday",
+          "openTime": "00:00"
+        }
+      ],
+      "updatedAt": "2026-11-12T15.26.17.864474Z",
+      "siteNumber": "41824",
+      "services": [
+        {
+          "serviceType": "CStore",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": false,
+          "serviceRegularHours": [
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Monday",
+              "openTime": "07:00"
+            },
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Tuesday",
+              "openTime": "07:00"
+            },
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Wednesday",
+              "openTime": "07:00"
+            },
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Thursday",
+              "openTime": "07:00"
+            },
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Friday",
+              "openTime": "07:00"
+            },
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Saturday",
+              "openTime": "08:00"
+            },
+            {
+              "closeTime": "12:00",
+              "dayOfWeek": "Sunday",
+              "openTime": "00:00"
+            }
+          ],
+          "serviceBrand": "Aucun"
+        },
+        {
+          "serviceType": "Forecourt",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": false,
+          "serviceRegularHours": [
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Monday",
+              "openTime": "07:00"
+            },
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Tuesday",
+              "openTime": "07:00"
+            },
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Wednesday",
+              "openTime": "07:00"
+            },
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Thursday",
+              "openTime": "07:00"
+            },
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Friday",
+              "openTime": "07:00"
+            },
+            {
+              "closeTime": "20:00",
+              "dayOfWeek": "Saturday",
+              "openTime": "08:00"
+            },
+            {
+              "closeTime": "12:00",
+              "dayOfWeek": "Sunday",
+              "openTime": "00:00"
+            }
+          ],
+          "serviceBrand": "Ultramar"
+        }
+      ]
+    },
+    {
+      "market": "CA",
+      "country": "CA",
+      "locationId": "1788",
+      "locationType": "Retail",
+      "coordinates": {
+        "latitude": "45.6072",
+        "longitude": "-74.6150816"
+      },
+      "siteStatus": "active",
+      "siteAddressLine1": "370 McGill St",
+      "siteAddressLine2": null,
+      "siteAddressLine3": "Prescott and Russell United Counties",
+      "siteCity": "HAWKESBURY",
+      "siteStateProvince": "ON",
+      "sitePostalCode": "K6A 1R2",
+      "siteCountry": "CA",
+      "siteTwentyFourSeven": false,
+      "siteRegularHours": [
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Monday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Tuesday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Wednesday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Thursday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Friday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Saturday",
+          "openTime": "06:00"
+        },
+        {
+          "closeTime": "23:00",
+          "dayOfWeek": "Sunday",
+          "openTime": "06:00"
+        }
+      ],
+      "updatedAt": "2026-11-12T15.26.17.864474Z",
+      "siteNumber": "41903",
+      "services": [
+        {
+          "serviceType": "CStore",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": false,
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Monday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Tuesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Wednesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Thursday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Friday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Saturday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Sunday",
+              "openTime": "06:00"
+            }
+          ],
+          "serviceBrand": "Independent Banner"
+        },
+        {
+          "serviceType": "Forecourt",
+          "serviceStatus": "active",
+          "serviceTwentyFourSeven": false,
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Monday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Tuesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Wednesday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Thursday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Friday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Saturday",
+              "openTime": "06:00"
+            },
+            {
+              "closeTime": "23:00",
+              "dayOfWeek": "Sunday",
+              "openTime": "06:00"
+            }
+          ],
+          "serviceBrand": "Ultramar"
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "totalRecords": 6,
+    "totalPages": 1,
+    "currentPage": 1,
+    "pageSize": 1000,
+    "hasNextPage": false,
+    "hasPrevPage": false
+  }
+}

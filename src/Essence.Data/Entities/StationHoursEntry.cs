@@ -9,6 +9,9 @@ public sealed class StationHoursEntry
     /// <summary>Found by the station's natural key: a curated rule written for that station.</summary>
     public const string ByNaturalKey = "natural_key";
 
+    /// <summary>The store number in the station's name: Couche-Tard's "Couche-Tard #140" is its site 6000140, wherever it is.</summary>
+    public const string ByStoreNumber = "store_number";
+
     /// <summary>Within the source's radius of the station, and of the same brand.</summary>
     public const string ByDistance = "distance";
 
@@ -33,15 +36,15 @@ public sealed class StationHoursEntry
     /// <summary>Where a person can check the hours.</summary>
     public string? SourceUrl { get; set; }
 
-    /// <summary><see cref="ByNaturalKey"/>, <see cref="ByDistance"/> or <see cref="ByBrand"/>.</summary>
+    /// <summary><see cref="ByNaturalKey"/>, <see cref="ByStoreNumber"/>, <see cref="ByDistance"/> or <see cref="ByBrand"/>.</summary>
     public required string MatchedBy { get; set; }
 
-    /// <summary>How far the source's point is from the station's, for a match by distance.</summary>
+    /// <summary>How far the source's point is from the station's, for a match by distance or by store number.</summary>
     public int? MatchDistanceM { get; set; }
 
     /// <summary>
-    /// The row is surely about this station: its natural key, its brand for a brand's rule, or for a match by distance its
-    /// postal code or house number agrees.
+    /// The row is surely about this station: its natural key, its store number, its brand for a brand's rule, or for a
+    /// match by distance its postal code or house number agrees.
     /// </summary>
     public bool Confirmed { get; set; }
 

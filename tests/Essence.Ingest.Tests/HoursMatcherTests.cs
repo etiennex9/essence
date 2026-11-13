@@ -159,6 +159,108 @@ public sealed class HoursMatcherTests
         Assert.Equal(1, result.Unmatched);
     }
 
+    [Fact]
+    public void Couche_Tard_s_store_matches_the_station_named_after_it_whatever_its_brand_and_700_m_away()
+    {
+        // The feed's "Couche-Tard #140" sells Esso's gas; the store's point is moved 700 m east.
+        var station = Station(10, "45 boul. Saint-Elzéar O., Laval", "H7M 1E3", "Esso", 45.600770, -73.732023) with { StoreNumber = 140 };
+        var store = Store(140, 45.600740, -73.732050 + 0.009);
+
+        var match = Assert.Single(HoursMatcher.Match([store], [station], 0).Matches);
+
+        Assert.Equal((10L, StationHoursEntry.ByStoreNumber, true), (match.StationId, match.MatchedBy, match.Confirmed));
+        Assert.InRange(match.DistanceM!.Value, 690, 710);
+    }
+
+    [Fact]
+    public void A_Couche_Tard_store_121_m_from_a_Shell_isn_t_matched_to_it_nor_to_a_Couche_Tard_not_named_after_it()
+    {
+        var shell = Station(11, "1 rue Principale, Laval", "H7M 1E3", "Shell", 45.6000, -73.7320);
+        var coucheTard = Station(12, "2 rue Principale, Laval", "H7M 1E3", "Couche-Tard", 45.6001, -73.7321);
+        var store = Store(999, 45.6000 + 0.00109, -73.7320) with { HouseNumber = "1", Postcode = "H7M1E3" };
+
+        var result = HoursMatcher.Match([store], [shell, coucheTard], 150);
+
+        Assert.Empty(result.Matches);
+        Assert.Equal(1, result.Unmatched);
+    }
+
+    [Fact]
+    public void A_store_number_two_stations_carry_matches_neither_and_a_store_without_a_point_is_never_its_brand_s_rule()
+    {
+        var first = Station(13, "1 rue A, Laval", "H7M 1E3", "Esso", 45.60, -73.73) with { StoreNumber = 140 };
+        var second = Station(14, "2 rue B, Laval", "H7M 1E4", "Irving", 45.61, -73.74) with { StoreNumber = 140 };
+        var other = Station(15, "3 rue C, Laval", "H7M 1E5", "Couche-Tard", 45.62, -73.75);
+        var store = Store(140, null, null);
+
+        var result = HoursMatcher.Match([store], [first, second, other], 150);
+
+        Assert.Empty(result.Matches);
+        Assert.Equal((1, 1), (result.Unmatched, result.Ambiguous));
+    }
+
+    [Theory]
+    [InlineData("Couche-Tard #140", 140)]
+    [InlineData("Couche-Tard # 140", 140)]
+    [InlineData("COUCHE-TARD #140", 140)]
+    [InlineData("  Couche Tard #1322 ", 1322)]
+    [InlineData("Couche-Tard inc.", null)]
+    [InlineData("COUCHE-TARD INC", null)]
+    [InlineData("Couche-Tard #0", null)]
+    [InlineData("Dépanneur Couche-Tard #140 et lave-auto", null)]
+    [InlineData("2642-4101 Québec Inc.", null)]
+    [InlineData(null, null)]
+    public void A_station_s_store_number_is_the_one_its_name_ends_with(string? name, int? number)
+    {
+        Assert.Equal(number, HoursMatcher.StoreNumber(name));
+    }
+
+    [Theory]
+    [InlineData("ultramar")]
+    [InlineData("shell")]
+    [InlineData("petro-canada")]
+    public void A_brand_s_record_matches_its_brand_s_station_never_the_other_brand_s_closer_one(string family)
+    {
+        var record = new SourceRecord("node/1", family, 45.5000, -73.5000, null, null, "24/7", null, null, false);
+        var other = Station(20, "1 rue A", "H1A 1A1", family == "shell" ? "Esso" : "Shell", 45.5001, -73.5000);
+        var own = new MatchStation(21, "own", family, 45.5010, -73.5000, "2", "H1A1A2");
+
+        var match = Assert.Single(HoursMatcher.Match([record], [other, own], 150).Matches);
+
+        Assert.Equal((21L, false), (match.StationId, match.Confirmed));
+    }
+
+    [Fact]
+    public void Two_stations_of_the_brand_within_reach_of_a_record_that_confirms_neither_match_neither_and_one_beyond_150_m_never()
+    {
+        var record = new SourceRecord("node/1", "ultramar", 45.5000, -73.5000, "999", "H9Z9Z9", "Mo-Su 06:00-22:00", null, null, false);
+        var east = new MatchStation(1, "east", "ultramar", 45.5000, -73.4990, "1", "H1A1A1");
+        var west = new MatchStation(2, "west", "ultramar", 45.5000, -73.5010, "2", "H1A1A2");
+        var far = new MatchStation(3, "far", "ultramar", 45.5014, -73.5000, "999", "H9Z9Z9"); // About 156 m north.
+
+        var both = HoursMatcher.Match([record], [east, west], 150);
+        var beyond = HoursMatcher.Match([record], [far], 150);
+
+        Assert.Empty(both.Matches);
+        Assert.Equal(1, both.Ambiguous);
+        Assert.Empty(beyond.Matches);
+    }
+
+    [Fact]
+    public void OpenStreetMap_s_Costco_pumps_match_Costco_Laval_188_m_away_as_Costco_s_own_records_do()
+    {
+        var pumps = new SourceRecord("node/6756481766", BrandFamily.Costco, 45.575341, -73.7552574, null, null, null,
+            "https://www.openstreetmap.org/node/6756481766", null, false);
+        var shellPumps = pumps with { Ref = "node/2", BrandFamily = "shell" };
+        var shell = LavalStation with { Id = 9, BrandFamily = "shell" };
+
+        var costco = Assert.Single(HoursMatcher.Match([pumps], [LavalStation], 150).Matches);
+        var other = HoursMatcher.Match([shellPumps], [shell], 150);
+
+        Assert.Equal((1L, 188), (costco.StationId, costco.DistanceM!.Value));
+        Assert.Empty(other.Matches);
+    }
+
     [Theory]
     [InlineData("2999 aut. 440, Laval", "2999")]
     [InlineData("  0105 rue Robert-Bernard", "105")]
@@ -174,11 +276,28 @@ public sealed class HoursMatcherTests
     [Theory]
     [InlineData("Costco", "costco")]
     [InlineData("COSTCO", "costco")]
+    [InlineData("Costco Gasoline", "costco")]
     [InlineData("Esso", "esso")]
+    [InlineData("ESSO", "esso")]
     [InlineData("Mobil", "esso")]
+    [InlineData("Esso Express", "esso")]
     [InlineData("Couche-Tard", "couche-tard")]
+    [InlineData("Couche Tard", "couche-tard")]
     [InlineData("Circle K", "couche-tard")]
+    [InlineData("CIRCLEK", "couche-tard")]
     [InlineData("Petro-Canada", "petro-canada")]
+    [InlineData("Pétro-Canada", "petro-canada")]
+    [InlineData("Petro Canada", "petro-canada")]
+    [InlineData("PetroCanada", "petro-canada")]
+    [InlineData("Ultramar", "ultramar")]
+    [InlineData("Shell", "shell")]
+    [InlineData("Irving", "irving")]
+    [InlineData("Irving Oil", "irving")]
+    [InlineData("Harnois Énergies", "harnois")]
+    [InlineData("Sonic", "sonic")]
+    [InlineData("Crevier", "crevier")]
+    [InlineData("Canadian Tire", "canadian-tire")]
+    [InlineData("Essence+ de Canadian Tire", "canadian-tire")]
     [InlineData("Pétro-T", "petro-t")]
     [InlineData("Nutrinor Énergies", "nutrinor-energies")]
     [InlineData("R.L.", "r-l")]
@@ -189,6 +308,13 @@ public sealed class HoursMatcherTests
     {
         Assert.Equal(family, BrandFamily.Of(brand));
     }
+
+    private static SourceRecord Store(int number, double? latitude, double? longitude) =>
+        new((CircleKSource.StoreNumberBase + number).ToString(System.Globalization.CultureInfo.InvariantCulture), BrandFamily.CoucheTard,
+            latitude, longitude, null, null, "24/7", CircleKSource.Link, null, false)
+        {
+            StoreNumber = number,
+        };
 
     private static MatchStation Station(long id, string address, string postalCode, string brand, double latitude, double longitude) =>
         new(id, StationKey.Create(address, postalCode), BrandFamily.Of(brand), latitude, longitude, HoursMatcher.HouseNumber(address),

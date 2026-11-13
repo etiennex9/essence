@@ -24,9 +24,10 @@ public static class StationEndpoints
     internal const string HoursDescription =
         "`hours` is the station's opening hours, null when no source has them: `rule` in OpenStreetMap's `opening_hours` "
         + "(`Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30`, `24/7`), in the station's time zone, and its `source`. Costco's own hours "
-        + "(`costco`) beat the hours Essence checked (`curated`), which beat Couche-Tard's (`circlek`), Ultramar's and Shell's, "
-        + "then OpenStreetMap's (`osm`, confirmed first); a source without a success in 21 days comes after the others and "
-        + "isn't `trusted`, nor is OpenStreetMap.";
+        + "(`costco`) beat the hours Essence checked (`curated`), which beat Ultramar's (`ultramar`) and Shell's (`shell`) "
+        + "forecourts', then Couche-Tard's stores' (`circlek`), then OpenStreetMap's (`osm`, confirmed first; its data is "
+        + "© OpenStreetMap contributors, ODbL, and `link` is the element); a source without a success in 21 days comes after "
+        + "the others and isn't `trusted`, nor is OpenStreetMap.";
 
     /// <summary>How Best near you and Best on the way leave out stations closed on arrival (TripEndpoints' too).</summary>
     internal const string LeftOutDescription =

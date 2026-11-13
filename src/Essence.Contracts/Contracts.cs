@@ -19,8 +19,8 @@ public sealed record CurrentPriceDto(string Fuel, decimal? PriceCents, bool IsAv
 
 /// <summary>
 /// A station's opening hours, as the API chose them among its sources: Costco's own over hours written down by Essence,
-/// those over Couche-Tard's, Ultramar's and Shell's, then OpenStreetMap's (confirmed first), and a source that's gone stale
-/// after the fresh ones.
+/// those over Ultramar's and Shell's forecourts', then Couche-Tard's stores', then OpenStreetMap's (confirmed first), and a
+/// source that's gone stale after the fresh ones.
 /// </summary>
 /// <param name="Rule">
 /// The canonical opening_hours that Essence.Hours reads (<c>OpeningHours.Parse</c>): <c>Mo-Fr 06:00-21:30; Sa-Su

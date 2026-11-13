@@ -152,16 +152,20 @@ In the Development environment, logs are plain text and the ingest archive goes 
 ## Opening hours
 
 The feed says every station is "En opération", so whether one is open has to come from its hours. A second worker in the
-ingest (`src/Essence.Ingest/Hours`) fetches them from the brands, matches them to the feed's stations, and keeps one row per
-station and source. Every source's hours are put in OpenStreetMap's `opening_hours`, made canonical by `Essence.Hours`
-(`Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30`); hours a source writes in a way that can't be read for sure leave that station
-out, with a warning in the log, rather than being guessed. The API serves one source's hours per station (see **Which hours
-show**), and the app shows them.
+ingest (`src/Essence.Ingest/Hours`) fetches them from the brands and OpenStreetMap, matches them to the feed's stations,
+and keeps one row per station and source. Every source's hours are put in OpenStreetMap's `opening_hours`, made
+canonical by `Essence.Hours` (`Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30`); hours a source writes in a way that can't be read
+for sure leave that station out, with a warning in the log, rather than being guessed. The API serves one source's hours
+per station (see **Which hours show**), and the app shows them.
 
 | Source | What it fetches | Matched to |
 |---|---|---|
 | `costco` | Costco's warehouse locator (`costco.ca/AjaxWarehouseBrowseLookupView`), asked from Montréal and from Québec City, each answering its 50 nearest warehouses: the gas bars' hours (`gasStationHours`) of the Québec warehouses that have one. | The feed's Costco stations within 600 m: the feed's point and the locator's can be 540 m apart, the gas bar being away from the warehouse. |
 | `curated` | [curated-hours.json](src/Essence.Ingest/Hours/curated-hours.json), shipped in the image: rules written by hand, each with the day it was checked and where. | A brand's rule: every station of the brand. A station's: its address and postal code, as in the feed. It beats the brand's. |
+| `ultramar` | Ultramar's locator on journie.ca (`/ultramar/api/locations/nearest`), one request for all of Canada's ~620 stations: each station's week (`siteRegularHours`, `siteTwentyFourSeven`) and its services', the forecourt's first, and whether it's closed for now. | The feed's Ultramar stations within 150 m (326 of 356 on 2026-11-13). |
+| `circlek` | Circle K's store locator (`api.circlek.com/us/ngrp-store-locator/v1/stations`), asked about Québec's west and east: Couche-Tard's ~605 Québec stores, each with its store's hours (`openingHours`: `alwaysOpen`, or each day's `open` and `close`). | Only the station whose feed name carries the store's number: "Couche-Tard #140" is the store 6000140, whatever the station's brand and however far (467 of the 473 stations named so on 2026-11-13, 8 of them 336 to 716 m away; the other 6 stores weren't in the locator). Never by distance: the store nearest a station is another station's 74 % of the time. |
+| `shell` | Shell's locator (`shellgsllocator.geoapp.me/api/v2/locations`): its lists of Québec's ~400 stations (`within_bounds`, a cluster listed in turn until it gives stations), then the details (`forecourt_opening_hours`, else `opening_hours`; `open_status`) of only those within 150 m of a feed Shell station. | The feed's Shell stations within 150 m (371 of 391 on 2026-11-13). |
+| `osm` | OpenStreetMap, from an Overpass server: every `amenity=fuel` element in Québec (~2,860), with its tags and point (`out tags center`), never who mapped it. Each is a record, hours or not (~184 have `opening_hours`), so a station knows which element to edit. | The feed's stations of the element's brand (`brand`, else `operator`, else `name`) within 150 m, Costco's within 600 m (1,713 elements on 2026-11-13, 132 of them with hours). |
 
 - **Costco's terms of use ban automated collection.** The owner accepted that risk at two requests a week, one per point.
   A request isn't repeated within a run (`Hours:RetryCount` 0), and a run that fails stops at the request that failed,
@@ -170,33 +174,68 @@ show**), and the app shows them.
   them isn't known, so they're ignored for now. The curated rule (the same hours at all 18 Québec warehouses, checked
   2026-11-11 and confirmed for Laval) serves when the locator can't be had: it's a source of its own, so a Costco station
   has both rows, and which one counts is the API's choice.
+- **The other brands' terms, and their requests.** Each source runs once a week (see **When**), its requests a few
+  seconds apart (`Hours:MinPause` 2 s to `Hours:MaxPause` 3 s, drawn at random), and none is repeated within a run except
+  as said here. Petro-Canada's, Esso's and Canadian Tire's locators are behind bot protection, which isn't worked
+  around: their stations get OpenStreetMap's hours, or none.
+  - `ultramar`: one request a week. journie.ca's robots.txt allows everything. A station is closed for now when its
+    forecourt is (`serviceStatus` "temporary closure"), or the station is (`siteStatus`) and has no forecourt. But the
+    forecourt's status says little: in November 2026 it was "active" at every Québec station, the 7 whose `siteStatus`
+    (and store) said "temporary closure" included, and of the two of those the feed has, one's prices kept moving while
+    the other's hadn't moved in a month. So a station closed for now whose forecourt is active is left out, with a
+    warning, rather than taken either way: it gets another source's hours (OpenStreetMap's), or none. A station said to
+    be open 24 hours whose days say otherwise, or whose days are "00:00" to "12:00" (what the locator gives on days it
+    doesn't say, the weekend of a station open 6 to 18 on weekdays), is left out too: which is right can't be told.
+  - `circlek`: two requests a week. Circle K's terms say nothing about automated use. Its hours are the store's: an
+    Ultramar's or a Shell's hours outrank them where both match one station (see **Which hours show**). A store that
+    gives no hours, or not every day's, is left out.
+  - `shell`: about 22 lists and 375 details a week, one every 2 to 3 s, so a run takes about 17 minutes. A detail that
+    fails (an error, no answer in time, a body that isn't a station's) is asked again once, after the pause; failing
+    twice, its station is left out with a warning, like a station gone from the locator (404), so one broken record
+    can't keep the run failing, and retried, week after week. 3 details failing one after the other fail the run (the
+    locator is down, or refusing it): asking on would only hammer it. Shell's terms say nothing about automated use. A
+    station's days are ranges (`["Mon", "Thu"]`, `["Sat", "Sun"]`).
+  - `osm`: one query a week (`Hours:Osm:Query`, about a minute of the server's time; `Hours:Osm:RequestTimeout` 4 min),
+    to the next server in `Hours:Osm:Endpoints` when one is busy (a 504, an error in its answer), too slow, or answers no
+    elements at all (a server without its areas, or rebuilding them, answers so: Québec never has no station). Overpass
+    answers 406 to a generic User-Agent, so `Hours:UserAgent` is sent. **OpenStreetMap's data is © OpenStreetMap
+    contributors, under the [ODbL](https://www.openstreetmap.org/copyright)**: where the app shows these hours, their
+    source line says OpenStreetMap ("OpenStreetMap, checked 2025") and links the element. Hours that can't be read for
+    sure, even leniently, leave the element's record without them (a warning in the log). When the hours were checked
+    is `check_date:opening_hours`, else `check_date`; an element's last edit isn't a check.
 - **When.** Each source runs once every 7 days, at a minute drawn at random in that night's 01:00–05:00 (Québec time,
   the window an hour shorter or longer on the nights the clocks change), drawn again each week. After a start, a source
   that never succeeded runs a minute after the one before it, and `curated` runs on every start, so a new image's rules
   are in at once. A failed or rejected run is tried again after 15 minutes, then 1 hour, then every 6 hours until one
   succeeds.
-- **Matching.** A record only ever matches stations of its own brand (Esso and Mobil are one, Couche-Tard and Circle K
-  too): a station's own rule first, then the records with a point, then a brand's rule for the brand's stations left. A
-  match by distance is confirmed when the postal codes or the house numbers agree (Drummondville's two points, 540 m apart,
-  have other postal codes but the same number). Pairs are taken one to one, the confirmed first, then the
-  closest, and a pair that isn't confirmed is left out when the same record is within reach of another station, or the
-  same station within reach of another record with other hours: which is which can't be told then.
+- **Matching.** A station's own rule comes first, then Couche-Tard's stores by the number in the station's name (whatever
+  the station's brand; a number two stations carry matches neither), then the records with a point, then a brand's rule
+  for the brand's stations left. A record with a point only ever matches stations of its own brand (folded: "Pétro-Canada"
+  and "Petro Canada" are one; Esso and Mobil are one, Couche-Tard and Circle K too), and a Costco record, whatever its
+  source, within 600 m. A match by distance is confirmed when the postal codes or the house numbers agree
+  (Drummondville's two points, 540 m apart, have other postal codes but the same number). Pairs are taken one to one,
+  the confirmed first, then the closest, and a pair that isn't confirmed is left out when the same record is within
+  reach of another station, or the same station within reach of another record with other hours: which is which can't
+  be told then.
 - **Checks.** A run whose source gives no records, or that matches fewer stations than 80 % of the last good run, is
   rejected: nothing is written, and the last good hours keep serving. `curated` is taken as written instead, fewer rules
   or none included (a rule taken out of the file takes its rows with it), unless one of its rules is left out (it can't
   be read, or it's there twice): then the whole file is rejected until it's fixed, and the rules before it keep serving.
 - **The last downloads.** Each source's last good download is kept in `/data/hours/<source>/` (`latest.raw`, the one
   before as `previous.raw`, and `meta.json` with its version and when it was fetched), cut down to the fields read:
-  nobody's name or phone number. Every hour, when the feed's stations changed, they're matched again without asking the
-  sources, so a station added or moved gets its hours within the hour. Only the download whose rows are serving is
-  matched again: one left older on disk (keeping the newer one failed) waits for the next run.
-- **Tables.** `station_hours` has one row per station and source: the rule (null when a source has the place but not
-  its hours), the source's id for the place and a link, how it was matched (`natural_key`, `distance` or `brand`) and how
-  far, whether that's confirmed, whether the source says it's closed for now, when the source says it was checked, and
-  when it was fetched. `hours_imports` logs each source's runs: `succeeded`, `unchanged`, `rematched` (matched again from
-  the last download because the stations changed: nothing was fetched, so it's no success), `rejected`, `failed` or
-  `disabled` (see **Turning a source off**), with the version of the download (its SHA-256), its counts and the error.
-  The feed's `imports` is left alone: what reads it takes every success there for a version of the feed.
+  nobody's name or phone number (for OpenStreetMap, neither who mapped an element nor an operator or a name that's no
+  feed station's brand, which can be a person's). Every hour, when the feed's stations changed, they're matched again
+  without asking the sources, so a station added or moved gets its hours within the hour (Shell's only from the stations
+  whose details the last run asked for). Only the download whose rows are serving is matched again: one left older on
+  disk (keeping the newer one failed) waits for the next run.
+- **Tables.** `station_hours` has one row per station and source: the rule (null when a source has the place but not its
+  hours), the source's id for the place and a link, how it was matched (`natural_key`, `store_number`, `distance` or
+  `brand`) and how far, whether that's confirmed, whether the source says it's closed for now, when the source says it
+  was checked, and when it was fetched. `hours_imports` logs each source's runs: `succeeded`, `unchanged`, `rematched`
+  (matched again from the last download because the stations changed: nothing was fetched, so it's no success),
+  `rejected`, `failed` or `disabled` (see **Turning a source off**), with the version of the download (its SHA-256), its
+  counts and the error. The feed's `imports` is left alone: what reads it takes every success there for a version of the
+  feed.
 - **Turning a source off.** On a start, the rows of a source that has run but is now off (`Hours:<Source>:Enabled`
   `false`) or gone from the image are removed, since nothing refreshes them any more, and a `disabled` run is logged:
   the source is no longer listed in `/hours/sources` or checked by `/health`. Turned on again, it starts over, as a new
@@ -205,14 +244,15 @@ show**), and the app shows them.
 - **Health.** `/hours/sources` says how each source is going, and `/health`'s `hours` check is `Degraded` when a source
   that has run has had no success in `Health:HoursStaleAfterDays` (21) days, or none ever. Its hours still show then,
   but are stale.
-- **Which hours show.** The API keeps each station's chosen hours with its snapshot of the stations
-  (`HoursPrecedence` in `src/Essence.Ranking`): Costco's own, then `curated`, then (once they're fetched) Couche-Tard's
-  (`circlek`), Ultramar's and Shell's, then OpenStreetMap's (`osm`, confirmed matches first). A stale source comes after
-  every fresh one, so a stale Costco gives way to the curated rule; `curated` never goes stale. A row without a rule, or
-  with one that can't be read, doesn't count. The hours are `trusted` when they're a brand's or Essence's from a fresh
-  source: only those will ever leave a closed station out of Best near you. OpenStreetMap's, and a stale source's, are
-  only shown. The snapshot is loaded again when an hours run changed rows (`succeeded`, `rematched`, `disabled` with rows
-  removed), when a success makes a stale source count again (`unchanged`), and when a source goes stale.
+- **Which hours show.** The API keeps each station's chosen hours with its snapshot of the stations (`HoursPrecedence`
+  in `src/Essence.Ranking`): Costco's own, then `curated`, then Ultramar's and Shell's forecourts' (`ultramar`,
+  `shell`), then Couche-Tard's stores' (`circlek`: a Couche-Tard that sells Shell's gas shows the pumps' hours), then
+  OpenStreetMap's (`osm`, confirmed matches first). A stale source comes after every fresh one, so a stale Costco gives
+  way to the curated rule; `curated` never goes stale. A row without a rule, or with one that can't be read, doesn't
+  count. The hours are `trusted` when they're a brand's or Essence's from a fresh source: only those will ever leave a
+  closed station out of Best near you. OpenStreetMap's, and a stale source's, are only shown. The snapshot is loaded
+  again when an hours run changed rows (`succeeded`, `rematched`, `disabled` with rows removed), when a success makes a
+  stale source count again (`unchanged`), and when a source goes stale.
 - **In the app.** The hours are read in the station's own time zone (Eastern, or Atlantic on the Îles-de-la-Madeleine),
   never the device's. A station's details say "Open until 9:30 p.m." (amber in its last 30 minutes), "Closed · opens
   6:00 a.m.", "Open 24 hours" or "Temporarily closed" on the line under its address, warn when a holiday's hours may
@@ -690,8 +730,18 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Hours:StaleAfter` | 21 days | Past this without a success, a failing source's log says its hours are stale. Keep it with `Health:HoursStaleAfterDays`. |
 | `Hours:RematchEvery` | 1 h | How often the last downloads are matched again, when the stations changed. |
 | `Hours:RequestTimeout` / `RetryCount` | 30 s / 0 | Per request; retries within a run. |
-| `Hours:Curated:Enabled` / `Hours:Costco:Enabled` | `true` | Each source. Turned off, its rows are removed at the next start. |
+| `Hours:MinPause` / `MaxPause` | 2 s / 3 s | The pause before each request to a source after its first in a run (Circle K's boxes, Shell's lists and details), drawn at random between the two. |
+| `Hours:Curated:Enabled` / `Costco:Enabled` / `Ultramar:Enabled` / `CircleK:Enabled` / `Shell:Enabled` / `Osm:Enabled` | `true` | Each source. Turned off, its rows are removed at the next start. |
 | `Hours:Costco:Url` | Costco's locator | With `{lat}` and `{lon}` where each point goes. |
+| `Hours:Ultramar:Url` | journie.ca's locator, all of Canada's stations in a page of 1,000 | One request. An answer with more pages is refused: raise its `pageSize`. |
+| `Hours:CircleK:Url` | Circle K's locator, up to 2,000 stores a box | With `{north}`, `{west}`, `{south}` and `{east}` where a box's edges go. |
+| `Hours:CircleK:Boxes` | Québec's west and east: 62.6, −79.8 to 44.9, −71.5 and 62.6, −71.5 to 44.9, −57.0 | Each `North`, `West`, `South` and `East`, in degrees; one request each. |
+| `Hours:Shell:ListUrl` / `DetailUrl` | Shell's locator | Its list of a box, with `{north}`, `{west}`, `{south}` and `{east}`, and a station's details, with `{id}`. |
+| `Hours:Shell:Box` | Québec: 62.6, −79.8 to 44.9, −57.0 | The box listed; its neighbours' stations are left out. |
+| `Hours:Shell:MaxListRequests` | 100 | Lists a run may make, a cluster listed in turn until it gives stations (about 22); past it, the run fails. |
+| `Hours:Osm:Endpoints` | `overpass-api.de`, then `overpass.private.coffee` (`/api/interpreter`) | The Overpass servers, asked in order: the next one when one fails. |
+| `Hours:Osm:Query` | Québec's `amenity=fuel`, `out tags center` | Posted as `data`. |
+| `Hours:Osm:RequestTimeout` | 4 min | Instead of `Hours:RequestTimeout`: longer than the query's own 180 s. |
 | `Routing:BaseUrl` | `http://routing:5000/` | The routing server (OSRM), ending with `/`. 3 s per attempt and one retry. |
 | `Routing:StatusUrl` | `http://routing:9090/` | The routing container's status server, ending with `/`. |
 | `Geocoding:BaseUrl` | `http://geocoding:2322/` | The address search (Photon), ending with `/`. 1.5 s, no retry. |

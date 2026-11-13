@@ -130,12 +130,17 @@ public sealed class CuratedHoursSource(IOptions<HoursOptions> options) : IHoursS
                 return null;
             }
 
-            // The day in Québec: its midnight there.
-            var midnight = date.ToDateTime(TimeOnly.MinValue);
-            checkedAt = new DateTimeOffset(midnight, QuebecTime.Eastern.GetUtcOffset(midnight));
+            checkedAt = MidnightInQuebec(date);
         }
 
         return (hours.ToRule(), checkedAt);
+    }
+
+    /// <summary>A day in Québec, as when a rule was checked: its midnight there.</summary>
+    internal static DateTimeOffset MidnightInQuebec(DateOnly date)
+    {
+        var midnight = date.ToDateTime(TimeOnly.MinValue);
+        return new DateTimeOffset(midnight, QuebecTime.Eastern.GetUtcOffset(midnight));
     }
 
     private class CuratedRule

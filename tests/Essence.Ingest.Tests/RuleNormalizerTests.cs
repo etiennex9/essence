@@ -71,6 +71,68 @@ public sealed class RuleNormalizerTests
         Assert.False(RuleNormalizer.TryTimes(code, time, out _));
     }
 
+    [Theory]
+    [InlineData("06:00", "23:00", "06:00-23:00")]
+    [InlineData("5:30", "22:00", "05:30-22:00")]
+    [InlineData("05:30", "00:30", "05:30-00:30")]
+    [InlineData("06:00", "24:00", "06:00-24:00")]
+    [InlineData("06:00", "00:00", "06:00-24:00")]
+    [InlineData("00:00", "24:00", "00:00-24:00")]
+    [InlineData("00:00", "00:00", "00:00-24:00")]
+    [InlineData("07:00", "21:59", "07:00-21:59")]
+    [InlineData(" 04:45 ", "21:30", "04:45-21:30")]
+    public void Clock_times_are_read_an_end_before_the_start_being_past_midnight(string open, string close, string expected)
+    {
+        Assert.True(RuleNormalizer.TryRange(open, close, out var range));
+        Assert.Equal(expected, range.ToString());
+    }
+
+    [Theory]
+    [InlineData("06:00", "06:00")]
+    [InlineData("24:00", "06:00")]
+    [InlineData("06:00", "24:30")]
+    [InlineData("25:00", "06:00")]
+    [InlineData("06:60", "22:00")]
+    [InlineData("6h", "22h")]
+    [InlineData("6:00am", "10:00pm")]
+    [InlineData("", "22:00")]
+    [InlineData(null, "22:00")]
+    public void Clock_times_that_aren_t_a_range_are_refused(string? open, string? close)
+    {
+        Assert.False(RuleNormalizer.TryRange(open, close, out _));
+    }
+
+    [Theory]
+    [InlineData("Mon", DayOfWeek.Monday)]
+    [InlineData("monday", DayOfWeek.Monday)]
+    [InlineData("Sunday", DayOfWeek.Sunday)]
+    [InlineData(" THU ", DayOfWeek.Thursday)]
+    public void Days_are_named_in_English_in_any_case(string name, DayOfWeek day)
+    {
+        Assert.True(RuleNormalizer.TryDay(name, out var read));
+        Assert.Equal(day, read);
+    }
+
+    [Fact]
+    public void A_range_of_days_wraps_across_the_weekend()
+    {
+        Assert.Equal([DayOfWeek.Saturday, DayOfWeek.Sunday, DayOfWeek.Monday], RuleNormalizer.Range(DayOfWeek.Saturday, DayOfWeek.Monday));
+        Assert.Equal(7, RuleNormalizer.Range(DayOfWeek.Monday, DayOfWeek.Sunday).Count);
+        Assert.Equal([DayOfWeek.Friday], RuleNormalizer.Range(DayOfWeek.Friday, DayOfWeek.Friday));
+    }
+
+    [Fact]
+    public void A_week_given_day_by_day_is_its_canonical_rule_23_59_being_midnight()
+    {
+        var week = Enum.GetValues<DayOfWeek>().ToDictionary(d => d, d => (IReadOnlyList<TimeRange>)[new TimeRange(0, 1439)]);
+
+        Assert.Equal("24/7", RuleNormalizer.Week(week, out var error));
+        Assert.Null(error);
+        week.Remove(DayOfWeek.Wednesday);
+        Assert.Null(RuleNormalizer.Week(week, out error));
+        Assert.Equal("Wednesday's hours aren't given", error);
+    }
+
     [Fact]
     public void Costco_s_week_is_its_canonical_rule()
     {

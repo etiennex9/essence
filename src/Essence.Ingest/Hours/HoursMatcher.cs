@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text.RegularExpressions;
 using Essence.Data.Entities;
 
 namespace Essence.Ingest.Hours;
@@ -13,32 +15,51 @@ public sealed record MatchStation(
     double? Latitude,
     double? Longitude,
     string? HouseNumber,
-    string Postcode);
+    string Postcode)
+{
+    /// <summary>Couche-Tard's store number in its name (<see cref="HoursMatcher.StoreNumber"/>): 140 for "Couche-Tard #140".</summary>
+    public int? StoreNumber { get; init; }
+}
 
 /// <summary>A record matched to a station: one row of <c>station_hours</c>.</summary>
-/// <param name="MatchedBy"><see cref="StationHoursEntry.ByNaturalKey"/>, <see cref="StationHoursEntry.ByDistance"/> or <see cref="StationHoursEntry.ByBrand"/>.</param>
-/// <param name="DistanceM">From the record's point to the station's, for a match by distance.</param>
+/// <param name="MatchedBy">
+/// <see cref="StationHoursEntry.ByNaturalKey"/>, <see cref="StationHoursEntry.ByStoreNumber"/>,
+/// <see cref="StationHoursEntry.ByDistance"/> or <see cref="StationHoursEntry.ByBrand"/>.
+/// </param>
+/// <param name="DistanceM">From the record's point to the station's, for a match by distance or by store number.</param>
 /// <param name="Confirmed">As <see cref="StationHoursEntry.Confirmed"/>.</param>
 public sealed record HoursMatch(long StationId, SourceRecord Record, string MatchedBy, int? DistanceM, bool Confirmed);
 
 /// <param name="Matches">At most one per station.</param>
-/// <param name="Unmatched">Records for one place (a natural key or a point) that found no station.</param>
+/// <param name="Unmatched">Records for one place (a natural key, a store number or a point) that found no station.</param>
 /// <param name="Ambiguous">Of those, the ones left out because which station they're about couldn't be told.</param>
 public sealed record MatchResult(IReadOnlyList<HoursMatch> Matches, int Unmatched, int Ambiguous);
 
 /// <summary>
 /// Gives each station at most one of a source's records, never guessing. A rule written for one station (by its natural
-/// key) comes first, then the records with a point, then a brand's rule for the brand's stations left.
+/// key) comes first, then Couche-Tard's stores by the number in the stations' names, then the records with a point, then
+/// a brand's rule for the brand's stations left.
 /// <para>
-/// A record with a point matches a station of its own brand family within the source's radius, never another brand's,
-/// and the match is confirmed when their postal codes or house numbers agree. Pairs are taken one to one, the confirmed
-/// first, then the closest. A pair that isn't confirmed is left out while there's a rival still free: the same record
-/// within reach of another station, or the same station within reach of another record with other hours. Which is which
-/// can't be told then.
+/// A store number matches the one station named after it, whatever its brand and wherever it is (the feed's point and
+/// the store's can be 700 m apart), and never by distance: the store nearest a Couche-Tard station is another
+/// station's three times out of four. A number two stations carry matches neither.
+/// </para>
+/// <para>
+/// A record with a point matches a station of its own brand family within the source's radius (Costco's, whatever the
+/// source, within <see cref="CostcoReachM"/>), never another brand's, and the match is confirmed when their postal codes
+/// or house numbers agree. Pairs are taken one to one, the confirmed first, then the closest. A pair that isn't confirmed
+/// is left out while there's a rival still free: the same record within reach of another station, or the same station
+/// within reach of another record with other hours. Which is which can't be told then.
 /// </para>
 /// </summary>
-public static class HoursMatcher
+public static partial class HoursMatcher
 {
+    /// <summary>
+    /// How far a Costco record may be from its station, whatever the source: the feed's point is on the warehouse, and its
+    /// gas bar can be 540 m away (Drummondville's).
+    /// </summary>
+    public const double CostcoReachM = 600;
+
     private const double EarthRadiusM = 6_371_008.8;
 
     public static MatchResult Match(IReadOnlyList<SourceRecord> records, IReadOnlyList<MatchStation> stations, double radiusM)
@@ -65,8 +86,26 @@ public static class HoursMatcher
             }
         }
 
-        var located = records.Where(r => r.NaturalKey is null && r.Latitude is not null && r.Longitude is not null).ToList();
-        var (byDistance, ambiguous) = MatchByDistance(located, stations.Where(s => !taken.Contains(s.Id)).ToList(), radiusM);
+        var ambiguous = 0;
+        var byNumber = stations.Where(s => s.StoreNumber is not null).ToLookup(s => s.StoreNumber!.Value);
+        foreach (var record in records.Where(r => r.NaturalKey is null && r.StoreNumber is not null))
+        {
+            var named = byNumber[record.StoreNumber!.Value].ToList();
+            if (named.Count == 1 && taken.Add(named[0].Id))
+            {
+                var distance = Distance(record, named[0]) is { } metres ? (int?)Math.Round(metres) : null;
+                matches.Add(new HoursMatch(named[0].Id, record, StationHoursEntry.ByStoreNumber, distance, Confirmed: true));
+                continue;
+            }
+
+            unmatched++;
+            ambiguous += named.Count > 1 ? 1 : 0;
+        }
+
+        var located = records
+            .Where(r => r.NaturalKey is null && r.StoreNumber is null && r.Latitude is not null && r.Longitude is not null)
+            .ToList();
+        var (byDistance, ambiguousByDistance) = MatchByDistance(located, stations.Where(s => !taken.Contains(s.Id)).ToList(), radiusM);
         foreach (var match in byDistance)
         {
             taken.Add(match.StationId);
@@ -74,9 +113,10 @@ public static class HoursMatcher
         }
 
         unmatched += located.Count - byDistance.Count;
+        ambiguous += ambiguousByDistance;
 
         var brandRules = records
-            .Where(r => r.NaturalKey is null && (r.Latitude is null || r.Longitude is null) && r.BrandFamily is not null)
+            .Where(r => r.NaturalKey is null && r.StoreNumber is null && (r.Latitude is null || r.Longitude is null) && r.BrandFamily is not null)
             .DistinctBy(r => r.BrandFamily);
         foreach (var rule in brandRules)
         {
@@ -91,6 +131,17 @@ public static class HoursMatcher
 
         return new MatchResult(matches, unmatched, ambiguous);
     }
+
+    /// <summary>
+    /// Couche-Tard's store number in a feed station's name: "Couche-Tard #140" and "Couche-Tard # 140" are 140. Null for
+    /// any other name ("Couche-Tard inc.", "2642-4101 Québec Inc."), whatever the station's brand: Couche-Tard's stores sell
+    /// Esso's, Irving's, Shell's… gas under their own name.
+    /// </summary>
+    public static int? StoreNumber(string? name) =>
+        name is not null && StoreNumberPattern().Match(name) is { Success: true } match
+        && int.TryParse(match.Groups["number"].ValueSpan, NumberStyles.None, CultureInfo.InvariantCulture, out var number) && number > 0
+            ? number
+            : null;
 
     /// <summary>The number an address starts with: "2999 aut. 440, Laval" is <c>2999</c>; null when it doesn't start with one.</summary>
     public static string? HouseNumber(string? address)
@@ -137,8 +188,9 @@ public static class HoursMatcher
                     continue;
                 }
 
+                var reach = record.BrandFamily == BrandFamily.Costco ? Math.Max(radiusM, CostcoReachM) : radiusM;
                 var distance = DistanceM(record.Latitude!.Value, record.Longitude!.Value, latitude, longitude);
-                if (distance <= radiusM)
+                if (distance <= reach)
                 {
                     var confirmed = record.Postcode is { Length: > 0 } postcode && postcode == station.Postcode
                         || record.HouseNumber is { Length: > 0 } number && number == station.HouseNumber;
@@ -184,6 +236,14 @@ public static class HoursMatcher
     }
 
     private static bool Disagree(SourceRecord a, SourceRecord b) => a.Rule != b.Rule || a.TemporarilyClosed != b.TemporarilyClosed;
+
+    private static double? Distance(SourceRecord record, MatchStation station) =>
+        record is { Latitude: { } latitude, Longitude: { } longitude } && station is { Latitude: { } stationLatitude, Longitude: { } stationLongitude }
+            ? DistanceM(latitude, longitude, stationLatitude, stationLongitude)
+            : null;
+
+    [GeneratedRegex(@"^\s*couche[\s-]*tard\s*#\s*(?<number>\d{1,6})\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex StoreNumberPattern();
 
     /// <param name="Record">The record's index among those with a point.</param>
     private sealed record Pair(int Record, long StationId, double DistanceM, bool Confirmed);

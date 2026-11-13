@@ -72,38 +72,55 @@ builder.Services.AddHttpClient<FeedClient>(client =>
 builder.Services.AddSingleton(provider => new HoursSchedule(
     provider.GetRequiredService<IOptions<HoursOptions>>(), provider.GetRequiredService<TimeProvider>(), Random.Shared));
 builder.Services.AddSingleton<HoursCache>();
+builder.Services.AddSingleton(provider => new HoursPacer(
+    provider.GetRequiredService<IOptions<HoursOptions>>(), provider.GetRequiredService<TimeProvider>(), Random.Shared));
 builder.Services.AddScoped<HoursWriter>();
-// In the order of their first runs after a start, a minute apart (HoursSchedule.Stagger).
+builder.Services.AddScoped<IHoursStations>(provider => provider.GetRequiredService<HoursWriter>());
+// In the order of their first runs after a start, a minute apart (HoursSchedule.Stagger): Shell's, the longest, last.
 builder.Services.AddTransient<IHoursSource, CuratedHoursSource>();
 builder.Services.AddTransient<IHoursSource, CostcoSource>();
+builder.Services.AddTransient<IHoursSource, UltramarSource>();
+builder.Services.AddTransient<IHoursSource, CircleKSource>();
+builder.Services.AddTransient<IHoursSource, OverpassSource>();
+builder.Services.AddTransient<IHoursSource, ShellSource>();
 
-builder.Services.AddHttpClient<HoursClient>(client =>
-    {
-        client.Timeout = Timeout.InfiniteTimeSpan; // The resilience pipeline owns timeouts.
-        client.MaxResponseContentBufferSize = 32 * 1024 * 1024;
-        client.DefaultRequestHeaders.UserAgent.ParseAdd(hours.UserAgent);
-    })
-    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
-    {
-        AutomaticDecompression = DecompressionMethods.All,
-        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
-    })
-    .AddStandardResilienceHandler(o =>
-    {
-        o.AttemptTimeout.Timeout = hours.RequestTimeout;
-        // The pipeline wants at least one retry: with none asked, nothing is handled as worth retrying. A source's run
-        // then makes only the requests it needs, and a failed run is tried again later (Hours:Backoff).
-        o.Retry.MaxRetryAttempts = Math.Max(1, hours.RetryCount);
-        if (hours.RetryCount == 0)
-        {
-            o.Retry.ShouldHandle = _ => ValueTask.FromResult(false);
-        }
-
-        o.TotalRequestTimeout.Timeout = hours.RequestTimeout * (hours.RetryCount + 1) + TimeSpan.FromSeconds(15);
-        o.CircuitBreaker.SamplingDuration = hours.RequestTimeout * 2;
-    });
+AddHoursClient(builder.Services.AddHttpClient<HoursClient>(), hours.RequestTimeout);
+// Overpass takes a minute or more for all Québec: its own timeout, longer than the query's.
+AddHoursClient(builder.Services.AddHttpClient<OverpassClient>(), hours.Osm.RequestTimeout);
 
 builder.Services.AddHostedService<IngestWorker>();
 builder.Services.AddHostedService<HoursWorker>();
 
 builder.Build().Run();
+
+// The hours sources' clients: their own User-Agent, compressed answers decompressed, and the pipeline's timeouts, without
+// the feed's retries unless asked.
+void AddHoursClient(IHttpClientBuilder client, TimeSpan requestTimeout)
+{
+    client
+        .ConfigureHttpClient(http =>
+        {
+            http.Timeout = Timeout.InfiniteTimeSpan; // The resilience pipeline owns timeouts.
+            http.MaxResponseContentBufferSize = 32 * 1024 * 1024;
+            http.DefaultRequestHeaders.UserAgent.ParseAdd(hours.UserAgent);
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+        {
+            AutomaticDecompression = DecompressionMethods.All,
+            PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+        })
+        .AddStandardResilienceHandler(o =>
+        {
+            o.AttemptTimeout.Timeout = requestTimeout;
+            // The pipeline wants at least one retry: with none asked, nothing is handled as worth retrying. A source's run
+            // then makes only the requests it needs, and a failed run is tried again later (Hours:Backoff).
+            o.Retry.MaxRetryAttempts = Math.Max(1, hours.RetryCount);
+            if (hours.RetryCount == 0)
+            {
+                o.Retry.ShouldHandle = _ => ValueTask.FromResult(false);
+            }
+
+            o.TotalRequestTimeout.Timeout = requestTimeout * (hours.RetryCount + 1) + TimeSpan.FromSeconds(15);
+            o.CircuitBreaker.SamplingDuration = requestTimeout * 2;
+        });
+}

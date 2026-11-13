@@ -1,0 +1,346 @@
+[
+  {
+    "id": "12200873",
+    "name": "4055 BOUL INDUSTRIEL - LAVAL",
+    "lat": 45.59807,
+    "lng": -73.750277,
+    "brand": "Shell",
+    "inactive": false,
+    "country_code": "CA",
+    "address": "4055 BOUL. INDUSTRIEL",
+    "city": "LAVAL",
+    "state": "Quebec",
+    "postcode": "H7L 4S3",
+    "website_url": "https://find.shell.com/ca/fuel/12200873-4055-boul-industriel-laval",
+    "open_status": "closed",
+    "forecourt_open_status": "closed",
+    "shop_open_status": "unknown",
+    "opening_hours": [
+      {
+        "days": [
+          "Mon",
+          "Fri"
+        ],
+        "hours": [
+          [
+            "04:45",
+            "21:30"
+          ]
+        ]
+      },
+      {
+        "days": [
+          "Sat",
+          "Sun"
+        ],
+        "hours": [
+          [
+            "07:00",
+            "21:00"
+          ]
+        ]
+      }
+    ],
+    "forecourt_opening_hours": [
+      {
+        "days": [
+          "Mon",
+          "Fri"
+        ],
+        "hours": [
+          [
+            "04:45",
+            "21:30"
+          ]
+        ]
+      },
+      {
+        "days": [
+          "Sat",
+          "Sun"
+        ],
+        "hours": [
+          [
+            "07:00",
+            "21:00"
+          ]
+        ]
+      }
+    ],
+    "shop_opening_hours": []
+  },
+  {
+    "id": "12280964",
+    "name": "BOULEVARD DES LAURENTIDES-VIMONT",
+    "lat": 45.608843,
+    "lng": -73.734213,
+    "brand": "Shell",
+    "inactive": false,
+    "country_code": "CA",
+    "address": "2131 BOULEVARD DES LAURENTIDES",
+    "city": "VIMONT",
+    "state": "Quebec",
+    "postcode": "H7M 4M2",
+    "website_url": "https://find.shell.com/ca/fuel/12280964-boulevard-des-laurentides-vimont",
+    "open_status": "twenty_four_hour",
+    "forecourt_open_status": "twenty_four_hour",
+    "shop_open_status": "unknown",
+    "opening_hours": [
+      {
+        "days": [
+          "Mon",
+          "Sun"
+        ],
+        "hours": [
+          [
+            "00:00",
+            "23:59"
+          ]
+        ]
+      }
+    ],
+    "forecourt_opening_hours": [
+      {
+        "days": [
+          "Mon",
+          "Sun"
+        ],
+        "hours": [
+          [
+            "00:00",
+            "23:59"
+          ]
+        ]
+      }
+    ],
+    "shop_opening_hours": []
+  },
+  {
+    "id": "10052881",
+    "name": "ST MARTIN O - TESSIER",
+    "lat": 45.568473,
+    "lng": -73.72729,
+    "brand": "Shell",
+    "inactive": false,
+    "country_code": "CA",
+    "address": "1625 BOUL ST MARTIN O",
+    "city": "CHOMEDEY LAVAL",
+    "state": "Quebec",
+    "postcode": "H7S 1N1",
+    "website_url": "https://find.shell.com/ca/fuel/10052881-st-martin-o-tessier",
+    "open_status": "closed",
+    "forecourt_open_status": "closed",
+    "shop_open_status": "unknown",
+    "opening_hours": [
+      {
+        "days": [
+          "Mon",
+          "Fri"
+        ],
+        "hours": [
+          [
+            "07:00",
+            "19:30"
+          ]
+        ]
+      },
+      {
+        "days": [
+          "Sat"
+        ],
+        "hours": [
+          [
+            "08:00",
+            "18:00"
+          ]
+        ]
+      },
+      {
+        "days": [
+          "Sun"
+        ],
+        "hours": [
+          [
+            "09:00",
+            "18:00"
+          ]
+        ]
+      }
+    ],
+    "forecourt_opening_hours": [
+      {
+        "days": [
+          "Mon",
+          "Fri"
+        ],
+        "hours": [
+          [
+            "07:00",
+            "19:30"
+          ]
+        ]
+      },
+      {
+        "days": [
+          "Sat"
+        ],
+        "hours": [
+          [
+            "08:00",
+            "18:00"
+          ]
+        ]
+      },
+      {
+        "days": [
+          "Sun"
+        ],
+        "hours": [
+          [
+            "09:00",
+            "18:00"
+          ]
+        ]
+      }
+    ],
+    "shop_opening_hours": []
+  },
+  {
+    "id": "10052586",
+    "name": "CH STE FOY - AVE MYRAND",
+    "lat": 46.789106,
+    "lng": -71.270307,
+    "brand": "Shell",
+    "inactive": false,
+    "country_code": "CA",
+    "address": "2125 CH STE-FOY",
+    "city": "STE FOY",
+    "state": "Quebec",
+    "postcode": "G1V 1R9",
+    "website_url": "https://find.shell.com/ca/fuel/10052586-ch-ste-foy-ave-myrand",
+    "open_status": "closed",
+    "forecourt_open_status": "closed",
+    "shop_open_status": "unknown",
+    "opening_hours": [
+      {
+        "days": [
+          "Mon",
+          "Thu"
+        ],
+        "hours": [
+          [
+            "07:00",
+            "21:00"
+          ]
+        ]
+      },
+      {
+        "days": [
+          "Fri"
+        ],
+        "hours": [
+          [
+            "05:00",
+            "21:00"
+          ]
+        ]
+      },
+      {
+        "days": [
+          "Sat",
+          "Sun"
+        ],
+        "hours": [
+          [
+            "08:00",
+            "21:00"
+          ]
+        ]
+      }
+    ],
+    "forecourt_opening_hours": [
+      {
+        "days": [
+          "Mon",
+          "Thu"
+        ],
+        "hours": [
+          [
+            "07:00",
+            "21:00"
+          ]
+        ]
+      },
+      {
+        "days": [
+          "Fri"
+        ],
+        "hours": [
+          [
+            "05:00",
+            "21:00"
+          ]
+        ]
+      },
+      {
+        "days": [
+          "Sat",
+          "Sun"
+        ],
+        "hours": [
+          [
+            "08:00",
+            "21:00"
+          ]
+        ]
+      }
+    ],
+    "shop_opening_hours": []
+  },
+  {
+    "id": "13231467",
+    "name": "MONTEE DE LA RIVIERE - MONTMAGNY",
+    "lat": 46.97136,
+    "lng": -70.55618,
+    "brand": "Shell",
+    "inactive": false,
+    "country_code": "CA",
+    "address": "55 MONTEE DE LA RIVIERE-DU-SUD",
+    "city": "MONTMAGNY",
+    "state": "Quebec",
+    "postcode": "G5V 2P5",
+    "website_url": "https://find.shell.com/ca/fuel/13231467-montee-de-la-riviere-montmagny",
+    "open_status": "closed",
+    "forecourt_open_status": "closed",
+    "shop_open_status": "unknown",
+    "opening_hours": [
+      {
+        "days": [
+          "Mon",
+          "Sun"
+        ],
+        "hours": [
+          [
+            "07:00",
+            "21:59"
+          ]
+        ]
+      }
+    ],
+    "forecourt_opening_hours": [
+      {
+        "days": [
+          "Mon",
+          "Sun"
+        ],
+        "hours": [
+          [
+            "07:00",
+            "21:59"
+          ]
+        ]
+      }
+    ],
+    "shop_opening_hours": []
+  }
+]

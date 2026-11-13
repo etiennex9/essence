@@ -36,9 +36,9 @@ public class HoursPrecedenceTests
     [Theory]
     [InlineData(HoursPrecedence.Costco)]
     [InlineData(HoursPrecedence.Curated)]
-    [InlineData(HoursPrecedence.CircleK)]
     [InlineData(HoursPrecedence.Ultramar)]
     [InlineData(HoursPrecedence.Shell)]
+    [InlineData(HoursPrecedence.CircleK)]
     [InlineData("osm confirmed")]
     [InlineData("osm")]
     [InlineData("acme")]
@@ -46,8 +46,8 @@ public class HoursPrecedenceTests
     {
         HoursRow[] ranked =
         [
-            Row(HoursPrecedence.Costco), Row(HoursPrecedence.Curated), Row(HoursPrecedence.CircleK), Row(HoursPrecedence.Ultramar),
-            Row(HoursPrecedence.Shell), Row(HoursPrecedence.Osm, confirmed: true), Row(HoursPrecedence.Osm, confirmed: false), Row("acme"),
+            Row(HoursPrecedence.Costco), Row(HoursPrecedence.Curated), Row(HoursPrecedence.Ultramar), Row(HoursPrecedence.Shell),
+            Row(HoursPrecedence.CircleK), Row(HoursPrecedence.Osm, confirmed: true), Row(HoursPrecedence.Osm, confirmed: false), Row("acme"),
         ];
         var index = Array.FindIndex(ranked, r => winner == "osm confirmed" ? r is { Source: HoursPrecedence.Osm, Confirmed: true }
             : winner == HoursPrecedence.Osm ? r is { Source: HoursPrecedence.Osm, Confirmed: false }
@@ -57,6 +57,16 @@ public class HoursPrecedenceTests
         var chosen = HoursPrecedence.Choose(ranked[index..].Reverse(), Fresh, Now)[Laval];
 
         Assert.Same(ranked[index], chosen.Row);
+    }
+
+    [Fact]
+    public void A_forecourt_s_hours_beat_the_Couche_Tard_store_s_at_the_same_station()
+    {
+        // A Couche-Tard that sells Shell's gas: the store opens at 5, the pumps at 6.
+        var chosen = HoursPrecedence.Choose(
+            [Row(HoursPrecedence.CircleK, "Mo-Su 05:00-23:00"), Row(HoursPrecedence.Shell, "Mo-Su 06:00-22:00")], Fresh, Now)[Laval];
+
+        Assert.Equal((HoursPrecedence.Shell, true), (chosen.Row.Source, chosen.Trusted));
     }
 
     [Theory]
