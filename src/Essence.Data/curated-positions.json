@@ -1,0 +1,4 @@
+{
+  "$comment": "Where stations are when the Régie's feed puts them elsewhere, reviewed by hand (README → Position corrections). Each entry comes from /stations/positions, where two independent kinds of position agree far from the feed's point: copy its `entry`, check it, and set `reviewed` to the day you did. A correction applies while the feed's point is within 50 m of feedLatitude/feedLongitude and more than 50 m from the corrected point; otherwise it has expired (the Régie fixed or changed its point) and can be removed. Never take a position from Google Maps or Street View.",
+  "corrections": []
+}

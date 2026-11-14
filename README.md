@@ -7,12 +7,12 @@ and shows them on a map of nearby stations.
 
 | Project | What it does |
 |---|---|
-| `src/Essence.Data` | EF Core model, migrations, `StationKey` normalizer. Shared by every app. |
-| `src/Essence.Ingest` | Worker: polls the feed, archives each new file, diffs it against the database and writes only the changes. Backfills missed versions from the Régie's xlsx files. Fetches stations' opening hours once a week and matches them to the stations (see [Opening hours](#opening-hours)). |
+| `src/Essence.Data` | EF Core model, migrations, `StationKey` normalizer, and the stations' reviewed position corrections (`curated-positions.json`, see [Position corrections](#position-corrections)). Shared by every app. |
+| `src/Essence.Ingest` | Worker: polls the feed, archives each new file, diffs it against the database and writes only the changes. Backfills missed versions from the Régie's xlsx files. Fetches stations' opening hours once a week and matches them to the stations (see [Opening hours](#opening-hours)). Lists once a day the stations whose point in the feed may be wrong, for review (see [Position corrections](#position-corrections)). |
 | `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. |
 | `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
 | `src/Essence.Contracts` | The API's response records and the release notes', shared by the API, the UI and the release tool. |
-| `src/Essence.Ranking` | Which station to fill up at: costs, savings, the pick and its rules, the search area; for trips, the route's corridor, km along it, detours and the range; the OSRM and Photon clients, the address search's labels, and Québec's boundary; which source's opening hours a station shows (`HoursPrecedence`). Only `Essence.Hours` as a dependency; used by the API. |
+| `src/Essence.Ranking` | Which station to fill up at: costs, savings, the pick and its rules, the search area; for trips, the route's corridor, km along it, detours and the range; the OSRM and Photon clients, the address search's labels, and Québec's boundary; which source's opening hours a station shows (`HoursPrecedence`). Only `Essence.Hours` as a dependency; used by the API, and by the ingest for its Photon client. |
 | `src/Essence.Hours` | Stations' opening hours: OpenStreetMap's `opening_hours`, which every source's hours are put in, read (refusing what can't be told for sure) and written one way; Québec's time zones and holidays; whether a station is open, closes soon or is closed when the driver gets there. No dependencies, and trimmable for the web app. |
 | `src/Essence.Routing` | The routing image: OSRM with Essence's car profile, which builds and refreshes Québec's road data itself (see [Routing and address search](#routing-and-address-search)). |
 | `src/Essence.Geocoding` | The address search image: Photon, which builds and refreshes its index of Québec's places itself. |
@@ -21,10 +21,10 @@ and shows them on a map of nearby stations.
 | `src/Essence.Web` | Blazor WebAssembly host for `Essence.UI`, served as static files by nginx. See [its README](src/Essence.Web/README.md). |
 | `src/Essence.Mobile` | The Android app: a .NET MAUI Blazor Hybrid host for `Essence.UI`, with home-screen widgets. Not in `Essence.slnx`: see [its README](src/Essence.Mobile/README.md). |
 | `tools/Essence.Release` | Run by the publish and Android workflows: dates each release by the day it landed on `main` and writes the apps' changelog (see [Versions](#versions)). |
-| `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. The hours: Costco's locator against a trimmed real answer, the curated rules, days and times as the locators write them, matching, the gate, the weekly night schedule across daylight time and the retries, the rows' diff, the cache, the runs' history, the settings. |
+| `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. The hours: Costco's locator against a trimmed real answer, the curated rules, days and times as the locators write them, matching, the gate, the weekly night schedule across daylight time and the retries, the rows' diff, the cache, the runs' history, the settings. The position corrections: when one applies, expires (the Régie's point moved, or reached the corrected one) or no longer finds its station, and what the file refuses; the stations listed for review (two kinds agree far from the feed's point, one kind or the same kind twice doesn't, something at the feed's point keeps a station off, the address search's answers taken and refused, without the address search), the daily run's time and the settings. |
 | `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM and Photon clients against stub servers; the address search's labels and filtering; Québec's boundary at its borders; which source's hours a station shows, stale sources and what's trusted; the stations left out because they'd be closed on arrival (trusted hours only, holidays, corrected hours, everything closed), and the rankings' reference and first station reached once they are. |
 | `tests/Essence.Hours.Tests` | xUnit unit tests: the sources' hours, strict and lenient, what's refused and why, the canonical rule and its round trip, the week's groups; open, closing soon and closed, past midnight and across daylight time; the holidays, Easter and the cautions; the time zones at their borders, and Canada's rule against the system's zones. |
-| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked); the stations' hours as served, when the snapshot loads them again, and the 304 rule with the hours; `ignoreHours`, the stations said to be left out, the 304 rule of an answer that depends on the clock, and the Development clock (`Clock:Now`); `/client-config` with and without an OpenStreetMap application, and the stations' OpenStreetMap elements; `/health/sources`, each source's verdict from runs given (failures in a row, rejected runs, re-matches, successes, staleness, never succeeded, the feed's age, sources turned off), its settings and JSON, and the endpoint with its database unreachable, HEAD and no rate limit. |
+| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked); the stations' hours as served, when the snapshot loads them again, and the 304 rule with the hours; `ignoreHours`, the stations said to be left out, the 304 rule of an answer that depends on the clock, and the Development clock (`Clock:Now`); `/client-config` with and without an OpenStreetMap application, and the stations' OpenStreetMap elements; `/health/sources`, each source's verdict from runs given (failures in a row, rejected runs, re-matches, successes, staleness, never succeeded, the feed's age, sources turned off), its settings and JSON, and the endpoint with its database unreachable, HEAD and no rate limit; the position corrections in the snapshot, the details, Best near you's distances, the map's nearby stations and the hours' time zone, the 304 rule once they change, and `/stations/positions` (the corrections' states, the candidates and the entry to paste, its JSON and its place in the OpenAPI document). |
 | `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the station shown in Best near you and on the way, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations; stations' hours as shown (open, closing soon, closed, the week, the source) in the station's time zone, closed markers, the hours on the Favorites widget and rows; what Best near you, Best on the way and their Go links say of a station closing soon after the driver gets there or closed then, the stations left out, the hours on the Best near a place and frequent route widgets, `ignoreHours` sent, and plans read and restored without the new fields; hours corrected on the device (kept per server, read leniently, winning everywhere, `ignoreHours` asked again with them), the editor's week and rule, and OpenStreetMap: the edit sent against a stub API (only the hours changed, escaping, ways, a version conflict, the changeset always closed, brand hours never sent on their own), linking with PKCE and the state checked, and the Android app's `essence://` links. |
 | `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
@@ -143,7 +143,8 @@ In the Development environment, logs are plain text and the ingest archive goes 
   and its prices closed; if it comes back it is reactivated (logged as `is_active`).
 - Prices are cents per litre (`numeric(5,1)`), null when unavailable. `price_history` gets a row only when a price or its
   availability changes; `current_prices` mirrors the open rows.
-- Coordinates of 0,0 become null. An empty or "Aucun" brand becomes null. An unparsable price skips that one price (its current
+- Coordinates of 0,0 become null; the others are kept as the feed gives them, even the few known to be off, which the API
+  and the hours' matching correct instead ([Position corrections](#position-corrections)). An empty or "Aucun" brand becomes null. An unparsable price skips that one price (its current
   value is kept) and counts as a warning in the import.
 - The xlsx has the same data in another shape, with two gaps. It has no status column, so a backfill keeps the stored status
   (a brand-new station gets "En opération", the only status ever seen). And "N/D" means either "unavailable" or "not sold":
@@ -343,6 +344,83 @@ per station (see **Which hours show**), and the app shows them.
   OpenStreetMap**, a link to the map at that spot: the app never creates one, to avoid duplicates. Other devices get the
   fix at the next weekly OpenStreetMap run, where no brand's hours outrank it.
 
+## Position corrections
+
+A few of the Régie's points are wrong: the station is drawn a few hundred metres away (the right street at another
+house number, or the town's centre), and once in another town, 21.7 km off. An audit in November 2026 confirmed 13 of
+the 2,473 stations, 163 m to 21.7 km off, with no shift common to them: each is a geocoding mistake of its own. The
+marker, the directions, Best near you's and Best on the way's distances and the hours' matching would all follow the
+wrong point. So a station whose point is known to be off gets a reviewed correction in
+[curated-positions.json](src/Essence.Data/curated-positions.json), shipped in `Essence.Data` so that the API and the
+ingest read the same ones (`PositionCorrections`). The database keeps the Régie's point as it is.
+
+- **Where it applies.** The API's snapshot of the stations puts a corrected station at the corrected point, and every
+  answer gives that point: `/stations`, `/stations/{id}` (the details, and the Google Maps directions built from them),
+  `/stations/nearby` (the map: which stations are within the radius, and how far, is worked out from it),
+  `/stations/best` and `/trips/best` (distances, roads and arrival times, so the hours on arrival too) and
+  `/prices/current`, and so the favorites and the widgets; a station's hours are read in the time zone of the corrected
+  point. The ingest matches the hours sources against the corrected point too, from the first re-match after a start
+  (and Shell's details are asked near it from its next weekly run).
+- **Expiry.** A correction applies only while the Régie's point is within 50 m of the one it was reviewed against
+  (`feedLatitude`, `feedLongitude`) and more than 50 m from the corrected one. Once the Régie moves its point (it fixed
+  it, or changed it), the correction expires by itself, the Régie's point is used again, and it's logged (once by the
+  API, at each daily check by the ingest) to be taken out of the file. A station whose address or postal code changes
+  has another natural key: the correction no longer finds it (`station gone`).
+- **No 304 hides them.** A new image can bring new corrections with no new import: the API counts the corrections that
+  apply as data, like the hours, so after a start, and once they change, a client with the feed's version from before
+  gets the full answer rather than a 304, until the next import.
+- **Finding the stations to review.** Once a day at 05:30, Québec time (after the hours sources' night), and a minute
+  after each start, the ingest compares each station's point with independent kinds of position, all within 30 km of it
+  and at its address, the house number **and** the postal code (a postal code alone covers villages kilometres apart):
+  - `osm`: an OpenStreetMap fuel element of the station's brand, or of none, with its `addr:housenumber` and
+    `addr:postcode`, from the last Overpass download;
+  - `locator`: a brand's locator record: the store whose number the station's name carries ("Couche-Tard #1268" is
+    Circle K's 6001268, wherever it is), or a store of its brand at its address;
+  - `photon`: for the few stations with one of those more than 150 m away, the address search's answers for the
+    station's address (`Positions:GeocodingUrl`, the deployment's own Photon): a place of OpenStreetMap's at its house
+    number, with its postal code or in its town (an address, a building, the station's shop or restaurant), never an
+    interpolated number (a street's range) nor a fuel element, which is `osm` already.
+
+  A station is a candidate when two positions of different kinds agree within 75 m, both more than 150 m from the
+  Régie's point, and nothing is at that point: no position of the station, and no OpenStreetMap element or locator
+  record of its brand, within 75 m. The point proposed is the mean of the positions that agree. Single sources are
+  wrong too often to count (Ultramar's locator in 10 of the 12 stations it put far off, Circle K's in 9 of 10, Photon in
+  28 of 46), and nothing moves a station until a person approves it. Nothing is fetched but Photon's answers, a few
+  dozen a day: the other positions come from the hours sources' last downloads (`/data/hours`). Without Photon
+  (`Positions:GeocodingUrl` empty, or the container not running), `osm` and `locator` are compared alone. The
+  candidates replace the last run's in `position_candidates`; stations whose correction applies are left out.
+- **Reviewing.** `GET /api/stations/positions` lists the `corrections`, each with its station, the Régie's point now
+  (`feed`), the corrected one, how far apart and its `state` (`applied`, `expired` or `station gone`), and the
+  `candidates`, farthest first, each with its `evidence` (the kind, the element or the store, its point and distance from
+  the Régie's) and the `entry` to paste into the file. Check the evidence on OpenStreetMap (the element's page) and on
+  the brand's locator. **Never take a position from Google Maps or Street View**: their terms forbid it.
+- **Adding an entry.** Paste the candidate's `entry` into `corrections` in `src/Essence.Data/curated-positions.json`,
+  with `reviewed` the day you checked it:
+
+  ```json
+  {
+    "naturalKey": "1918 boul. tadoussac, saint-fulgence|G0V1S0",
+    "latitude": 48.443208,
+    "longitude": -70.709135,
+    "feedLatitude": 48.458942,
+    "feedLongitude": -71.003062,
+    "reviewed": "2026-11-14",
+    "note": "OpenStreetMap way/549635443 and the address node/1266988689 (Photon) agree within 39 m, 21748 m from the Régie's point."
+  }
+  ```
+
+  `naturalKey` is the station's `natural_key`, `latitude` and `longitude` where it is, `feedLatitude` and
+  `feedLongitude` the Régie's point it was reviewed against, and `note` the evidence, by element and store ids, never a
+  person's name. A station that the check can't find but that two independent positions place elsewhere (its
+  OpenStreetMap element has no address, say) is added the same way, with that evidence in the note. A test reads the
+  file: an entry that can't be read (a field missing, a point outside Québec, a corrected point within 50 m of the
+  Régie's, a second entry for a station) fails it, and in a running app it's left out with a warning (`warnings` in
+  `/stations/positions`). The new image applies the entry at its start.
+- **Sending the list to the Régie.** The fix belongs at the source. The applied `corrections` of
+  `/stations/positions` give each station's name, address, the Régie's point and where the station is, with the
+  evidence: what the Régie needs to fix them, sent through its site (regieessencequebec.ca). Once it moves a point, the
+  correction expires by itself and can be taken out of the file.
+
 ## API
 
 | Endpoint | |
@@ -350,6 +428,7 @@ per station (see **Which hours show**), and the app shows them.
 | `GET /stations?region&brand&active&q&page&pageSize` | Stations, paged. `q` searches the name, address and postal code. |
 | `GET /stations/{id}` | One station with its current prices, opening hours (`hours`, null when unknown) and OpenStreetMap element (`osmElement`: `node/123`, `way/456`, `relation/789`, its hours or not; null when it wasn't matched to one), with `osmBrandDiffers` (true when it was matched by location only, being of another brand or none on OpenStreetMap; null without an element) and `osmBrand` (its brand there as the last run read it, its `brand`, else `operator`, else `name`, when a feed station has that brand: `Sonic`; null for none, or without an element). |
 | `GET /stations/nearby?lat&lon&radiusKm=5&fuel&limit=20` | Active stations within a radius, closest first, with their opening hours. |
+| `GET /stations/positions` | The reviewed position corrections and what became of each (`applied`, `expired`, `station gone`), and the stations the ingest found whose Régie point may be wrong, with their evidence and the entry to paste (see [Position corrections](#position-corrections)). |
 | `GET /stations/best?lat&lon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&radiusKm=10&ignoreHours` | Where to fill up near a point: the pick, the closest, the cheapest and a few others that save, and the stations left out because they'd be closed on arrival (see below). |
 | `GET /trips/best?fromLat&fromLon&toLat&toLon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&rangeKm&spareKm=30&ignoreHours` | Where to fill up on the way to a destination: the route, where to stop, the stations along it ranked by detour, and those left out because they'd be closed on arrival (see below). |
 | `GET /places/search?q&lat&lon&lang=fr` | Places in Québec matching what was typed, at most 5, those near `lat`,`lon` first (see below). |
@@ -413,7 +492,8 @@ estimates, and `/trips/best` and `/places/*` answer 503 with `service`, `state`,
 about 5 min 20 s after that time, which is when the next import should be in, and more often while that import is late. A request
 whose `If-Modified-Since` is still current gets a 304, unless the hours changed after it: they change apart from the
 feed, so `Last-Modified` stays the feed's, but the latest hours run (one that changed rows, or any success, which can end
-a stale spell) and the latest moment a source went stale, rounded up to the second, must be no newer either.
+a stale spell) and the latest moment a source went stale, rounded up to the second, must be no newer either. Nor may the
+moment the position corrections that apply last changed, which a start counts as: a new image may bring new ones.
 `/stations/best` and `/trips/best` depend on the time too (a station closing changes them with no new data): they
 give no 304 once the latest import is more than 10 minutes old.
 
@@ -662,6 +742,10 @@ pasting it is all they need. Each runs a supervisor ([src/Essence.Supervisor](sr
   again, and after 5 times in a row its data is rebuilt.
 - reports what it's doing at `:9090/status`, which the api reads (`/health`, `/services`).
 
+The ingest asks the `geocoding` container too, a few dozen addresses a day, when it checks the stations' positions
+(`Positions:GeocodingUrl`, [Position corrections](#position-corrections)); while it builds, that check compares
+OpenStreetMap and the locators alone.
+
 **Storage: Docker volumes, not datasets.** The data is a cache that rebuilds itself, so it lives in the named volumes
 `routing` and `geocoding` that the YAML declares: Docker creates them in the apps pool (`ix-apps`), owned by the
 containers' user, with nothing to create or `chown` by hand. TrueNAS deletes them with the app, and leaves them out of
@@ -908,6 +992,10 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Hours:Osm:RequestTimeout` | 4 min | Instead of `Hours:RequestTimeout`: longer than the query's own 180 s. |
 | `Routing:BaseUrl` | `http://routing:5000/` | The routing server (OSRM), ending with `/`. 3 s per attempt and one retry. |
 | `Routing:StatusUrl` | `http://routing:9090/` | The routing container's status server, ending with `/`. |
+| `Positions:Enabled` | `true` | The ingest's daily check of the stations' positions ([Position corrections](#position-corrections)). Off, the corrections still apply. |
+| `Positions:RunAt` / `RunOnStart` | 05:30 / `true` | When each day's check starts, in Québec time, and whether one also runs a minute after each start. |
+| `Positions:GeocodingUrl` | (none) | The address search (Photon) the check looks up stations' addresses in, ending with `/`: `http://geocoding:2322/` in `docker-compose.yml` and `deploy/truenas.yaml`. Empty: OpenStreetMap and the locators are compared alone. |
+| `Positions:GeocodingTimeout` | 10 s | Per lookup, no retry. |
 | `Geocoding:BaseUrl` | `http://geocoding:2322/` | The address search (Photon), ending with `/`. 1.5 s, no retry. |
 | `Geocoding:StatusUrl` | `http://geocoding:9090/` | The geocoding container's status server, ending with `/`. |
 | `Clock:Now` | (none) | Development only: the API's clock starts at this moment (ISO 8601 with its offset) and moves on with the real one, to see which stations Best near you and Best on the way leave out at another time of day. Ignored in any other environment. |

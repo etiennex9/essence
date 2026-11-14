@@ -1,3 +1,4 @@
+using System.Globalization;
 using Essence.Contracts;
 using Essence.Data;
 using Essence.Data.Entities;
@@ -8,6 +9,8 @@ using Microsoft.EntityFrameworkCore;
 namespace Essence.Api;
 
 /// <summary>An active station with coordinates and its current prices, as <see cref="StationSnapshot"/> keeps it.</summary>
+/// <param name="Latitude">Where it is: a reviewed correction's point when one applies (<see cref="Snapshot.Corrections"/>), else the feed's.</param>
+/// <param name="Longitude">Where it is.</param>
 /// <param name="MembersOnly">A Costco (<see cref="Brands.IsMembersOnly"/>).</param>
 public sealed record SnapshotStation(
     long Id,
@@ -64,6 +67,15 @@ public sealed record SnapshotOsmElement(string Ref, bool BrandDiffers, string? B
 /// The OpenStreetMap element each station was matched to (<see cref="StationSnapshot.OsmElementsOf"/>), its hours or not,
 /// by id: where the app sends a correction of them.
 /// </param>
+/// <param name="Corrections">
+/// The reviewed position corrections that apply (<see cref="PositionCorrections"/>), by station id: those stations are at
+/// the corrected point in <paramref name="Stations"/>, and every answer gives that point instead of the feed's.
+/// </param>
+/// <param name="PositionsChangedAt">
+/// When the corrections that apply last changed, as this process saw it (<see cref="StationSnapshot.PositionsChange"/>):
+/// what the 304 rule compares with <c>If-Modified-Since</c> besides the hours, so a new image's corrections aren't hidden
+/// by a 304. Null before the first load.
+/// </param>
 public sealed record Snapshot(
     DateTimeOffset? Version,
     IReadOnlyList<SnapshotStation> Stations,
@@ -71,10 +83,25 @@ public sealed record Snapshot(
     IReadOnlyDictionary<long, SnapshotHours> Hours,
     DateTimeOffset? HoursStaleAt,
     DateTimeOffset? HoursChangedAt,
-    IReadOnlyDictionary<long, SnapshotOsmElement>? OsmElements = null)
+    IReadOnlyDictionary<long, SnapshotOsmElement>? OsmElements = null,
+    IReadOnlyDictionary<long, PositionCorrection>? Corrections = null,
+    DateTimeOffset? PositionsChangedAt = null)
 {
+    /// <summary>
+    /// When what it serves besides the feed last changed, the hours (<see cref="HoursChangedAt"/>) or the positions
+    /// (<see cref="PositionsChangedAt"/>), whichever is later: a client with the feed's version from before doesn't have it.
+    /// </summary>
+    public DateTimeOffset? ChangedAt => HoursChangedAt is null || PositionsChangedAt > HoursChangedAt ? PositionsChangedAt : HoursChangedAt;
+
     /// <summary>The station's OpenStreetMap element, <c>node/123</c>, and how it was matched; null when it wasn't matched to one.</summary>
     public SnapshotOsmElement? OsmElementOf(long stationId) => OsmElements?.GetValueOrDefault(stationId);
+
+    /// <summary>
+    /// Where to say the station is: the corrected point when a correction applies to it, else the one given (the
+    /// database's, which is the feed's). For the answers that read stations from the database rather than from the snapshot.
+    /// </summary>
+    public (double? Latitude, double? Longitude) PointOf(long stationId, double? latitude, double? longitude) =>
+        Corrections?.GetValueOrDefault(stationId) is { } correction ? (correction.Latitude, correction.Longitude) : (latitude, longitude);
 
     /// <summary>Still what the data says: the same import and hours run, and no source gone stale since.</summary>
     public bool IsCurrent(DateTimeOffset? version, DateTimeOffset? hoursVersion, DateTimeOffset now) =>
@@ -86,15 +113,21 @@ public sealed record Snapshot(
 /// loaded with one query when a new import is in, then shared by every request until the next one. The ranking filters it
 /// (status, availability, Costco) itself: <c>/stations/nearby</c> returns only the 100 closest, which in Montréal cover a
 /// few km, and doesn't check those. With them, each station's opening hours, chosen among their sources: loaded again
-/// when an hours run changed them too, or when a source went stale.
+/// when an hours run changed them too, or when a source went stale. Each station is where it is: a reviewed correction's
+/// point when one applies (<see cref="PositionCorrections.Embedded"/>), else the feed's, which the database keeps as it is.
 /// </summary>
-public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration configuration)
+public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration configuration, ILogger<StationSnapshot> logger)
 {
     private readonly SemaphoreSlim _loading = new(1, 1);
     private readonly TimeSpan _staleAfter = TimeSpan.FromDays(
         configuration.GetValue("Health:HoursStaleAfterDays", HoursPrecedence.DefaultStaleAfter.TotalDays));
 
+    /// <summary>The corrections already said not to apply, by natural key: each is logged once, until it applies again.</summary>
+    private readonly HashSet<string> _notApplying = new(StringComparer.Ordinal);
+
     private Snapshot? _current;
+    private string? _positionsKey;
+    private DateTimeOffset? _positionsChangedAt;
 
     /// <summary>The snapshot of the latest import and hours, loaded by the first request that needs it while the others wait.</summary>
     public async Task<Snapshot> GetAsync(EssenceDbContext db, CancellationToken cancellationToken)
@@ -122,6 +155,7 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
                 .Select(s => new
                 {
                     s.Id,
+                    s.NaturalKey,
                     s.Name,
                     s.Brand,
                     s.Status,
@@ -132,10 +166,15 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
                 })
                 .ToListAsync(cancellationToken);
 
-            var stations = rows
-                .Select(s => new SnapshotStation(
-                    s.Id, s.Name, s.Brand, s.Status, s.Address, s.Latitude, s.Longitude, Brands.IsMembersOnly(s.Brand), s.Prices))
-                .ToList();
+            var corrections = PositionCorrections.Embedded;
+            var (stations, corrected) = Correct(
+                rows.Select(s => (
+                    new SnapshotStation(
+                        s.Id, s.Name, s.Brand, s.Status, s.Address, s.Latitude, s.Longitude, Brands.IsMembersOnly(s.Brand), s.Prices),
+                    s.NaturalKey)),
+                corrections);
+            LogNotApplying(corrections, rows.ToDictionary(s => s.NaturalKey, s => (s.Latitude, s.Longitude), StringComparer.Ordinal));
+            (_positionsKey, _positionsChangedAt) = PositionsChange(_positionsKey, _positionsChangedAt, corrected, now);
 
             var lastSuccesses = await LastSuccessesAsync(db, cancellationToken);
             var hourRows = await db.StationHours
@@ -147,7 +186,7 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
                     h.MatchedBy,
                     h.SourceBrand))
                 .ToListAsync(cancellationToken);
-            var hours = ChooseHours(hourRows, lastSuccesses, now, _staleAfter);
+            var hours = ChooseHours(Correct(hourRows, corrected), lastSuccesses, now, _staleAfter);
             return _current = new Snapshot(
                 version,
                 stations,
@@ -155,11 +194,88 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
                 hours,
                 HoursPrecedence.StaleAt(lastSuccesses, now, _staleAfter),
                 HoursChangedAt(hoursVersion, lastSuccesses, now, _staleAfter),
-                OsmElementsOf(hourRows));
+                OsmElementsOf(hourRows),
+                corrected,
+                _positionsChangedAt);
         }
         finally
         {
             _loading.Release();
+        }
+    }
+
+    /// <summary>
+    /// The stations where they are: those whose correction applies to their feed point
+    /// (<see cref="PositionCorrection.AppliesTo"/>) at the corrected point, the others as given; and the corrections that
+    /// apply, by station id.
+    /// </summary>
+    public static (IReadOnlyList<SnapshotStation> Stations, IReadOnlyDictionary<long, PositionCorrection> Corrected) Correct(
+        IEnumerable<(SnapshotStation Station, string NaturalKey)> stations, PositionCorrections corrections)
+    {
+        var placed = new List<SnapshotStation>();
+        var corrected = new Dictionary<long, PositionCorrection>();
+        foreach (var (station, naturalKey) in stations)
+        {
+            if (corrections.AppliedTo(naturalKey, station.Latitude, station.Longitude) is { } correction)
+            {
+                corrected[station.Id] = correction;
+                placed.Add(station with { Latitude = correction.Latitude, Longitude = correction.Longitude });
+            }
+            else
+            {
+                placed.Add(station);
+            }
+        }
+
+        return (placed, corrected);
+    }
+
+    /// <summary>The hours rows with their station where it is (<paramref name="corrected"/>): its time zone is the one there.</summary>
+    public static IReadOnlyList<SnapshotHoursRow> Correct(
+        IEnumerable<SnapshotHoursRow> rows, IReadOnlyDictionary<long, PositionCorrection> corrected) =>
+        [.. rows.Select(r => corrected.GetValueOrDefault(r.Row.StationId) is { } c ? r with { Latitude = c.Latitude, Longitude = c.Longitude } : r)];
+
+    /// <summary>
+    /// What the corrections that apply are (<paramref name="corrected"/>, as a key that changes with them), and since
+    /// when: <paramref name="lastChangedAt"/> while they're the same as at the last load, else now. The first load of a
+    /// process is a change, since a new image may bring new ones: a client with the feed's version from before the start
+    /// gets no 304 until the next import.
+    /// </summary>
+    public static (string Key, DateTimeOffset ChangedAt) PositionsChange(
+        string? lastKey, DateTimeOffset? lastChangedAt, IReadOnlyDictionary<long, PositionCorrection> corrected, DateTimeOffset now)
+    {
+        var key = string.Join(
+            ";",
+            corrected.OrderBy(c => c.Key).Select(c => string.Create(CultureInfo.InvariantCulture, $"{c.Key}:{c.Value.Latitude:R},{c.Value.Longitude:R}")));
+        return key == lastKey && lastChangedAt is { } at ? (key, at) : (key, now);
+    }
+
+    /// <summary>Logs, once each, the corrections that don't apply: their station's feed point moved, or no active station has their key.</summary>
+    private void LogNotApplying(PositionCorrections corrections, IReadOnlyDictionary<string, (double Latitude, double Longitude)> feedPoints)
+    {
+        foreach (var correction in corrections.All)
+        {
+            var point = feedPoints.TryGetValue(correction.NaturalKey, out var p) ? (p.Latitude, p.Longitude) : ((double?, double?)?)null;
+            var state = PositionCorrections.StateOf(correction, point);
+            if (state == PositionCorrectionState.Applied)
+            {
+                _notApplying.Remove(correction.NaturalKey);
+            }
+            else if (_notApplying.Add(correction.NaturalKey))
+            {
+                if (state == PositionCorrectionState.Expired)
+                {
+                    logger.LogWarning(
+                        "The position correction of {NaturalKey} has expired: the Régie's point moved since it was reviewed. The feed's point is used again; take it out of curated-positions.json.",
+                        correction.NaturalKey);
+                }
+                else
+                {
+                    logger.LogWarning(
+                        "The position correction of {NaturalKey} applies to no station on the map: it left the feed, has no point, or its address changed. Take it out of curated-positions.json.",
+                        correction.NaturalKey);
+                }
+            }
         }
     }
 

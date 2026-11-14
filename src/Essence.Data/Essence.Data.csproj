@@ -9,4 +9,10 @@
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" PrivateAssets="all" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Stations' reviewed position corrections (PositionCorrections): shipped in the assembly, so the API and the ingest
+         read the same ones, and a new image brings new ones. -->
+    <EmbeddedResource Include="curated-positions.json" LogicalName="Essence.Data.curated-positions.json" />
+  </ItemGroup>
+
 </Project>

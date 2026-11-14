@@ -4,10 +4,12 @@ WORKDIR /src
 COPY Directory.Build.props Directory.Packages.props global.json .editorconfig ./
 COPY src/Essence.Data/Essence.Data.csproj src/Essence.Data/
 COPY src/Essence.Hours/Essence.Hours.csproj src/Essence.Hours/
+COPY src/Essence.Ranking/Essence.Ranking.csproj src/Essence.Ranking/
 COPY src/Essence.Ingest/Essence.Ingest.csproj src/Essence.Ingest/
 RUN dotnet restore src/Essence.Ingest/Essence.Ingest.csproj
 COPY src/Essence.Data/ src/Essence.Data/
 COPY src/Essence.Hours/ src/Essence.Hours/
+COPY src/Essence.Ranking/ src/Essence.Ranking/
 COPY src/Essence.Ingest/ src/Essence.Ingest/
 RUN dotnet publish src/Essence.Ingest/Essence.Ingest.csproj --configuration Release --no-restore --output /app
 

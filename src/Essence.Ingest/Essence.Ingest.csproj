@@ -12,6 +12,8 @@
   <ItemGroup>
     <ProjectReference Include="..\Essence.Data\Essence.Data.csproj" />
     <ProjectReference Include="..\Essence.Hours\Essence.Hours.csproj" />
+    <!-- Photon's client, to look up the stations' addresses when checking their positions (Positions:GeocodingUrl). -->
+    <ProjectReference Include="..\Essence.Ranking\Essence.Ranking.csproj" />
   </ItemGroup>
 
   <ItemGroup>

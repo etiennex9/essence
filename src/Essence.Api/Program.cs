@@ -79,6 +79,7 @@ app.MapHealthChecks("/alive", new HealthCheckOptions { Predicate = _ => false })
 app.MapSourceHealthEndpoints();
 
 app.MapStationEndpoints();
+app.MapPositionEndpoints();
 app.MapTripEndpoints();
 app.MapPlaceEndpoints();
 app.MapDataServiceEndpoints();

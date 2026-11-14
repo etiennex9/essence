@@ -4,8 +4,10 @@ using Essence.Ingest;
 using Essence.Ingest.Backfill;
 using Essence.Ingest.Feed;
 using Essence.Ingest.Hours;
+using Essence.Ingest.Positions;
 using Essence.Ingest.Scheduling;
 using Essence.Ingest.Storage;
+using Essence.Ranking;
 using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -43,6 +45,13 @@ var hours = hoursSection.Get<HoursOptions>() ?? new HoursOptions();
 builder.Services.AddOptions<HoursOptions>()
     .Bind(hoursSection)
     .Validate(o => o.Validate() is null, hours.Validate() ?? "The Hours settings are invalid.")
+    .ValidateOnStart();
+
+var positionsSection = builder.Configuration.GetSection(PositionsOptions.SectionName);
+var positions = positionsSection.Get<PositionsOptions>() ?? new PositionsOptions();
+builder.Services.AddOptions<PositionsOptions>()
+    .Bind(positionsSection)
+    .Validate(o => o.Validate() is null, positions.Validate() ?? "The Positions settings are invalid.")
     .ValidateOnStart();
 
 builder.Services.AddSingleton<PollScheduler>();
@@ -88,8 +97,24 @@ AddHoursClient(builder.Services.AddHttpClient<HoursClient>(), hours.RequestTimeo
 // Overpass takes a minute or more for all Québec: its own timeout, longer than the query's.
 AddHoursClient(builder.Services.AddHttpClient<OverpassClient>(), hours.Osm.RequestTimeout);
 
+// The address search the stations' addresses are looked up in, when it's set: no retry, a lookup that fails waits for
+// the next day's run.
+builder.Services.AddScoped<PositionsWriter>();
+if (positions.GeocodingUri is { } geocoding)
+{
+    builder.Services.AddHttpClient<PhotonClient>(client =>
+        {
+            client.BaseAddress = geocoding;
+            client.Timeout = positions.GeocodingTimeout;
+            client.MaxResponseContentBufferSize = 1024 * 1024;
+            client.DefaultRequestHeaders.UserAgent.ParseAdd("Essence-Ingest/1.0 (station positions)");
+        })
+        .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler { PooledConnectionLifetime = TimeSpan.FromMinutes(5) });
+}
+
 builder.Services.AddHostedService<IngestWorker>();
 builder.Services.AddHostedService<HoursWorker>();
+builder.Services.AddHostedService<PositionsWorker>();
 
 builder.Build().Run();
 

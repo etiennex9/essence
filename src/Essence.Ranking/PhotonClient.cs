@@ -10,6 +10,7 @@ namespace Essence.Ranking;
 /// <c>locality</c>, <c>district</c>, <c>city</c>, <c>county</c>, <c>state</c>, <c>country</c> or <c>other</c>.</param>
 /// <param name="OsmKey">The feature's main OpenStreetMap tag (<c>highway</c>, <c>amenity</c>, <c>place</c>…).</param>
 /// <param name="State">The province, in the language asked for ("Québec", "Quebec", "Ontario").</param>
+/// <param name="OsmRef">The OpenStreetMap object it comes from, as OpenStreetMap names it: <c>node/1266988689</c>, <c>way/549635443</c>.</param>
 public sealed record PhotonPlace(
     LatLon Location,
     string Type,
@@ -24,7 +25,8 @@ public sealed record PhotonPlace(
     string? City,
     string? County,
     string? State,
-    string? CountryCode);
+    string? CountryCode,
+    string? OsmRef = null);
 
 /// <summary>What <see cref="PhotonClient.SearchAsync"/> asks for.</summary>
 /// <param name="Language"><c>fr</c> or <c>en</c>: the names and the address come in it.</param>
@@ -160,7 +162,8 @@ public sealed class PhotonClient(HttpClient http)
                 Text(p, "city"),
                 Text(p, "county"),
                 Text(p, "state"),
-                Text(p, "countrycode")));
+                Text(p, "countrycode"),
+                OsmRef(p)));
         }
 
         return places;
@@ -200,6 +203,19 @@ public sealed class PhotonClient(HttpClient http)
             }
         }
     }
+
+    /// <summary>Photon's <c>osm_type</c> (<c>N</c>, <c>W</c>, <c>R</c>) and <c>osm_id</c> as OpenStreetMap names the object; null without them.</summary>
+    private static string? OsmRef(JsonElement properties) =>
+        Text(properties, "osm_type") switch
+        {
+            "N" => "node",
+            "W" => "way",
+            "R" => "relation",
+            _ => null,
+        } is { } type
+        && properties.TryGetProperty("osm_id", out var id) && id.ValueKind == JsonValueKind.Number && id.TryGetInt64(out var number) && number > 0
+            ? string.Create(CultureInfo.InvariantCulture, $"{type}/{number}")
+            : null;
 
     private static string? Text(JsonElement element, string name) =>
         element.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.String && value.GetString() is { Length: > 0 } text
