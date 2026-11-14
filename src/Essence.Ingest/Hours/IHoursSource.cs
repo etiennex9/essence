@@ -25,6 +25,13 @@ public interface IHoursSource
     /// </summary>
     double MatchRadiusM { get; }
 
+    /// <summary>
+    /// How far from a station left without a record a record of another brand, or none, may be and still be that
+    /// station's, its brand out of date (<see cref="HoursMatcher"/>): without its hours, so the station knows which element
+    /// to edit. Null for a source whose brands are its own: a brand's locator lists only its stations.
+    /// </summary>
+    double? OtherBrandReachM { get; }
+
     /// <param name="cachedVersion">The version of the download kept on disk: the source may answer <see cref="HoursFetch.NotModified"/> when it's the same.</param>
     /// <exception cref="HttpRequestException">The source doesn't answer, or answers with an error.</exception>
     /// <exception cref="HoursFormatException">The answer isn't what the source sends.</exception>
@@ -58,8 +65,9 @@ public sealed record HoursParse(IReadOnlyList<SourceRecord> Records, IReadOnlyLi
 /// <summary>
 /// One place's hours, as a source gives them. A record finds its station (<see cref="HoursMatcher"/>) by
 /// <see cref="NaturalKey"/> when it has one, else by <see cref="StoreNumber"/>, else by its point within the source's
-/// radius among stations of <see cref="BrandFamily"/>, else it's a rule for every station of <see cref="BrandFamily"/>.
-/// A record for one place has a natural key, a store number or a point: without any, it would be its brand's rule.
+/// radius among stations of <see cref="BrandFamily"/> (or further at the same address), else it's a rule for every
+/// station of <see cref="BrandFamily"/>. A record for one place has a natural key, a store number or a point: without
+/// any, it would be its brand's rule.
 /// </summary>
 /// <param name="Ref">The source's id for the place, stored as <c>source_ref</c>: Costco's warehouse number, <c>node/123</c>…</param>
 /// <param name="BrandFamily">The brand, as <see cref="Hours.BrandFamily.Of"/> folds it: <c>costco</c>.</param>

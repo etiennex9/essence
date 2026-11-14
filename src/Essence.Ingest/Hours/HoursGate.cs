@@ -18,6 +18,12 @@ public static class HoursGate
             : Check(parsed.Records.Count, matched, lastGoodMatched, minShareOfLastGood);
 
     /// <summary>A source that downloads its records.</summary>
+    /// <param name="matched">
+    /// The stations matched but for those matched by location only (<see cref="MatchResult.Counted"/>), as
+    /// <c>hours_imports.matched</c> records them. Those carry no hours, and they'd hide a broken answer: elements that lost
+    /// their brands would match by location what they matched by brand. Leaving them out, a run that gains them is no jump,
+    /// and one that loses them no drop.
+    /// </param>
     /// <param name="lastGoodMatched">The stations the last good run matched; null when there's none, and any number goes.</param>
     /// <returns>Why the run is rejected, or null when it's accepted.</returns>
     public static string? Check(int records, int matched, int? lastGoodMatched, double minShareOfLastGood)

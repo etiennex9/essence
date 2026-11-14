@@ -11,8 +11,9 @@ namespace Essence.Ingest.Hours;
 /// Shell's stations, from its station locator (shellgsllocator.geoapp.me). Its lists give the stations in a box, or
 /// clusters of them when there are many, each cluster listed in turn (about 22 lists for Québec); only a station's
 /// details give its hours, one request each. So only the stations within reach of one of the feed's Shell stations
-/// (<see cref="MatchRadiusM"/>) are asked about, about 390, one every 2 to 3 s (<see cref="HoursPacer"/>): a run takes
-/// about 17 minutes, once a week. The forecourt's hours come first (<c>forecourt_opening_hours</c>), else the station's.
+/// (<see cref="MatchRadiusM"/>) are asked about, about 390, and the few a feed Shell station with none within reach could
+/// match by address (<see cref="AtItsAddress"/>), one every 2 to 3 s (<see cref="HoursPacer"/>): a run takes about 17
+/// minutes, once a week. The forecourt's hours come first (<c>forecourt_opening_hours</c>), else the station's.
 /// A station whose details fail twice is left out, not the run, so one broken record can't keep the source failing (and
 /// asked again and again); <see cref="FailuresInARow"/> stations failing one after the other fail the run.
 /// </summary>
@@ -51,9 +52,11 @@ public sealed class ShellSource(HoursClient client, HoursPacer pacer, IHoursStat
     public bool Enabled => options.Value.Shell.Enabled;
     public bool ShippedInImage => false;
     public double MatchRadiusM => 150;
+    public double? OtherBrandReachM => null;
 
     /// <summary>
-    /// Lists Québec's stations, then asks for the details of those within reach of a feed Shell station, and keeps them:
+    /// Lists Québec's stations, then asks for the details of those within reach of a feed Shell station, and of those a
+    /// feed Shell station with none within reach could match by address (<see cref="AtItsAddress"/>), and keeps them:
     /// <c>{"locations": […], "missing": [ids], "failed": [{"id", "error"}]}</c>, <c>missing</c> being those the locator no
     /// longer has (a 404). A detail that fails otherwise (an error, no answer in time, something else than a station) is
     /// asked again once, after a pause; failing twice, it's in <c>failed</c>. Any list failing fails the run, and so do
@@ -68,8 +71,9 @@ public sealed class ShellSource(HoursClient client, HoursPacer pacer, IHoursStat
         var shells = (await stations.LoadStationsAsync(cancellationToken)).Stations
             .Where(s => s is { BrandFamily: BrandFamily.Shell, Latitude: not null, Longitude: not null })
             .ToList();
+        var alone = shells.Where(s => !sites.Values.Any(site => Distance(site, s) <= MatchRadiusM)).ToList();
         var wanted = sites.Values
-            .Where(site => shells.Any(s => HoursMatcher.DistanceM(site.Latitude, site.Longitude, s.Latitude!.Value, s.Longitude!.Value) <= MatchRadiusM))
+            .Where(site => shells.Any(s => Distance(site, s) <= MatchRadiusM) || alone.Any(s => AtItsAddress(site, s)))
             .Select(site => site.Id)
             .Order(StringComparer.Ordinal)
             .ToList();
@@ -308,7 +312,9 @@ public sealed class ShellSource(HoursClient client, HoursPacer pacer, IHoursStat
                     && HoursJson.Text(site, "id") is { } id
                     && HoursJson.Number(site, "lat") is { } latitude && HoursJson.Number(site, "lng") is { } longitude)
                 {
-                    sites.TryAdd(id, new ListedSite(id, latitude, longitude));
+                    sites.TryAdd(id, new ListedSite(
+                        id, latitude, longitude, HoursMatcher.HouseNumber(HoursJson.Text(site, "address")),
+                        StationKey.NormalizePostalCode(HoursJson.Text(site, "postcode"))));
                 }
             }
 
@@ -399,7 +405,22 @@ public sealed class ShellSource(HoursClient client, HoursPacer pacer, IHoursStat
         return kept;
     }
 
-    private sealed record ListedSite(string Id, double Latitude, double Longitude);
+    private static double Distance(ListedSite site, MatchStation station) =>
+        HoursMatcher.DistanceM(site.Latitude, site.Longitude, station.Latitude!.Value, station.Longitude!.Value);
+
+    /// <summary>
+    /// The site is at the station's house number and postal code, as the list gives them, within
+    /// <see cref="HoursMatcher.AddressReachM"/>: what a match by address needs. Only asked of the feed Shell stations with
+    /// no site within reach, 14 of 391 in November 2026, so it costs a few details a week.
+    /// </summary>
+    private static bool AtItsAddress(ListedSite site, MatchStation station) =>
+        site.HouseNumber is { } number && number == station.HouseNumber
+        && site.Postcode is { Length: > 0 } postcode && postcode == station.Postcode
+        && Distance(site, station) <= HoursMatcher.AddressReachM;
+
+    /// <param name="HouseNumber">As the list gives it (<see cref="HoursMatcher.HouseNumber"/>).</param>
+    /// <param name="Postcode">As the list gives it, folded.</param>
+    private sealed record ListedSite(string Id, double Latitude, double Longitude, string? HouseNumber, string Postcode);
 
     /// <summary>The run's requests to Shell, a pause before each but the first.</summary>
     private sealed class Paced(HoursClient client, HoursPacer pacer)
