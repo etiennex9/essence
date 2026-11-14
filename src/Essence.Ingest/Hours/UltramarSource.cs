@@ -13,7 +13,9 @@ namespace Essence.Ingest.Hours;
 /// status too, "active" or "temporary closure", but the forecourt's says little: it was active at every Québec station
 /// in November 2026, the 7 closed for now ("temporary closure", their store's too) included, and some of those sold gas
 /// while others' prices hadn't moved in a month. So a station closed for now whose forecourt is active is left out,
-/// with a warning: which is right can't be told. Matched to the feed's Ultramar stations within 150 m.
+/// with a warning: which is right can't be told. Matched to the feed's Ultramar stations within 150 m, or within 2 km at
+/// the same house number and postal code (<see cref="HoursMatcher.AddressReachM"/>): the locator puts a few stations a
+/// street or more from where they are.
 /// </summary>
 public sealed class UltramarSource(HoursClient client, IOptions<HoursOptions> options) : IHoursSource
 {

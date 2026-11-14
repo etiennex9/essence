@@ -21,7 +21,8 @@ public interface IHoursSource
 
     /// <summary>
     /// How far from a station a record with a point may be and still be that station's (<see cref="HoursMatcher"/>); a
-    /// Costco record, whatever the source, within <see cref="HoursMatcher.CostcoReachM"/>.
+    /// Costco record, whatever the source, within <see cref="HoursMatcher.CostcoReachM"/>. Further, up to
+    /// <see cref="HoursMatcher.AddressReachM"/>, only at the station's house number and postal code.
     /// </summary>
     double MatchRadiusM { get; }
 
