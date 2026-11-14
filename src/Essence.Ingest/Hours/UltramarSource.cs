@@ -39,6 +39,7 @@ public sealed class UltramarSource(HoursClient client, IOptions<HoursOptions> op
     public bool Enabled => options.Value.Ultramar.Enabled;
     public bool ShippedInImage => false;
     public double MatchRadiusM => 150;
+    public double? OtherBrandReachM => null;
 
     /// <summary>
     /// Asks once, and keeps the answer's stations with only <see cref="KeptFields"/>, as the locator answers:

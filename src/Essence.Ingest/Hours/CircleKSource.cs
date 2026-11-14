@@ -38,6 +38,7 @@ public sealed class CircleKSource(HoursClient client, HoursPacer pacer, IOptions
 
     /// <summary>Unused: a store matches its station by number, never by distance.</summary>
     public double MatchRadiusM => 0;
+    public double? OtherBrandReachM => null;
 
     /// <summary>
     /// Asks each box in turn, and keeps one array of the stores found, each once (by <c>id</c>), with only

@@ -39,6 +39,7 @@ public sealed class CostcoSource(HoursClient client, IOptions<HoursOptions> opti
     public bool Enabled => options.Value.Costco.Enabled;
     public bool ShippedInImage => false;
     public double MatchRadiusM => 600;
+    public double? OtherBrandReachM => null;
 
     /// <summary>
     /// Asks each point in turn, and keeps one array of the warehouses found, each once (by <c>stlocID</c>) and with only

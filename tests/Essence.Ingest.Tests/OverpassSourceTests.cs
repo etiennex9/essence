@@ -13,7 +13,7 @@ namespace Essence.Ingest.Tests;
 public sealed class OverpassSourceTests
 {
     /// <summary>The feed's brands: not "Essence", the name of a station of the fixture's far north.</summary>
-    private static readonly string[] Brands = ["Costco", "Ultramar", "Esso", "Irving", "Sonic", "Petro-Canada", "Harnois", "Couche-Tard"];
+    private static readonly string[] Brands = ["Costco", "Ultramar", "Esso", "Irving", "Sonic", "Petro-Canada", "Harnois", "Couche-Tard", "R.L."];
 
     /// <summary>One feed station of each brand.</summary>
     private static readonly Stations FeedBrands =
@@ -174,6 +174,35 @@ public sealed class OverpassSourceTests
         Assert.DoesNotContain("Untel", Encoding.UTF8.GetString(fetched.Raw));
         Assert.Contains("\"Ultramar\"", Encoding.UTF8.GetString(fetched.Raw));
         Assert.Null(source.Parse(fetched.Raw).Records.Single(r => r.Ref == "node/5334869289").BrandFamily);
+    }
+
+    [Fact]
+    public async Task R_L_s_stations_named_after_Petroles_R_L_or_its_Rezzo_banner_keep_that_name_and_are_R_L_s()
+    {
+        var answer = Json("overpass.json");
+        answer["elements"]!.AsArray().Add(new JsonObject
+        {
+            ["type"] = "node", ["id"] = 5309263899, ["lat"] = 48.3366, ["lon"] = -70.8843,
+            ["tags"] = new JsonObject { ["amenity"] = "fuel", ["name"] = "Petroles RL", ["addr:housenumber"] = "1162", ["addr:postcode"] = "G7B 1C5" },
+        });
+        answer["elements"]!.AsArray().Add(new JsonObject
+        {
+            ["type"] = "way", ["id"] = 549565977, ["center"] = new JsonObject { ["lat"] = 48.2353, ["lon"] = -70.5841 },
+            ["tags"] = new JsonObject { ["amenity"] = "fuel", ["name"] = "Pétrole Rl" },
+        });
+        answer["elements"]!.AsArray().Add(new JsonObject
+        {
+            ["type"] = "node", ["id"] = 10909434881, ["lat"] = 48.2470, ["lon"] = -70.8500,
+            ["tags"] = new JsonObject { ["amenity"] = "fuel", ["brand"] = "Rezzo" },
+        });
+        var source = Source(_ => Ok(answer.ToJsonString()));
+
+        var fetched = Assert.IsType<HoursFetch.Fetched>(await source.FetchAsync(null, TestContext.Current.CancellationToken));
+        var records = source.Parse(fetched.Raw).Records;
+
+        string[] named = ["node/5309263899", "way/549565977", "node/10909434881"];
+        Assert.Equal(["r-l", "r-l", "r-l"], named.Select(r => records.Single(e => e.Ref == r).BrandFamily));
+        Assert.Contains("Petroles RL", Encoding.UTF8.GetString(fetched.Raw));
     }
 
     [Theory]

@@ -146,6 +146,19 @@ public class HoursPrecedenceTests
     }
 
     [Fact]
+    public void An_OpenStreetMap_element_matched_by_location_only_gives_no_hours_another_source_s_showing_or_none()
+    {
+        // The ingest stores such a match unconfirmed and without the element's hours.
+        var byLocation = Row(HoursPrecedence.Osm, rule: null, confirmed: false);
+
+        var alone = HoursPrecedence.Choose([byLocation], Fresh, Now);
+        var withShell = HoursPrecedence.Choose([byLocation, Row(HoursPrecedence.Shell, rule: "24/7")], Fresh, Now);
+
+        Assert.Empty(alone);
+        Assert.Equal((HoursPrecedence.Shell, true), (withShell[Laval].Row.Source, withShell[Laval].Trusted));
+    }
+
+    [Fact]
     public void A_rule_written_loosely_still_counts()
     {
         var chosen = HoursPrecedence.Choose([Row(HoursPrecedence.Costco, rule: "Mo-Fr 6:00-21:30, Sa-Su 06:00-20:30")], Fresh, Now);

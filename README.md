@@ -163,10 +163,10 @@ per station (see **Which hours show**), and the app shows them.
 |---|---|---|
 | `costco` | Costco's warehouse locator (`costco.ca/AjaxWarehouseBrowseLookupView`), asked from Montréal and from Québec City, each answering its 50 nearest warehouses: the gas bars' hours (`gasStationHours`) of the Québec warehouses that have one. | The feed's Costco stations within 600 m: the feed's point and the locator's can be 540 m apart, the gas bar being away from the warehouse. |
 | `curated` | [curated-hours.json](src/Essence.Ingest/Hours/curated-hours.json), shipped in the image: rules written by hand, each with the day it was checked and where. | A brand's rule: every station of the brand. A station's: its address and postal code, as in the feed. It beats the brand's. |
-| `ultramar` | Ultramar's locator on journie.ca (`/ultramar/api/locations/nearest`), one request for all of Canada's ~620 stations: each station's week (`siteRegularHours`, `siteTwentyFourSeven`) and its services', the forecourt's first, and whether it's closed for now. | The feed's Ultramar stations within 150 m (326 of 356 on 2026-11-13). |
+| `ultramar` | Ultramar's locator on journie.ca (`/ultramar/api/locations/nearest`), one request for all of Canada's ~620 stations: each station's week (`siteRegularHours`, `siteTwentyFourSeven`) and its services', the forecourt's first, and whether it's closed for now. | The feed's Ultramar stations within 150 m (326 of 356 on 2026-11-13), or within 2 km at the same house number and postal code (6 more, the locator's point 165 to 660 m off). |
 | `circlek` | Circle K's store locator (`api.circlek.com/us/ngrp-store-locator/v1/stations`), asked about Québec's west and east: Couche-Tard's ~605 Québec stores, each with its store's hours (`openingHours`: `alwaysOpen`, or each day's `open` and `close`). | Only the station whose feed name carries the store's number: "Couche-Tard #140" is the store 6000140, whatever the station's brand and however far (467 of the 473 stations named so on 2026-11-13, 8 of them 336 to 716 m away; the other 6 stores weren't in the locator). Never by distance: the store nearest a station is another station's 74 % of the time. |
-| `shell` | Shell's locator (`shellgsllocator.geoapp.me/api/v2/locations`): its lists of Québec's ~400 stations (`within_bounds`, a cluster listed in turn until it gives stations), then the details (`forecourt_opening_hours`, else `opening_hours`; `open_status`) of only those within 150 m of a feed Shell station. | The feed's Shell stations within 150 m (371 of 391 on 2026-11-13). |
-| `osm` | OpenStreetMap, from an Overpass server: every `amenity=fuel` element in Québec (~2,860), with its tags and point (`out tags center`), never who mapped it. Each is a record, hours or not (~184 have `opening_hours`), so a station knows which element to edit. | The feed's stations of the element's brand (`brand`, else `operator`, else `name`) within 150 m, Costco's within 600 m (1,713 elements on 2026-11-13, 132 of them with hours). |
+| `shell` | Shell's locator (`shellgsllocator.geoapp.me/api/v2/locations`): its lists of Québec's ~400 stations (`within_bounds`, a cluster listed in turn until it gives stations), then the details (`forecourt_opening_hours`, else `opening_hours`; `open_status`) of only those within 150 m of a feed Shell station, and, for the 14 feed Shell stations with none there, those within 2 km at the station's house number and postal code as the list gives them (a few a week). | The feed's Shell stations within 150 m (371 of 391 on 2026-11-13), or within 2 km at the same house number and postal code. |
+| `osm` | OpenStreetMap, from an Overpass server: every `amenity=fuel` element in Québec (~2,860), with its tags and point (`out tags center`), never who mapped it. Each is a record, hours or not (~184 have `opening_hours`), so a station knows which element to edit. | The feed's stations of the element's brand (`brand`, else `operator`, else `name`) within 150 m, Costco's within 600 m, or within 2 km at the same house number and postal code (1,765 elements on 2026-11-13, 134 of them with hours). Then, without its hours, an element of another brand or none that's on a station still without one (351 more, see **Matching**). |
 
 - **Costco's terms of use ban automated collection.** The owner accepted that risk at two requests a week, one per point.
   A request isn't repeated within a run (`Hours:RetryCount` 0), and a run that fails stops at the request that failed,
@@ -210,18 +210,36 @@ per station (see **Which hours show**), and the app shows them.
   are in at once. A failed or rejected run is tried again after 15 minutes, then 1 hour, then every 6 hours until one
   succeeds.
 - **Matching.** A station's own rule comes first, then Couche-Tard's stores by the number in the station's name (whatever
-  the station's brand; a number two stations carry matches neither), then the records with a point, then a brand's rule
-  for the brand's stations left. A record with a point only ever matches stations of its own brand (folded: "Pétro-Canada"
-  and "Petro Canada" are one; Esso and Mobil are one, Couche-Tard and Circle K too), and a Costco record, whatever its
-  source, within 600 m. A match by distance is confirmed when the postal codes or the house numbers agree
-  (Drummondville's two points, 540 m apart, have other postal codes but the same number). Pairs are taken one to one,
-  the confirmed first, then the closest, and a pair that isn't confirmed is left out when the same record is within
-  reach of another station, or the same station within reach of another record with other hours: which is which can't
-  be told then.
+  the station's brand; a number two stations carry matches neither), then the records with a point (by distance, then by
+  address), then a brand's rule for the brand's stations left, and last, for OpenStreetMap only, an element of another
+  brand on a station (by location).
+  - **By distance.** A record with a point only ever matches stations of its own brand (folded: "Pétro-Canada" and
+    "Petro Canada" are one; Esso and Mobil are one, Couche-Tard and Circle K too, and R.L. and the names OpenStreetMap
+    gives its stations, "Petroles RL" and Rezzo), and a Costco record, whatever its source, within 600 m. A match by
+    distance is confirmed when the postal codes or the house numbers agree (Drummondville's two points, 540 m apart,
+    have other postal codes but the same number). Pairs are taken one to one, the confirmed first, then the closest, and
+    a pair that isn't confirmed is left out when the same record is within reach of another station, or the same
+    station within reach of another record with other hours: which is which can't be told then.
+  - **By address.** A record and a station of the same brand both left free then match when the house number **and** the
+    postal code agree, up to 2 km apart: one of the two points is off. Ultramar's locator puts 6 stations 165 to 660 m
+    from where they are (5 more are 3.5 to 8.9 km off, past the 2 km), and the feed draws a few stations a street or a
+    village away. A postal code alone is never enough: a rural one covers villages kilometres apart. A record at the
+    address of two stations, or a station with two such records, matches neither.
+  - **By location.** OpenStreetMap is often years out of date: of the elements by stations it didn't match in November
+    2026, a third were last edited in 2020 or before, many still under a brand the station no longer has (Saguenay's
+    Nutrinor stations are Sonic's there). So a station still without an element gets its nearest one of another brand,
+    or none, when it's within 50 m, no other feed station (of any brand, matched or not) is within 150 m of the element,
+    and no other free element is within 50 m of the station. The element's hours aren't taken, its brand suggesting
+    they're as old: the row (`location`, never confirmed, no rule) only says which element a correction made in the app
+    goes to. Nutrinor Chicoutimi on boulevard Saint-Paul stays without one: its element is 62 m away, and 54 m from the
+    Petro-Canada next door.
 - **Checks.** A run whose source gives no records, or that matches fewer stations than 80 % of the last good run, is
-  rejected: nothing is written, and the last good hours keep serving. `curated` is taken as written instead, fewer rules
-  or none included (a rule taken out of the file takes its rows with it), unless one of its rules is left out (it can't
-  be read, or it's there twice): then the whole file is rejected until it's fixed, and the rules before it keep serving.
+  rejected: nothing is written, and the last good hours keep serving. The stations matched by location only don't
+  count, on either side: they carry no hours, and elements that lost their brands (a changed query, a broken answer)
+  would otherwise match by location what they matched by brand, and pass. `curated` is taken as written instead, fewer
+  rules or none included (a rule taken out of the file takes its rows with it), unless one of its rules is left out (it
+  can't be read, or it's there twice): then the whole file is rejected until it's fixed, and the rules before it keep
+  serving.
 - **The last downloads.** Each source's last good download is kept in `/data/hours/<source>/` (`latest.raw`, the one
   before as `previous.raw`, and `meta.json` with its version and when it was fetched), cut down to the fields read:
   nobody's name or phone number (for OpenStreetMap, neither who mapped an element nor an operator or a name that's no
@@ -230,9 +248,10 @@ per station (see **Which hours show**), and the app shows them.
   whose details the last run asked for). Only the download whose rows are serving is matched again: one left older on
   disk (keeping the newer one failed) waits for the next run.
 - **Tables.** `station_hours` has one row per station and source: the rule (null when a source has the place but not its
-  hours), the source's id for the place and a link, how it was matched (`natural_key`, `store_number`, `distance` or
-  `brand`) and how far, whether that's confirmed, whether the source says it's closed for now, when the source says it
-  was checked, and when it was fetched. `hours_imports` logs each source's runs: `succeeded`, `unchanged`, `rematched`
+  hours, or doesn't give them), the source's id for the place and a link, how it was matched (`natural_key`,
+  `store_number`, `distance`, `address`, `brand` or `location`) and how far, whether that's confirmed, whether the
+  source says it's closed for now, when the source says it was checked, and when it was fetched. `hours_imports` logs
+  each source's runs (`matched` leaving out the matches by location only): `succeeded`, `unchanged`, `rematched`
   (matched again from the last download because the stations changed: nothing was fetched, so it's no success),
   `rejected`, `failed` or `disabled` (see **Turning a source off**), with the version of the download (its SHA-256), its
   counts and the error. The feed's `imports` is left alone: what reads it takes every success there for a version of the
@@ -242,7 +261,8 @@ per station (see **Which hours show**), and the app shows them.
   the source is no longer listed in `/hours/sources` or checked by `/health`. Turned on again, it starts over, as a new
   source, and runs soon after the start. `Hours:Enabled` `false` only stops the worker: the rows stay as they are,
   and go stale.
-- **Health.** `/hours/sources` says how each source is going, and `/health`'s `hours` check is `Degraded` when a source
+- **Health.** `/hours/sources` says how each source is going, and how many stations it has hours for (an OpenStreetMap
+  element without them, or matched by location, isn't counted); `/health`'s `hours` check is `Degraded` when a source
   that has run has had no success in `Health:HoursStaleAfterDays` (21) days, or none ever. Its hours still show then,
   but are stale. `/health/sources` fails a source after 3 failed or rejected runs in a row, for a monitor to alert on
   ([Alerts](#alerts)).
