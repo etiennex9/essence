@@ -63,8 +63,8 @@ public sealed class HoursWriter(EssenceDbContext db, TimeProvider timeProvider) 
 
     /// <summary>
     /// Replaces the source's rows with the run's matches, in one transaction: rows added, changed and removed, then the
-    /// run's row in <c>hours_imports</c>, <see cref="HoursImportStatus.Unchanged"/> when nothing changed. A re-match that
-    /// changes nothing writes nothing.
+    /// run's row in <c>hours_imports</c>, <see cref="HoursImportStatus.Unchanged"/> when nothing changed, counting the
+    /// matches that count (<see cref="HoursMatch.Counts"/>). A re-match that changes nothing writes nothing.
     /// </summary>
     public async Task<HoursWriteOutcome> WriteAsync(HoursRun run, IReadOnlyList<HoursMatch> matches, CancellationToken cancellationToken)
     {
@@ -90,7 +90,7 @@ public sealed class HoursWriter(EssenceDbContext db, TimeProvider timeProvider) 
                 : HoursImportStatus.Succeeded,
             SourceVersion = run.Version,
             Records = run.Records,
-            Matched = matches.Count,
+            Matched = matches.Count(m => m.Counts),
             Changed = changes.Count,
             Warnings = run.Warnings,
         };

@@ -31,6 +31,7 @@ public sealed class CuratedHoursSource(IOptions<HoursOptions> options) : IHoursS
 
     /// <summary>Unused: curated rules name their station or their brand, never a point.</summary>
     public double MatchRadiusM => 0;
+    public double? OtherBrandReachM => null;
 
     /// <summary>The file as shipped.</summary>
     public static byte[] Embedded()

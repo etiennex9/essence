@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json.Nodes;
+using Essence.Data.Entities;
 using Essence.Hours;
 using Essence.Ingest.Hours;
 using Microsoft.Extensions.Time.Testing;
@@ -179,6 +180,32 @@ public sealed class ShellSourceTests
         Assert.Equal(["12200873", "12280964", "13231467"], source.Parse(fetched.Raw).Records.Select(r => r.Ref));
         Assert.DoesNotContain("telephone", Encoding.UTF8.GetString(fetched.Raw));
         Assert.DoesNotContain("closed", Encoding.UTF8.GetString(fetched.Raw));
+    }
+
+    [Theory]
+    [InlineData("2125 ch. Sainte-Foy, Québec", "G1V 1R9", 46.798, true)] // 1 km from 10052586, at its address.
+    [InlineData("2125 ch. Sainte-Foy, Québec", "G1V 1R9", 46.808, false)] // 2.1 km.
+    [InlineData("2125 ch. Sainte-Foy, Québec", "G1V 1S1", 46.798, false)] // The number only.
+    [InlineData("2200 ch. Sainte-Foy, Québec", "G1V 1R9", 46.798, false)] // The postal code only.
+    public async Task A_feed_Shell_station_with_none_within_reach_has_the_one_at_its_address_within_2_km_asked_about_and_matched(
+        string address, string postalCode, double latitude, bool asked)
+    {
+        var requests = new List<string>();
+        var station = Station(6, address, postalCode, "Shell", latitude, -71.270);
+        var source = new ShellSource(Client(Locator(requests)), NoPause(), new Stations([.. FeedStations[..5], station]), Options());
+
+        var fetched = Assert.IsType<HoursFetch.Fetched>(await source.FetchAsync(null, TestContext.Current.CancellationToken));
+
+        Assert.Equal(asked, requests.Contains("/api/v2/locations/10052586"));
+        var match = HoursMatcher.Match(source.Parse(fetched.Raw).Records, [station], source.MatchRadiusM).Matches.SingleOrDefault();
+        if (asked)
+        {
+            Assert.Equal(("10052586", StationHoursEntry.ByAddress), (match?.Record.Ref, match?.MatchedBy));
+        }
+        else
+        {
+            Assert.Null(match);
+        }
     }
 
     [Fact]

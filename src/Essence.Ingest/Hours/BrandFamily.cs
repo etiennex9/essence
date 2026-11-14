@@ -42,14 +42,21 @@ public static class BrandFamily
         ["harnois-energies"] = "harnois",
         ["petro-t"] = "harnois",
         ["petrot"] = "harnois",
+        // The feed's R.L.: OpenStreetMap names its stations after the company, Pétroles R.L. ("Petroles RL", "Pétrole Rl"),
+        // or after its stations' banner, Rezzo.
+        ["petroles-rl"] = "r-l",
+        ["petroles-r-l"] = "r-l",
+        ["petrole-rl"] = "r-l",
+        ["petrole-r-l"] = "r-l",
+        ["rezzo"] = "r-l",
         ["canadiantire"] = "canadian-tire",
         ["canadian-tire-gas"] = "canadian-tire",
         ["essence-de-canadian-tire"] = "canadian-tire",
     };
 
     /// <summary>
-    /// "Pétro-T" is <c>harnois</c>, "Mobil" is <c>esso</c>, "Circle K" is <c>couche-tard</c>; null for no brand (the feed's
-    /// "Aucun" included).
+    /// "Pétro-T" is <c>harnois</c>, "Mobil" is <c>esso</c>, "Circle K" is <c>couche-tard</c>, "Petroles RL" is <c>r-l</c>;
+    /// null for no brand (the feed's "Aucun" included).
     /// </summary>
     public static string? Of(string? brand)
     {

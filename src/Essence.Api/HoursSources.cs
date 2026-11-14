@@ -15,7 +15,9 @@ public static class HoursSources
     public static async Task<IReadOnlyList<HoursSourceStatus>> LoadAsync(EssenceDbContext db, CancellationToken cancellationToken)
     {
         var histories = await HoursHistory.LoadAsync(db, cancellationToken);
+        // The stations it has hours for: an OpenStreetMap element without them, or matched by location only, doesn't count.
         var stations = await db.StationHours
+            .Where(h => h.OpeningHours != null)
             .GroupBy(h => h.Source)
             .Select(g => new { Source = g.Key, Count = g.Count() })
             .ToDictionaryAsync(g => g.Source, g => g.Count, cancellationToken);

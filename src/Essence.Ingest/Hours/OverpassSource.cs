@@ -16,7 +16,14 @@ namespace Essence.Ingest.Hours;
 /// Every element is a record, its hours or not (about 184 have <c>opening_hours</c>), so a station knows which element
 /// to edit; hours that can't be read for sure, even leniently, leave the record without them, with a warning. Matched to
 /// the feed's stations of the same brand (<c>brand</c>, else <c>operator</c>, else <c>name</c>) within 150 m, confirmed by
-/// the postal code or the house number. OpenStreetMap's hours are shown, never trusted to leave a station out.
+/// the postal code or the house number, or within 2 km at the same house number and postal code. OpenStreetMap's hours
+/// are shown, never trusted to leave a station out.
+/// </para>
+/// <para>
+/// Many elements' brands are years out of date (a third of those by the stations left unmatched were last edited in
+/// 2020 or before): a station still without an element gets the one of another brand, or none, that's within
+/// <see cref="OtherBrandReachM"/> of it when no other feed station is within 150 m of the element, without the
+/// element's hours (they're likely out of date too), so a correction made in the app can be sent to it.
 /// </para>
 /// <para>
 /// The brand is kept only when some station of the feed has it: an operator or a name can be a person's ("Garage
@@ -45,6 +52,12 @@ public sealed class OverpassSource(OverpassClient client, IHoursStations station
     public bool Enabled => options.Value.Osm.Enabled;
     public bool ShippedInImage => false;
     public double MatchRadiusM => 150;
+
+    /// <summary>
+    /// An element of another brand, or none, on a station left without one is the station's when it's this close and
+    /// alone there (<see cref="HoursMatcher"/>): OpenStreetMap's brands are often years out of date.
+    /// </summary>
+    public double? OtherBrandReachM => 50;
 
     /// <summary>
     /// Asks each server in turn until one answers with elements, and keeps them with only their point and the tags read
