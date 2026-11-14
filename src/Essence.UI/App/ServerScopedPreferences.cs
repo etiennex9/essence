@@ -4,8 +4,9 @@ namespace Essence.UI.App;
 
 /// <summary>
 /// Keeps what names stations per server: a station's id is its row in that server's database, so another server's id 12 is
-/// another station. Favorites and the comparison get the server in their key (<c>essence.favorites@example.com</c>); cars,
-/// places and the fuel are the driver's own and stay shared.
+/// another station. Favorites, the comparison and the corrected hours get the server in their key
+/// (<c>essence.favorites@example.com</c>); cars, places and the fuel are the driver's own and stay shared, and so does the
+/// linked OpenStreetMap account, which isn't kept here at all (<see cref="IOsmTokenStore"/>).
 /// </summary>
 /// <param name="serverId">The current server (<see cref="ServerAddress.DisplayName"/> of its API); null or empty before one is chosen.</param>
 public sealed class ServerScopedPreferences(IPreferenceStore inner, Func<string?> serverId) : IPreferenceStore
@@ -15,6 +16,7 @@ public sealed class ServerScopedPreferences(IPreferenceStore inner, Func<string?
     {
         FavoriteStations.StorageKey,
         ComparedStations.StorageKey,
+        StationHoursOverrides.StorageKey,
     };
 
     public ValueTask<string?> GetAsync(string key) => inner.GetAsync(KeyFor(key));

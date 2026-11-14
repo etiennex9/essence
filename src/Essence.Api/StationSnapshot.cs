@@ -1,5 +1,6 @@
 using Essence.Contracts;
 using Essence.Data;
+using Essence.Data.Entities;
 using Essence.Hours;
 using Essence.Ranking;
 using Microsoft.EntityFrameworkCore;
@@ -30,7 +31,23 @@ public sealed record SnapshotHours(StationHours Dto, OpeningHours Hours, TimeZon
 }
 
 /// <summary>A row of <c>station_hours</c>, with where its station is (for its time zone).</summary>
-public sealed record SnapshotHoursRow(HoursRow Row, double? Latitude, double? Longitude);
+/// <param name="SourceRef">The source's id for the place: for OpenStreetMap, the element (<c>node/6756481766</c>).</param>
+/// <param name="MatchedBy">How the row was matched to the station (<see cref="StationHoursEntry.MatchedBy"/>).</param>
+/// <param name="SourceBrand">The brand the source writes for the place (<see cref="StationHoursEntry.SourceBrand"/>).</param>
+public sealed record SnapshotHoursRow(
+    HoursRow Row, double? Latitude, double? Longitude, string? SourceRef = null, string? MatchedBy = null, string? SourceBrand = null);
+
+/// <summary>A station's OpenStreetMap element, as <see cref="StationSnapshot.OsmElementsOf"/> found it.</summary>
+/// <param name="Ref"><c>node/123</c>, <c>way/456</c> or <c>relation/789</c>.</param>
+/// <param name="BrandDiffers">
+/// Matched by place only (<see cref="StationHoursEntry.ByLocation"/>): on OpenStreetMap it's of another brand or none
+/// (<see cref="StationDetail.OsmBrandDiffers"/>).
+/// </param>
+/// <param name="Brand">
+/// Its brand there as the last run read it, when a feed station has it (<see cref="StationHoursEntry.SourceBrand"/>,
+/// <see cref="StationDetail.OsmBrand"/>): "Sonic"; null for none.
+/// </param>
+public sealed record SnapshotOsmElement(string Ref, bool BrandDiffers, string? Brand = null);
 
 /// <param name="Version">The import it was loaded for (<see cref="DataVersion"/>); null before the first one.</param>
 /// <param name="HoursVersion">
@@ -43,14 +60,22 @@ public sealed record SnapshotHoursRow(HoursRow Row, double? Latitude, double? Lo
 /// When the hours it holds last changed (<see cref="StationSnapshot.HoursChangedAt"/>): what the 304 rule compares with
 /// <c>If-Modified-Since</c>. Null before the first hours run.
 /// </param>
+/// <param name="OsmElements">
+/// The OpenStreetMap element each station was matched to (<see cref="StationSnapshot.OsmElementsOf"/>), its hours or not,
+/// by id: where the app sends a correction of them.
+/// </param>
 public sealed record Snapshot(
     DateTimeOffset? Version,
     IReadOnlyList<SnapshotStation> Stations,
     DateTimeOffset? HoursVersion,
     IReadOnlyDictionary<long, SnapshotHours> Hours,
     DateTimeOffset? HoursStaleAt,
-    DateTimeOffset? HoursChangedAt)
+    DateTimeOffset? HoursChangedAt,
+    IReadOnlyDictionary<long, SnapshotOsmElement>? OsmElements = null)
 {
+    /// <summary>The station's OpenStreetMap element, <c>node/123</c>, and how it was matched; null when it wasn't matched to one.</summary>
+    public SnapshotOsmElement? OsmElementOf(long stationId) => OsmElements?.GetValueOrDefault(stationId);
+
     /// <summary>Still what the data says: the same import and hours run, and no source gone stale since.</summary>
     public bool IsCurrent(DateTimeOffset? version, DateTimeOffset? hoursVersion, DateTimeOffset now) =>
         Version == version && HoursVersion == hoursVersion && !(now > HoursStaleAt);
@@ -117,7 +142,10 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
                 .Select(h => new SnapshotHoursRow(
                     new HoursRow(h.StationId, h.Source, h.OpeningHours, h.Confirmed, h.TemporarilyClosed, h.SourceCheckedAt, h.SourceUrl),
                     h.Station.Latitude,
-                    h.Station.Longitude))
+                    h.Station.Longitude,
+                    h.SourceRef,
+                    h.MatchedBy,
+                    h.SourceBrand))
                 .ToListAsync(cancellationToken);
             var hours = ChooseHours(hourRows, lastSuccesses, now, _staleAfter);
             return _current = new Snapshot(
@@ -126,7 +154,8 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
                 hoursVersion,
                 hours,
                 HoursPrecedence.StaleAt(lastSuccesses, now, _staleAfter),
-                HoursChangedAt(hoursVersion, lastSuccesses, now, _staleAfter));
+                HoursChangedAt(hoursVersion, lastSuccesses, now, _staleAfter),
+                OsmElementsOf(hourRows));
         }
         finally
         {
@@ -156,6 +185,32 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
                     QuebecTime.ZoneFor(latitude, longitude));
             });
     }
+
+    /// <summary>
+    /// Each station's OpenStreetMap element, from its <c>osm</c> row, with a rule or without one (OpenStreetMap often has the
+    /// place but not its hours): <c>node/123</c>, <c>way/456</c> or <c>relation/789</c>, and whether it was matched by place
+    /// only (<see cref="StationHoursEntry.ByLocation"/>), its brand there another or none, with that brand as it's written
+    /// there. A reference of another shape is left out, so the app is never sent elsewhere than to an element.
+    /// </summary>
+    public static IReadOnlyDictionary<long, SnapshotOsmElement> OsmElementsOf(IEnumerable<SnapshotHoursRow> rows)
+    {
+        var elements = new Dictionary<long, SnapshotOsmElement>();
+        foreach (var row in rows)
+        {
+            if (row.Row.Source == HoursPrecedence.Osm && IsOsmElement(row.SourceRef))
+            {
+                elements[row.Row.StationId] = new SnapshotOsmElement(
+                    row.SourceRef!, row.MatchedBy == StationHoursEntry.ByLocation, string.IsNullOrWhiteSpace(row.SourceBrand) ? null : row.SourceBrand);
+            }
+        }
+
+        return elements;
+    }
+
+    /// <summary><c>node/123</c>, <c>way/456</c>, <c>relation/789</c>: a type, and an id above 0 in digits.</summary>
+    public static bool IsOsmElement(string? reference) =>
+        reference?.Split('/') is [var type and ("node" or "way" or "relation"), var id]
+        && id.Length > 0 && id.All(char.IsAsciiDigit) && long.TryParse(id, out var number) && number > 0;
 
     /// <summary>
     /// When the hours served last changed: the latest hours run that changed them (<paramref name="hoursVersion"/>), or the

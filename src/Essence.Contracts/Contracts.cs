@@ -48,6 +48,21 @@ public sealed record StationHours(
     bool TemporarilyClosed = false);
 
 /// <param name="Hours">Its opening hours; null when no source has them (hours unknown).</param>
+/// <param name="OsmElement">
+/// The OpenStreetMap element the station was matched to, its hours or not: <c>node/123</c>, <c>way/456</c> or
+/// <c>relation/789</c>, so the app can send a correction of its hours there. Null when none was, and from an older API.
+/// </param>
+/// <param name="OsmBrandDiffers">
+/// That element was matched to the station by place only: on OpenStreetMap it's of another brand or none, its brand
+/// likely out of date, so the app offers to set the station's brand on it too (when the station has one). False when
+/// it's of the station's brand; null when there's no element, and from an older API.
+/// </param>
+/// <param name="OsmBrand">
+/// The brand that element has on OpenStreetMap, as Essence last read it: its <c>brand</c>, else its <c>operator</c>, else
+/// its <c>name</c> ("Sonic"), when some station of the feed has that brand. Null when it has none (a name of its own,
+/// "Dépanneur Sonic", is no brand), when there's no element, and from an older API. An element with no <c>brand</c> tag
+/// whose name is this is named after its brand: setting the station's brand renames it too.
+/// </param>
 public sealed record StationDetail(
     long Id,
     string? Name,
@@ -63,7 +78,10 @@ public sealed record StationDetail(
     DateTimeOffset LastSeenAt,
     DateTimeOffset UpdatedAt,
     IReadOnlyList<CurrentPriceDto> Prices,
-    StationHours? Hours = null);
+    StationHours? Hours = null,
+    string? OsmElement = null,
+    bool? OsmBrandDiffers = null,
+    string? OsmBrand = null);
 
 /// <param name="Hours">Its opening hours; null when no source has them (hours unknown).</param>
 public sealed record NearbyStation(
@@ -297,3 +315,16 @@ public sealed record HoursSourceStatus(
     int ConsecutiveFailures,
     int Stations,
     string? DataVersion);
+
+/// <summary>
+/// What the apps need of their server's settings (<c>/client-config</c>): the Android app picks its server at run time, so
+/// what differs between deployments comes from the server rather than the build.
+/// </summary>
+/// <param name="OsmClientId">
+/// The client id of the deployment's OpenStreetMap OAuth 2 application (a public client, no secret), with which a device
+/// links its own OpenStreetMap account to send its hours corrections there; null when the server has none, and editing
+/// OpenStreetMap is off.
+/// </param>
+/// <param name="OsmAuthUrl">Where that application signs in and gets its token: <c>https://www.openstreetmap.org</c>, or OpenStreetMap's development server.</param>
+/// <param name="OsmApiUrl">Where edits go: <c>https://api.openstreetmap.org</c>, or the development server's.</param>
+public sealed record ClientConfig(string? OsmClientId, string OsmAuthUrl, string OsmApiUrl);

@@ -122,6 +122,13 @@ public sealed class EssenceApiClient(HttpClient http)
     public Task<ApiResult<DataServicesStatus>> GetServicesAsync(CancellationToken cancellationToken) =>
         GetAsync("services", EssenceJsonContext.Default.DataServicesStatus, cancellationToken);
 
+    /// <summary>
+    /// What the app needs of the server's settings (<c>/client-config</c>): its OpenStreetMap application.
+    /// <see cref="ApiError.NotFound"/> from a server older than it.
+    /// </summary>
+    public Task<ApiResult<ClientConfig>> GetClientConfigAsync(CancellationToken cancellationToken) =>
+        GetAsync("client-config", EssenceJsonContext.Default.ClientConfig, cancellationToken);
+
     public Task<ApiResult<StationDetail>> GetStationAsync(long id, CancellationToken cancellationToken) =>
         GetAsync(string.Create(CultureInfo.InvariantCulture, $"stations/{id}"), EssenceJsonContext.Default.StationDetail, cancellationToken);
 
@@ -226,4 +233,5 @@ public sealed record TripQuery(
 [JsonSerializable(typeof(List<PriceHistoryDto>))]
 [JsonSerializable(typeof(List<PlaceSuggestion>))]
 [JsonSerializable(typeof(DataServicesStatus))]
+[JsonSerializable(typeof(ClientConfig))]
 public sealed partial class EssenceJsonContext : JsonSerializerContext;

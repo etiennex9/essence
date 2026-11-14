@@ -3,6 +3,8 @@
 @implements IAsyncDisposable
 @inject EssenceApiClient Api
 @inject FavoriteStations Favorites
+@inject StationHoursOverrides Overrides
+@inject StationHoursView HoursViews
 @inject ComparedStations Comparison
 @inject BestNearYou Best
 @inject CarProfiles Cars
@@ -397,6 +399,8 @@
     protected override void OnInitialized()
     {
         Favorites.Changed += OnFavoritesChanged;
+        Overrides.Changed += OnHoursCorrected;
+        _ = Overrides.LoadAsync();
         Comparison.Changed += OnComparisonChanged;
         Updates.Changed += OnUpdateChanged;
         _appHost = ServiceProvider.GetService<IAppHost>();
@@ -1097,7 +1101,7 @@
         var price = Formatting.Price(visible.HasPrice ? visible.Price!.PriceCents : null, CultureInfo.CurrentCulture);
         string label = visible.HasPrice ? L["MarkerPrice", name, price] : L["MarkerUnavailable", name, _fuel];
         var favorite = Favorites.IsFavorite(station.Id);
-        var closed = IsClosed(station.Hours, station.Latitude, station.Longitude, now);
+        var closed = IsClosed(station.Id, station.Hours, station.Latitude, station.Longitude, now);
         return new MarkerModel(
             station.Id, station.Latitude, station.Longitude, Label(label, station.Id, favorite, emphasis, closed), price, !visible.HasPrice,
             ToneName(visible.Tone), 0, favorite, brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl, Closed: closed);
@@ -1113,7 +1117,7 @@
         string label = L["MarkerPrice", $"{brand.Name ?? L["Independent"]}, {address}", price];
         var favorite = Favorites.IsFavorite(id);
         var tone = StationViewport.ToneOf(priceCents, visiblePrices);
-        var closed = IsClosed(_stations.Find(id)?.Hours, latitude, longitude, now);
+        var closed = IsClosed(id, _stations.Find(id)?.Hours, latitude, longitude, now);
         return new MarkerModel(
             id, latitude, longitude, Label(label, id, favorite, emphasis, closed), price, false, ToneName(tone), 0, favorite,
             brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl, Closed: closed);
@@ -1123,9 +1127,9 @@
     /// Its hours say it's closed now, or its source that it's closed for now: its marker is grey. When that changes counts
     /// toward the next render of the markers (<see cref="_nextHoursChange"/>).
     /// </summary>
-    private bool IsClosed(Essence.Contracts.StationHours? hours, double latitude, double longitude, DateTimeOffset now)
+    private bool IsClosed(long id, Essence.Contracts.StationHours? hours, double latitude, double longitude, DateTimeOffset now)
     {
-        var (closed, changesAt) = StationHoursView.MarkerAt(hours, latitude, longitude, now);
+        var (closed, changesAt) = StationHoursView.MarkerAt(HoursViews.HoursOf(id, hours), latitude, longitude, now);
         if (changesAt is { } at && !(_nextHoursChange <= at))
         {
             _nextHoursChange = at;
@@ -1793,6 +1797,9 @@
     /// <summary>A station starred or un-starred: its marker gains or loses the star.</summary>
     private void OnFavoritesChanged() => InvokeAsync(RenderMarkersAsync);
 
+    /// <summary>The user corrected a station's hours, or undid it: its marker is grey or not as its hours now say.</summary>
+    private void OnHoursCorrected() => InvokeAsync(RenderMarkersAsync);
+
     /// <summary>The toolbar shows how many stations are compared.</summary>
     private void OnComparisonChanged() => InvokeAsync(StateHasChanged);
 
@@ -1885,6 +1892,7 @@
         _disposed = true;
         _hoursTimer?.Dispose();
         Favorites.Changed -= OnFavoritesChanged;
+        Overrides.Changed -= OnHoursCorrected;
         Comparison.Changed -= OnComparisonChanged;
         Updates.Changed -= OnUpdateChanged;
         Updates.ReloadDue -= OnReloadDue;

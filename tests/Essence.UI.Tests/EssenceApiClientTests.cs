@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Essence.Contracts;
 using Essence.UI.Services;
 
@@ -114,6 +115,101 @@ public class EssenceApiClientTests
         var result = await client.GetStationAsync(42, TestContext.Current.CancellationToken);
 
         Assert.Equal(withHours ? Hours : null, result.Value!.Hours);
+    }
+
+    [Theory]
+    [InlineData(",\"osmElement\":\"way/456\"", "way/456")]
+    [InlineData(",\"osmElement\":null", null)]
+    [InlineData("", null)]
+    public async Task A_station_s_details_read_its_OpenStreetMap_element_or_none_from_an_older_API(string field, string? element)
+    {
+        var json = $$"""
+            {"id":42,"name":"Costco Laval","brand":"Costco","status":"En opération","address":"1 rue Principale",
+             "postalCode":"H7T0A1","region":"Laval","latitude":45.5699,"longitude":-73.7469,"isActive":true,
+             "firstSeenAt":"2026-10-01T00:00:00Z","lastSeenAt":"2026-11-11T00:00:00Z","updatedAt":"2026-11-11T00:00:00Z",
+             "prices":[],"hours":null{{field}}}
+            """;
+        var (client, _) = Client(_ => Json(json));
+
+        var result = await client.GetStationAsync(42, TestContext.Current.CancellationToken);
+
+        Assert.Equal(element, result.Value!.OsmElement);
+    }
+
+    [Theory]
+    [InlineData(",\"osmElement\":\"way/456\",\"osmBrandDiffers\":true", true)]
+    [InlineData(",\"osmElement\":\"way/456\",\"osmBrandDiffers\":false", false)]
+    [InlineData(",\"osmElement\":null,\"osmBrandDiffers\":null", null)]
+    [InlineData(",\"osmElement\":\"way/456\"", null)]
+    [InlineData("", null)]
+    public async Task A_station_s_details_say_whether_its_element_was_matched_by_place_only_or_not_from_an_older_API(string fields, bool? differs)
+    {
+        var json = $$"""
+            {"id":42,"name":"Nutrinor Energies","brand":"Nutrinor Énergies","status":"En opération","address":"1 rue Principale",
+             "postalCode":"G7H0A1","region":"Saguenay-Lac-Saint-Jean","latitude":48.42,"longitude":-71.07,"isActive":true,
+             "firstSeenAt":"2026-10-01T00:00:00Z","lastSeenAt":"2026-11-11T00:00:00Z","updatedAt":"2026-11-11T00:00:00Z",
+             "prices":[],"hours":null{{fields}}}
+            """;
+        var (client, _) = Client(_ => Json(json));
+
+        var result = await client.GetStationAsync(42, TestContext.Current.CancellationToken);
+
+        Assert.Equal(differs, result.Value!.OsmBrandDiffers);
+    }
+
+    [Theory]
+    [InlineData(",\"osmElement\":\"node/5310653589\",\"osmBrandDiffers\":true,\"osmBrand\":\"Sonic\"", "Sonic")]
+    [InlineData(",\"osmElement\":\"way/221282039\",\"osmBrandDiffers\":true,\"osmBrand\":null", null)]
+    [InlineData(",\"osmElement\":\"way/456\",\"osmBrandDiffers\":true", null)]
+    [InlineData("", null)]
+    public async Task A_station_s_details_say_the_brand_read_on_its_element_or_nothing_from_an_older_API(string fields, string? brand)
+    {
+        var json = $$"""
+            {"id":42,"name":"Nutrinor Energies","brand":"Nutrinor Énergies","status":"En opération","address":"253 rue Principale",
+             "postalCode":"G0W2V0","region":"Saguenay-Lac-Saint-Jean","latitude":48.58,"longitude":-71.55,"isActive":true,
+             "firstSeenAt":"2026-10-01T00:00:00Z","lastSeenAt":"2026-11-11T00:00:00Z","updatedAt":"2026-11-11T00:00:00Z",
+             "prices":[],"hours":null{{fields}}}
+            """;
+        var (client, _) = Client(_ => Json(json));
+
+        var result = await client.GetStationAsync(42, TestContext.Current.CancellationToken);
+
+        Assert.Equal(brand, result.Value!.OsmBrand);
+    }
+
+    [Fact]
+    public void An_older_app_reads_the_details_as_before_whether_its_element_was_matched_by_place_only_or_not()
+    {
+        var station = TestStations.Detail(42, "Nutrinor Énergies") with { OsmElement = "way/456", OsmBrandDiffers = true, OsmBrand = "Sonic" };
+        var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+
+        var json = JsonSerializer.Serialize(station, web);
+        var older = JsonSerializer.Deserialize<OlderStationDetail>(json, web);
+
+        Assert.EndsWith(""","osmElement":"way/456","osmBrandDiffers":true,"osmBrand":"Sonic"}""", json);
+        Assert.Equal(new OlderStationDetail(42, "Nutrinor Énergies", "way/456"), older);
+    }
+
+    /// <summary>
+    /// The details as an app from before <see cref="StationDetail.OsmBrandDiffers"/> and <see cref="StationDetail.OsmBrand"/>
+    /// reads them (the fields it needs).
+    /// </summary>
+    private sealed record OlderStationDetail(long Id, string? Brand, string? OsmElement = null);
+
+    [Fact]
+    public async Task The_server_s_settings_name_its_OpenStreetMap_application_and_an_older_server_has_none()
+    {
+        var (client, requests) = Client(r => r.RequestUri!.AbsolutePath == "/client-config"
+            ? Json("""{"osmClientId":"abc123","osmAuthUrl":"https://www.openstreetmap.org","osmApiUrl":"https://api.openstreetmap.org"}""")
+            : new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        var config = await client.GetClientConfigAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(new ClientConfig("abc123", "https://www.openstreetmap.org", "https://api.openstreetmap.org"), config.Value);
+        Assert.Equal("/client-config", Assert.Single(requests).RequestUri!.AbsolutePath);
+
+        var (older, _) = Client(_ => new HttpResponseMessage(HttpStatusCode.NotFound));
+        Assert.Equal(ApiError.NotFound, (await older.GetClientConfigAsync(TestContext.Current.CancellationToken)).Error);
     }
 
     [Fact]

@@ -6,7 +6,7 @@ namespace Essence.Ingest.Tests;
 public sealed class HoursDiffTests
 {
     private static readonly HoursRow Laval = new(
-        "Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30", "505", CostcoSource.Link, StationHoursEntry.ByDistance, 18, true, false, null);
+        "Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30", "505", CostcoSource.Link, StationHoursEntry.ByDistance, 18, true, false, null, null);
 
     [Fact]
     public void A_station_without_a_row_gets_one_a_changed_row_is_updated_and_a_station_no_longer_matched_loses_its_row()
@@ -51,7 +51,10 @@ public sealed class HoursDiffTests
     {
         var station = new MatchStation(1, "key", "nutrinor-energies", 48.4, -71.1, "100", "G7J3C5");
         var sonic = new SourceRecord("way/1", "sonic", 48.40018, -71.1, null, null, "Mo-Su 06:00-23:00",
-            OverpassSource.ElementLink + "way/1", new DateTimeOffset(2025, 6, 1, 4, 0, 0, TimeSpan.Zero), false);
+            OverpassSource.ElementLink + "way/1", new DateTimeOffset(2025, 6, 1, 4, 0, 0, TimeSpan.Zero), false)
+        {
+            Brand = "Sonic",
+        };
         var match = Assert.Single(HoursMatcher.Match([sonic], [station], 150, 50).Matches);
         var entry = new StationHoursEntry { Source = OverpassSource.SourceName, SourceRef = "", MatchedBy = "" };
 
@@ -62,6 +65,21 @@ public sealed class HoursDiffTests
         Assert.Equal(
             ("way/1", "https://www.openstreetmap.org/way/1", StationHoursEntry.ByLocation, 20, false, false),
             (entry.SourceRef, entry.SourceUrl, entry.MatchedBy, entry.MatchDistanceM!.Value, entry.Confirmed, entry.TemporarilyClosed));
+        // Its brand there, for the app to tell a name that's the old brand's ("Sonic") from one of its own.
+        Assert.Equal("Sonic", entry.SourceBrand);
+    }
+
+    [Fact]
+    public void A_row_whose_brand_on_the_source_changed_is_updated()
+    {
+        var sonic = Laval with { SourceRef = "node/1", SourceBrand = "Sonic" };
+
+        var changes = HoursDiff.Compute(
+            new Dictionary<long, HoursRow> { [1] = sonic, [2] = sonic with { SourceBrand = null } },
+            new Dictionary<long, HoursRow> { [1] = sonic with { SourceBrand = "Ultramar" }, [2] = sonic });
+
+        Assert.Equal([1L, 2L], changes.Updated.Keys.Order());
+        Assert.Equal("Ultramar", changes.Updated[1].SourceBrand);
     }
 
     [Fact]
@@ -70,7 +88,9 @@ public sealed class HoursDiffTests
         var entry = new StationHoursEntry { Source = "costco", SourceRef = "", MatchedBy = "" };
 
         Laval.CopyTo(entry);
-
         Assert.Equal(Laval, HoursRow.Of(entry));
+
+        (Laval with { SourceBrand = "Sonic" }).CopyTo(entry);
+        Assert.Equal(Laval with { SourceBrand = "Sonic" }, HoursRow.Of(entry));
     }
 }
