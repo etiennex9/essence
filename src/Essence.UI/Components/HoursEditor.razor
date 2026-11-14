@@ -13,8 +13,10 @@
    closed or open from one time to another, or open 24 hours, starting from the hours shown (HoursDraft). Saved, they're
    the app's for that station (StationHoursOverrides), and with an OpenStreetMap account linked and the station's element
    known, they can go to OpenStreetMap too, in the user's name (OsmAccount): never a brand's hours on their own, only once
-   the user says they checked them. A native modal dialog opened from JS (essenceDialog.js, as ClosingDialog's): Esc,
-   Android's Back and its own buttons close it, never a tap beside it, which would throw away the week typed. *@
+   the user says they checked them. It names the element they'd go to, as OpenStreetMap has it now; one matched by place
+   only, of another brand or none there, can get the station's brand with them, when the user ticks it. A native modal
+   dialog opened from JS (essenceDialog.js, as ClosingDialog's): Esc, Android's Back and its own buttons close it, never a
+   tap beside it, which would throw away the week typed. *@
 <dialog class="editor" @ref="_dialog" aria-labelledby="@_titleId" closedby="closerequest" @onclose="OnClosed">
     <h2 id="@_titleId">@(_known ? L["HoursEditorTitle"] : L["AddHours"])</h2>
     <p class="station">@Name · @Station.Address</p>
@@ -24,6 +26,8 @@
         var built = draft.TryBuild(out var hours, out _) ? hours : null;
         var (allowed, ticked) = built is null ? (true, true) : HoursDraft.OsmChoice(Station.Hours, built, _surveyed);
         var sends = allowed && (_osmUpdate ?? ticked);
+        var brand = HoursDraft.BrandToOffer(Station, _tags);
+        var (brandAllowed, brandTicked) = HoursDraft.BrandChoice(sends, _setBrand);
         var editing = _phase == Phase.Editing;
 
         <fieldset class="week" disabled="@(!editing)">
@@ -71,8 +75,15 @@
         {
             <section class="osm" aria-labelledby="@_osmTitleId">
                 <h3 id="@_osmTitleId">OpenStreetMap</h3>
-                @if (_element is { IsEditable: true })
+                @if (_element is { IsEditable: true } editable)
                 {
+                    @if (_tags is { } tags)
+                    {
+                        <p class="hint element">
+                            @L["OsmElementLabel"]
+                            <a href="@editable.PageOn(osm.AuthUrl)" target="_blank" rel="noopener">@OsmEditTexts.ElementName(L, tags)</a>
+                        </p>
+                    }
                     @if (Osm.IsLinked)
                     {
                         <fieldset class="osm-choices" disabled="@(!editing)" aria-labelledby="@_osmTitleId">
@@ -84,7 +95,18 @@
                                 <input type="checkbox" checked="@sends" disabled="@(!allowed)" @onchange="e => _osmUpdate = e.Value is true" />
                                 @L["OsmAlsoUpdate"]
                             </label>
+                            @if (brand is not null)
+                            {
+                                <label class="check">
+                                    <input type="checkbox" checked="@brandTicked" disabled="@(!brandAllowed)" @onchange="e => _setBrand = e.Value is true" />
+                                    @L["OsmAlsoSetBrand", brand]
+                                </label>
+                            }
                         </fieldset>
+                        @if (brand is not null)
+                        {
+                            <p class="hint">@OsmEditTexts.BrandNote(L, _tags)</p>
+                        }
                         @if (built is not null && Station.Hours is { } server && HoursDraft.SameAs(server, built))
                         {
                             <p class="hint">@(HoursDraft.IsBrand(server) ? L["OsmBrandHours", Name] : L["OsmSameHours"])</p>
@@ -143,7 +165,7 @@
                     <button type="button" class="secondary reset" disabled="@(!editing)" @onclick="ResetAsync">@L["HoursReset"]</button>
                 }
                 <button type="button" class="secondary" disabled="@(!editing)" @onclick="CloseAsync">@L["Cancel"]</button>
-                <button type="button" class="primary" disabled="@(!editing)" @onclick="() => SaveAsync(sends)">@L["Save"]</button>
+                <button type="button" class="primary" disabled="@(!editing)" @onclick="() => SaveAsync(sends, brandTicked ? brand : null)">@L["Save"]</button>
             }
         </div>
     }
@@ -184,6 +206,18 @@
 
     /// <summary>"Also update OpenStreetMap" as the user set it; null until they do, and it's ticked as <see cref="HoursDraft.OsmChoice"/> says.</summary>
     private bool? _osmUpdate;
+
+    /// <summary>
+    /// The element as OpenStreetMap has it now (<see cref="OsmAccount.ReadTagsAsync"/>), to name it and say its brand; null
+    /// until it's read, and when it can't be.
+    /// </summary>
+    private OsmElementTags? _tags;
+
+    /// <summary>The element being read, given up when the editor opens again or goes.</summary>
+    private CancellationTokenSource? _reading;
+
+    /// <summary>"Also set its brand to …" as the user set it (<see cref="HoursDraft.BrandChoice"/>): unticked each time it opens.</summary>
+    private bool _setBrand;
 
     private Phase _phase;
     private Uri? _sentPage;
@@ -248,8 +282,13 @@
             _draft = HoursDraft.From(hours);
             _known = hours is not null;
             _element = OsmElementRef.TryParse(Station.OsmElement, out var element) ? element : null;
-            (_invalid, _surveyed, _osmUpdate, _phase, _sentPage, _failure, _editThere) = (null, false, null, Phase.Editing, null, null, null);
+            (_invalid, _surveyed, _osmUpdate, _setBrand, _tags) = (null, false, null, false, null);
+            (_phase, _sentPage, _failure, _editThere) = (Phase.Editing, null, null, null);
             StateHasChanged();
+            if (_element is { IsEditable: true } editable)
+            {
+                _ = ReadTagsAsync(editable);
+            }
         }
 
         try
@@ -269,6 +308,30 @@
         catch (JSDisconnectedException)
         {
             // The page is going away.
+        }
+    }
+
+    /// <summary>
+    /// Reads the element as OpenStreetMap has it now, while the editor opens: what it's named, and its brand there. A
+    /// failure says nothing (the element is then only not named), and an answer for an element no longer the one shown is
+    /// left be.
+    /// </summary>
+    private async Task ReadTagsAsync(OsmElementRef element)
+    {
+        _reading?.Cancel();
+        var reading = _reading = new CancellationTokenSource();
+        try
+        {
+            var tags = await Osm.ReadTagsAsync(element, reading.Token);
+            if (!reading.IsCancellationRequested && !_disposed && _element == element)
+            {
+                _tags = tags;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex) when (ex is OperationCanceledException or JSDisconnectedException)
+        {
+            // Opened again, or gone: the newer read, or none, says it.
         }
     }
 
@@ -293,9 +356,10 @@
 
     /// <summary>
     /// Saves the hours on the device at once, then, when asked to, sends them to OpenStreetMap, saying how that went: the
-    /// correction stays saved either way.
+    /// correction stays saved either way. Only the hours are kept on the device; a brand set on the element isn't.
     /// </summary>
-    private async Task SaveAsync(bool sendToOsm)
+    /// <param name="brand">The station's brand to set on the element with the hours ("Also set its brand"); null leaves it.</param>
+    private async Task SaveAsync(bool sendToOsm, string? brand)
     {
         if (_draft is not { } draft || _phase != Phase.Editing)
         {
@@ -322,7 +386,7 @@
         {
             // Not cancelled if the details close meanwhile: the user asked for it to be sent.
             var changeset = await Osm.SendHoursAsync(
-                new OsmHoursEdit(element, hours.ToRule(), Today(), await CreatedByAsync(), L["OsmChangesetComment", Name], _surveyed),
+                new OsmHoursEdit(element, hours.ToRule(), Today(), await CreatedByAsync(), OsmEditTexts.Comment(L, Name, brand), _surveyed, brand),
                 CancellationToken.None);
             _sentPage = Osm.Settings?.ChangesetPage(changeset);
         }
@@ -414,6 +478,7 @@
     public async ValueTask DisposeAsync()
     {
         _disposed = true;
+        _reading?.Cancel();
         Navigation.LocationChanged -= OnLocationChanged;
         Osm.Changed -= OnOsmChanged;
         await DetachAsync();

@@ -1254,4 +1254,25 @@
   <data name="OsmChangesetComment" xml:space="preserve">
     <value>Mise à jour des heures d’ouverture de {0}</value>
   </data>
+  <data name="OsmChangesetCommentBrand" xml:space="preserve">
+    <value>Mise à jour des heures d’ouverture et de la marque de {0}</value>
+  </data>
+  <data name="OsmElementLabel" xml:space="preserve">
+    <value>OpenStreetMap :</value>
+  </data>
+  <data name="OsmUnnamed" xml:space="preserve">
+    <value>station sans nom</value>
+  </data>
+  <data name="OsmAlsoSetBrand" xml:space="preserve">
+    <value>Lui donner aussi la marque {0}</value>
+  </data>
+  <data name="OsmBrandNow" xml:space="preserve">
+    <value>OpenStreetMap indique {0}.</value>
+  </data>
+  <data name="OsmNoBrandNow" xml:space="preserve">
+    <value>OpenStreetMap ne lui donne aucune marque.</value>
+  </data>
+  <data name="OsmBrandFirstHand" xml:space="preserve">
+    <value>Seulement pour ce que vous savez de première main : OpenStreetMap n’accepte ni Google Maps ni Street View comme source.</value>
+  </data>
 </root>

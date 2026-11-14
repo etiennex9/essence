@@ -231,7 +231,8 @@ per station (see **Which hours show**), and the app shows them.
     or none, when it's within 50 m, no other feed station (of any brand, matched or not) is within 150 m of the element,
     and no other free element is within 50 m of the station. The element's hours aren't taken, its brand suggesting
     they're as old: the row (`location`, never confirmed, no rule) only says which element a correction made in the app
-    goes to. Nutrinor Chicoutimi on boulevard Saint-Paul stays without one: its element is 62 m away, and 54 m from the
+    goes to, and the details say so (`osmBrandDiffers`), for the editor to offer the station's brand with the hours.
+    Nutrinor Chicoutimi on boulevard Saint-Paul stays without one: its element is 62 m away, and 54 m from the
     Petro-Canada next door.
 - **Checks.** A run whose source gives no records, or that matches fewer stations than 80 % of the last good run, is
   rejected: nothing is written, and the last good hours keep serving. The stations matched by location only don't
@@ -320,7 +321,17 @@ per station (see **Which hours show**), and the app shows them.
   says "Sent to OpenStreetMap" with a link to the changeset, or OpenStreetMap's reason; the correction stays saved on the
   device either way. **A brand's hours are never sent on their own:** hours equal to the ones shown from a brand (or
   Essence's own) leave the box unticked, and can't be sent until the user says they checked them at the station; equal to
-  OpenStreetMap's own, sending only says when they were checked, so the box starts unticked. A relation isn't edited
+  OpenStreetMap's own, sending only says when they were checked, so the box starts unticked. The editor names the
+  element the hours go to, as OpenStreetMap has it now ("OpenStreetMap: Dépanneur Sonic", its name, else its brand, read
+  without the token; nothing is said when it can't be read). For an element matched by location only
+  (`osmBrandDiffers`), it also offers **Also set its brand to <brand>**, saying what OpenStreetMap says now: unticked,
+  and only for what the user knows first-hand, as OpenStreetMap takes neither Google Maps nor Street View as a source.
+  Ticked, the same edit sets `brand` to the station's, removes `brand:wikidata` and `brand:wikipedia` (they'd describe
+  the old brand), and sets `name` to it only when the name was the old brand's (accents, case and punctuation aside), so
+  a name of its own stays; the comment becomes "Update opening hours and brand of <name>", and a version conflict does
+  it all again on the newer version. Nothing changes when OpenStreetMap already says the station's brand. The brand goes
+  only with the hours, never on its own: hours the box leaves unticked leave it unticked too. It isn't kept on the
+  device, only the hours are. A relation isn't edited
   (the editor links to OpenStreetMap's own editor instead), and a station without an element gets **Add it on
   OpenStreetMap**, a link to the map at that spot: the app never creates one, to avoid duplicates. Other devices get the
   fix at the next weekly OpenStreetMap run, where no brand's hours outrank it.
@@ -330,7 +341,7 @@ per station (see **Which hours show**), and the app shows them.
 | Endpoint | |
 |---|---|
 | `GET /stations?region&brand&active&q&page&pageSize` | Stations, paged. `q` searches the name, address and postal code. |
-| `GET /stations/{id}` | One station with its current prices, opening hours (`hours`, null when unknown) and OpenStreetMap element (`osmElement`: `node/123`, `way/456`, `relation/789`, its hours or not; null when it wasn't matched to one). |
+| `GET /stations/{id}` | One station with its current prices, opening hours (`hours`, null when unknown) and OpenStreetMap element (`osmElement`: `node/123`, `way/456`, `relation/789`, its hours or not; null when it wasn't matched to one), with `osmBrandDiffers` (true when it was matched by location only, being of another brand or none on OpenStreetMap; null without an element). |
 | `GET /stations/nearby?lat&lon&radiusKm=5&fuel&limit=20` | Active stations within a radius, closest first, with their opening hours. |
 | `GET /stations/best?lat&lon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&radiusKm=10&ignoreHours` | Where to fill up near a point: the pick, the closest, the cheapest and a few others that save, and the stations left out because they'd be closed on arrival (see below). |
 | `GET /trips/best?fromLat&fromLon&toLat&toLon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&rangeKm&spareKm=30&ignoreHours` | Where to fill up on the way to a destination: the route, where to stop, the stations along it ranked by detour, and those left out because they'd be closed on arrival (see below). |

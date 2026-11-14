@@ -6,7 +6,7 @@ namespace Essence.UI.Tests;
 
 /// <summary>
 /// The hours editor's week (HoursEditor.razor): what it starts from, the rule it saves (OpeningHours.FromDays, then ToRule),
-/// and whether the correction may go to OpenStreetMap.
+/// and whether the correction may go to OpenStreetMap, with the station's brand or not.
 /// </summary>
 public class HoursDraftTests
 {
@@ -236,6 +236,55 @@ public class HoursDraftTests
         Assert.Equal((true, false), HoursDraft.OsmChoice(Hours(CostcoRule, "osm"), edited, surveyed: false));
         Assert.Equal((true, true), HoursDraft.OsmChoice(Hours(CostcoRule, "osm"), edited, surveyed: true));
     }
+
+    [Fact]
+    public void The_station_s_brand_is_offered_for_an_element_matched_by_place_only_unless_OpenStreetMap_says_it_now()
+    {
+        var station = TestStations.Detail(1, "Nutrinor Énergies") with { OsmElement = "way/456", OsmBrandDiffers = true };
+
+        Assert.Equal("Nutrinor Énergies", HoursDraft.BrandToOffer(station, null));
+        Assert.Equal("Nutrinor Énergies", HoursDraft.BrandToOffer(station, Tags(("name", "Dépanneur Sonic"))));
+        Assert.Equal("Nutrinor Énergies", HoursDraft.BrandToOffer(station, Tags(("brand", "Sonic"))));
+        Assert.Equal("Nutrinor Énergies", HoursDraft.BrandToOffer(station with { Brand = " Nutrinor Énergies " }, null));
+        Assert.Null(HoursDraft.BrandToOffer(station, Tags(("brand", "NUTRINOR ENERGIES"))));
+    }
+
+    [Fact]
+    public void No_brand_is_offered_for_an_element_of_the_station_s_brand_an_independent_or_from_an_older_API()
+    {
+        var station = TestStations.Detail(1, "Nutrinor Énergies") with { OsmElement = "way/456", OsmBrandDiffers = true };
+
+        Assert.Null(HoursDraft.BrandToOffer(station with { OsmBrandDiffers = false }, null));
+        Assert.Null(HoursDraft.BrandToOffer(station with { OsmBrandDiffers = null }, null));
+        Assert.Null(HoursDraft.BrandToOffer(station with { Brand = null }, Tags(("brand", "Sonic"))));
+        Assert.Null(HoursDraft.BrandToOffer(station with { Brand = "  " }, null));
+    }
+
+    [Fact]
+    public void Setting_the_brand_starts_unticked_is_ticked_only_by_the_user_and_goes_only_with_the_hours()
+    {
+        Assert.Equal((true, false), HoursDraft.BrandChoice(sendsHours: true, chosen: false));
+        Assert.Equal((true, true), HoursDraft.BrandChoice(sendsHours: true, chosen: true));
+        Assert.Equal((false, false), HoursDraft.BrandChoice(sendsHours: false, chosen: true));
+        Assert.Equal((false, false), HoursDraft.BrandChoice(sendsHours: false, chosen: false));
+    }
+
+    [Fact]
+    public void A_brand_s_hours_left_as_they_were_and_unchecked_send_neither_them_nor_the_brand()
+    {
+        var edited = OpeningHours.Parse(CostcoRule);
+
+        var (allowed, ticked) = HoursDraft.OsmChoice(Hours(CostcoRule, "ultramar"), edited, surveyed: false);
+        Assert.Equal((false, false), HoursDraft.BrandChoice(allowed && ticked, chosen: true));
+
+        // Checked at the station, they can go, and the brand with them, once it's ticked.
+        (allowed, ticked) = HoursDraft.OsmChoice(Hours(CostcoRule, "ultramar"), edited, surveyed: true);
+        Assert.Equal((true, false), HoursDraft.BrandChoice(allowed && ticked, chosen: false));
+        Assert.Equal((true, true), HoursDraft.BrandChoice(allowed && ticked, chosen: true));
+    }
+
+    private static OsmElementTags Tags(params (string Key, string Value)[] tags) =>
+        new(tags.Append((Key: "amenity", Value: "fuel")).ToDictionary(t => t.Key, t => t.Value));
 
     private static StationHours Hours(string rule, string source) => new(rule, source, Trusted: true, Confirmed: true, null, null);
 

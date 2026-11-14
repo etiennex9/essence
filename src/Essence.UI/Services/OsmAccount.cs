@@ -305,6 +305,17 @@ public sealed class OsmAccount(EssenceApiClient api, IOsmSignIn signIn, IOsmToke
         }
     }
 
+    /// <summary>
+    /// The element's tags as this server's OpenStreetMap has them now (<see cref="OsmEditor.ReadTagsAsync"/>), to name it in
+    /// the hours editor: read from the API the server names, linked or not, since reading needs no token, and none is sent.
+    /// Null when editing OpenStreetMap is off, or they can't be had.
+    /// </summary>
+    public async Task<OsmElementTags?> ReadTagsAsync(OsmElementRef element, CancellationToken cancellationToken)
+    {
+        await LoadAsync();
+        return Settings is { } settings ? await editor.ReadTagsAsync(settings.ApiUrl, element, cancellationToken) : null;
+    }
+
     private async Task LoadCoreAsync()
     {
         var prepare = signIn.PrepareAsync();

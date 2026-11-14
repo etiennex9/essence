@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Essence.Contracts;
+using Essence.Data.Entities;
 using Essence.Ranking;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -80,7 +81,7 @@ public sealed class ClientConfigTests
     public void A_station_s_element_is_its_OpenStreetMap_row_s_even_without_hours_and_only_an_element()
     {
         SnapshotHoursRow Row(long station, string source, string? rule, string reference) =>
-            new(new HoursRow(station, source, rule, true, false, null, null), 45.5, -73.6, reference);
+            new(new HoursRow(station, source, rule, true, false, null, null), 45.5, -73.6, reference, StationHoursEntry.ByDistance);
 
         var elements = StationSnapshot.OsmElementsOf(
         [
@@ -94,12 +95,33 @@ public sealed class ClientConfigTests
         ]);
 
         Assert.Equal(
-            new Dictionary<long, string> { [1] = "node/6756481766", [2] = "way/456", [3] = "relation/789" },
+            new Dictionary<long, SnapshotOsmElement>
+            {
+                [1] = new("node/6756481766", BrandDiffers: false),
+                [2] = new("way/456", BrandDiffers: false),
+                [3] = new("relation/789", BrandDiffers: false),
+            },
             elements);
         var snapshot = new Snapshot(null, [], null, new Dictionary<long, SnapshotHours>(), null, null, elements);
-        Assert.Equal("way/456", snapshot.OsmElementOf(2));
+        Assert.Equal("way/456", snapshot.OsmElementOf(2)?.Ref);
         Assert.Null(snapshot.OsmElementOf(4));
         Assert.Null(new Snapshot(null, [], null, new Dictionary<long, SnapshotHours>(), null, null).OsmElementOf(1));
+    }
+
+    [Theory]
+    [InlineData(StationHoursEntry.ByLocation, true)]
+    [InlineData(StationHoursEntry.ByDistance, false)]
+    [InlineData(StationHoursEntry.ByAddress, false)]
+    [InlineData(StationHoursEntry.ByBrand, false)]
+    [InlineData(null, false)]
+    public void Only_an_element_matched_by_place_alone_has_another_brand_or_none(string? matchedBy, bool brandDiffers)
+    {
+        // A station on an element of another brand, or none: matched by location, its hours not taken, its brand likely old.
+        var row = new SnapshotHoursRow(new HoursRow(1, "osm", null, true, false, null, null), 48.42, -71.07, "way/456", matchedBy);
+
+        var element = StationSnapshot.OsmElementsOf([row])[1];
+
+        Assert.Equal(new SnapshotOsmElement("way/456", brandDiffers), element);
     }
 
     [Fact]
@@ -112,6 +134,7 @@ public sealed class ClientConfigTests
         var document = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         Assert.Contains("\"/client-config\"", document);
         Assert.Contains("osmElement", document);
+        Assert.Contains("osmBrandDiffers", document);
     }
 
     private static WebApplicationFactory<Program> Factory(params (string Key, string Value)[] settings) =>

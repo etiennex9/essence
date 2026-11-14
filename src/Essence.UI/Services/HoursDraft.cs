@@ -194,6 +194,29 @@ public sealed class HoursDraft
         return IsBrand(server!) ? (surveyed, surveyed) : (true, surveyed);
     }
 
+    /// <summary>
+    /// The brand the editor offers to set on the station's element too ("Also set its brand to Nutrinor Énergies"): the
+    /// station's, when its element was matched by place only (<see cref="StationDetail.OsmBrandDiffers"/>: of another brand
+    /// or none on OpenStreetMap, which is often years out of date), unless OpenStreetMap says it already now (<paramref name="now"/>,
+    /// when it could be read). Null when there's none to offer: an element of the station's brand, a station without one
+    /// (an independent), or an older API that doesn't say.
+    /// </summary>
+    public static string? BrandToOffer(StationDetail station, OsmElementTags? now) =>
+        station.OsmBrandDiffers == true && station.Brand?.Trim() is { Length: > 0 } brand && !OsmEditor.SameBrand(now?.Brand, brand)
+            ? brand
+            : null;
+
+    /// <summary>
+    /// Whether "Also set its brand" can be ticked, and whether it is, while the hours go to OpenStreetMap or not
+    /// (<paramref name="sendsHours"/>, "Also update OpenStreetMap" as <see cref="OsmChoice"/> and the user leave it). It
+    /// starts unticked, being for what the user knows first-hand, and it's ticked only by them. It goes only with the hours,
+    /// never on its own: the editor sends a correction of the hours, and a brand's hours left as they were, unchecked at the
+    /// station, untick both, so nothing goes that the user didn't see there. That keeps one box saying whether anything goes
+    /// to OpenStreetMap at all.
+    /// </summary>
+    /// <param name="chosen">The user ticked it.</param>
+    public static (bool Allowed, bool Ticked) BrandChoice(bool sendsHours, bool chosen) => (sendsHours, sendsHours && chosen);
+
     /// <summary>The hours are a brand's, or Essence's own: the same as them, they're not the user's to send.</summary>
     public static bool IsBrand(StationHours hours) => hours.Source != "osm";
 

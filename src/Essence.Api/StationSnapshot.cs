@@ -1,5 +1,6 @@
 using Essence.Contracts;
 using Essence.Data;
+using Essence.Data.Entities;
 using Essence.Hours;
 using Essence.Ranking;
 using Microsoft.EntityFrameworkCore;
@@ -31,7 +32,16 @@ public sealed record SnapshotHours(StationHours Dto, OpeningHours Hours, TimeZon
 
 /// <summary>A row of <c>station_hours</c>, with where its station is (for its time zone).</summary>
 /// <param name="SourceRef">The source's id for the place: for OpenStreetMap, the element (<c>node/6756481766</c>).</param>
-public sealed record SnapshotHoursRow(HoursRow Row, double? Latitude, double? Longitude, string? SourceRef = null);
+/// <param name="MatchedBy">How the row was matched to the station (<see cref="StationHoursEntry.MatchedBy"/>).</param>
+public sealed record SnapshotHoursRow(HoursRow Row, double? Latitude, double? Longitude, string? SourceRef = null, string? MatchedBy = null);
+
+/// <summary>A station's OpenStreetMap element, as <see cref="StationSnapshot.OsmElementsOf"/> found it.</summary>
+/// <param name="Ref"><c>node/123</c>, <c>way/456</c> or <c>relation/789</c>.</param>
+/// <param name="BrandDiffers">
+/// Matched by place only (<see cref="StationHoursEntry.ByLocation"/>): on OpenStreetMap it's of another brand or none
+/// (<see cref="StationDetail.OsmBrandDiffers"/>).
+/// </param>
+public sealed record SnapshotOsmElement(string Ref, bool BrandDiffers);
 
 /// <param name="Version">The import it was loaded for (<see cref="DataVersion"/>); null before the first one.</param>
 /// <param name="HoursVersion">
@@ -55,10 +65,10 @@ public sealed record Snapshot(
     IReadOnlyDictionary<long, SnapshotHours> Hours,
     DateTimeOffset? HoursStaleAt,
     DateTimeOffset? HoursChangedAt,
-    IReadOnlyDictionary<long, string>? OsmElements = null)
+    IReadOnlyDictionary<long, SnapshotOsmElement>? OsmElements = null)
 {
-    /// <summary>The station's OpenStreetMap element, <c>node/123</c>; null when it wasn't matched to one.</summary>
-    public string? OsmElementOf(long stationId) => OsmElements?.GetValueOrDefault(stationId);
+    /// <summary>The station's OpenStreetMap element, <c>node/123</c>, and how it was matched; null when it wasn't matched to one.</summary>
+    public SnapshotOsmElement? OsmElementOf(long stationId) => OsmElements?.GetValueOrDefault(stationId);
 
     /// <summary>Still what the data says: the same import and hours run, and no source gone stale since.</summary>
     public bool IsCurrent(DateTimeOffset? version, DateTimeOffset? hoursVersion, DateTimeOffset now) =>
@@ -127,7 +137,8 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
                     new HoursRow(h.StationId, h.Source, h.OpeningHours, h.Confirmed, h.TemporarilyClosed, h.SourceCheckedAt, h.SourceUrl),
                     h.Station.Latitude,
                     h.Station.Longitude,
-                    h.SourceRef))
+                    h.SourceRef,
+                    h.MatchedBy))
                 .ToListAsync(cancellationToken);
             var hours = ChooseHours(hourRows, lastSuccesses, now, _staleAfter);
             return _current = new Snapshot(
@@ -170,17 +181,18 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
 
     /// <summary>
     /// Each station's OpenStreetMap element, from its <c>osm</c> row, with a rule or without one (OpenStreetMap often has the
-    /// place but not its hours): <c>node/123</c>, <c>way/456</c> or <c>relation/789</c>. A reference of another shape is left
-    /// out, so the app is never sent elsewhere than to an element.
+    /// place but not its hours): <c>node/123</c>, <c>way/456</c> or <c>relation/789</c>, and whether it was matched by place
+    /// only (<see cref="StationHoursEntry.ByLocation"/>), its brand there another or none. A reference of another shape is
+    /// left out, so the app is never sent elsewhere than to an element.
     /// </summary>
-    public static IReadOnlyDictionary<long, string> OsmElementsOf(IEnumerable<SnapshotHoursRow> rows)
+    public static IReadOnlyDictionary<long, SnapshotOsmElement> OsmElementsOf(IEnumerable<SnapshotHoursRow> rows)
     {
-        var elements = new Dictionary<long, string>();
+        var elements = new Dictionary<long, SnapshotOsmElement>();
         foreach (var row in rows)
         {
             if (row.Row.Source == HoursPrecedence.Osm && IsOsmElement(row.SourceRef))
             {
-                elements[row.Row.StationId] = row.SourceRef!;
+                elements[row.Row.StationId] = new SnapshotOsmElement(row.SourceRef!, row.MatchedBy == StationHoursEntry.ByLocation);
             }
         }
 
