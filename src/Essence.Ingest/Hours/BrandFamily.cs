@@ -38,14 +38,17 @@ public static class BrandFamily
         ["shell-express"] = Shell,
         ["ultramar-express"] = Ultramar,
         ["irving-oil"] = "irving",
+        // Pétro-T belongs to Harnois Énergies: OpenStreetMap often tags its stations "Harnois".
         ["harnois-energies"] = "harnois",
+        ["petro-t"] = "harnois",
+        ["petrot"] = "harnois",
         ["canadiantire"] = "canadian-tire",
         ["canadian-tire-gas"] = "canadian-tire",
         ["essence-de-canadian-tire"] = "canadian-tire",
     };
 
     /// <summary>
-    /// "Pétro-T" is <c>petro-t</c>, "Mobil" is <c>esso</c>, "Circle K" is <c>couche-tard</c>; null for no brand (the feed's
+    /// "Pétro-T" is <c>harnois</c>, "Mobil" is <c>esso</c>, "Circle K" is <c>couche-tard</c>; null for no brand (the feed's
     /// "Aucun" included).
     /// </summary>
     public static string? Of(string? brand)
