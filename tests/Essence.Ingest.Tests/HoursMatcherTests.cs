@@ -521,9 +521,9 @@ public sealed class HoursMatcherTests
     [Fact]
     public void Saguenay_s_Nutrinor_on_boulevard_Saint_Paul_and_the_Petro_Canada_54_m_from_its_element_stay_unmatched()
     {
-        // As the feed and OpenStreetMap had them on 2026-11-13: the Nutrinor's element, a "Dépanneur Sonic" last edited in
-        // 2014 (its name not kept, Sonic being no feed station's brand), is 62 m from it and 54 m from the Petro-Canada,
-        // which has an element without a brand 29 m away and 110 m from the Nutrinor.
+        // As the feed and OpenStreetMap had them on 2026-11-13: the Nutrinor's element, last edited in 2014 (no brand nor
+        // operator, only the name "Dépanneur Sonic", which is no feed station's brand, so not kept), is 62 m from it and
+        // 54 m from the Petro-Canada, which has an element without a brand 29 m away and 110 m from the Nutrinor.
         var nutrinor = Station(2427, "1360 boul. Saint-Paul, Saguenay", "G7J 3C5", "Nutrinor Énergies", 48.407448, -71.094182);
         var petroCanada = Station(2389, "1312 boul. Saint-Paul, Saguenay", "G7J 3C5", "Petro-Canada", 48.408178, -71.093216);
         SourceRecord[] elements = [Element("way/221282039", null, 48.4077161, -71.093443), Element("way/221282040", null, 48.4079935, -71.0929333)];
