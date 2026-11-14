@@ -52,6 +52,11 @@ public sealed record StationHours(
 /// The OpenStreetMap element the station was matched to, its hours or not: <c>node/123</c>, <c>way/456</c> or
 /// <c>relation/789</c>, so the app can send a correction of its hours there. Null when none was, and from an older API.
 /// </param>
+/// <param name="OsmBrandDiffers">
+/// That element was matched to the station by place only: on OpenStreetMap it's of another brand or none, its brand
+/// likely out of date, so the app offers to set the station's brand on it too. False when it's of the station's brand;
+/// null when there's no element, and from an older API.
+/// </param>
 public sealed record StationDetail(
     long Id,
     string? Name,
@@ -68,7 +73,8 @@ public sealed record StationDetail(
     DateTimeOffset UpdatedAt,
     IReadOnlyList<CurrentPriceDto> Prices,
     StationHours? Hours = null,
-    string? OsmElement = null);
+    string? OsmElement = null,
+    bool? OsmBrandDiffers = null);
 
 /// <param name="Hours">Its opening hours; null when no source has them (hours unknown).</param>
 public sealed record NearbyStation(

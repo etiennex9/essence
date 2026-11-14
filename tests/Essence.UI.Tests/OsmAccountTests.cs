@@ -33,6 +33,10 @@ public class OsmAccountTests
             ("POST", "https://www.openstreetmap.org/oauth2/token") => Json("""{"access_token":"token-xyz","token_type":"Bearer","scope":"write_api read_prefs"}"""),
             ("GET", "https://api.openstreetmap.org/api/0.6/user/details.json") => Json("""{"version":"0.6","user":{"id":7,"display_name":"Mapper & Co"}}"""),
             ("POST", "https://www.openstreetmap.org/oauth2/revoke") => Json("{}"),
+            ("GET", "https://api.openstreetmap.org/api/0.6/way/2") => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = new StringContent("""<osm><way id="2" version="1"><nd ref="1"/><tag k="name" v="Dépanneur Sonic"/></way></osm>""", Encoding.UTF8, "application/xml"),
+            },
             _ => new HttpResponseMessage(HttpStatusCode.NotFound),
         });
     }
@@ -251,6 +255,35 @@ public class OsmAccountTests
     [InlineData("https://master.apis.dev.openstreetmap.org", "https://api.openstreetmap.org", false)]
     public void An_API_belongs_to_its_sign_in_s_server_or_to_OpenStreetMap_s_own_pair(string auth, string api, bool belongs) =>
         Assert.Equal(belongs, OsmServers.ApiBelongsTo(new Uri(auth), new Uri(api)));
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task The_element_is_read_from_the_server_s_OpenStreetMap_linked_or_not_and_never_with_the_token(bool linked)
+    {
+        var account = Account();
+        if (linked)
+        {
+            await account.LinkAsync();
+        }
+
+        _osm.Requests.Clear();
+
+        var tags = await account.ReadTagsAsync(new OsmElementRef("way", 2), TestContext.Current.CancellationToken);
+
+        Assert.Equal("Dépanneur Sonic", tags?.Label);
+        var read = Assert.Single(_osm.Requests, r => r.Url.Host != "api.test");
+        Assert.Equal(("https://api.openstreetmap.org/api/0.6/way/2", (string?)null), (read.Url.AbsoluteUri, read.Authorization));
+    }
+
+    [Fact]
+    public async Task With_editing_OpenStreetMap_off_no_element_is_read()
+    {
+        _config = """{"osmClientId":null,"osmAuthUrl":"https://www.openstreetmap.org","osmApiUrl":"https://api.openstreetmap.org"}""";
+
+        Assert.Null(await Account().ReadTagsAsync(new OsmElementRef("way", 2), TestContext.Current.CancellationToken));
+        Assert.DoesNotContain(_osm.Requests, r => r.Url.Host != "api.test");
+    }
 
     [Fact]
     public async Task Unlinking_forgets_the_token_and_asks_OpenStreetMap_to_revoke_it()

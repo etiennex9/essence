@@ -363,6 +363,218 @@ public class OsmEditorTests
         Assert.Empty(osm.Requests);
     }
 
+    /// <summary>
+    /// An element of another brand: its brand, its Wikidata and Wikipedia, a name that's the brand's (in capitals), hours,
+    /// and tags of its own.
+    /// </summary>
+    private const string OtherBrand = """
+        <osm version="0.6">
+          <node id="6756481766" visible="true" version="9" changeset="1" user="someone" uid="2" lat="48.42" lon="-71.07">
+            <tag k="amenity" v="fuel"/>
+            <tag k="brand" v="Sonic"/>
+            <tag k="brand:wikidata" v="Q1234567"/>
+            <tag k="brand:wikipedia" v="fr:Example"/>
+            <tag k="name" v="SONIC"/>
+            <tag k="opening_hours" v="Mo-Su 07:00-22:00"/>
+            <tag k="operator" v="Example Inc."/>
+            <tag k="shop" v="convenience"/>
+          </node>
+        </osm>
+        """;
+
+    private static readonly OsmHoursEdit BrandEdit = Edit with
+    {
+        Comment = "Update opening hours and brand of Nutrinor Énergies",
+        Brand = "Nutrinor Énergies",
+    };
+
+    [Fact]
+    public async Task With_the_brand_set_only_the_hours_the_brand_its_Wikidata_and_a_name_that_was_the_old_brand_change()
+    {
+        var osm = Sequence(OtherBrand);
+
+        await new OsmEditor(osm.Client).UpdateHoursAsync(Api, Token, BrandEdit, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            """<?xml version="1.0" encoding="utf-8"?><osm><node id="6756481766" version="9" changeset="170000001" lat="48.42" lon="-71.07">"""
+            + """<tag k="amenity" v="fuel" /><tag k="brand" v="Nutrinor Énergies" /><tag k="name" v="Nutrinor Énergies" />"""
+            + """<tag k="opening_hours" v="Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30" /><tag k="operator" v="Example Inc." />"""
+            + """<tag k="shop" v="convenience" /><tag k="check_date:opening_hours" v="2026-11-13" /></node></osm>""",
+            osm.Requests[2].Body);
+    }
+
+    [Fact]
+    public async Task Without_the_brand_set_the_brand_its_Wikidata_and_the_name_stay_as_they_were()
+    {
+        var osm = Sequence(OtherBrand);
+
+        await new OsmEditor(osm.Client).UpdateHoursAsync(Api, Token, Edit, TestContext.Current.CancellationToken);
+
+        var before = Tags(OtherBrand, "node");
+        var after = Tags(osm.Requests[2].Body, "node");
+        Assert.Equal(before.Keys.Append(OsmEditor.CheckDateTag), after.Keys);
+        Assert.Equal(
+            before.Where(t => t.Key != OsmEditor.HoursTag),
+            after.Where(t => t.Key is not (OsmEditor.HoursTag or OsmEditor.CheckDateTag)));
+    }
+
+    [Fact]
+    public async Task An_element_without_a_brand_gets_it_at_the_end_and_keeps_a_name_of_its_own()
+    {
+        const string unbranded = """
+            <osm><way id="456" version="3"><nd ref="11"/><nd ref="12"/><nd ref="11"/>
+              <tag k="amenity" v="fuel"/><tag k="name" v="Dépanneur Sonic"/>
+            </way></osm>
+            """;
+        var osm = Sequence(unbranded);
+
+        await new OsmEditor(osm.Client).UpdateHoursAsync(
+            Api, Token, BrandEdit with { Element = new OsmElementRef("way", 456) }, TestContext.Current.CancellationToken);
+
+        var tags = Tags(osm.Requests[2].Body, "way");
+        Assert.Equal(["amenity", "name", "opening_hours", "check_date:opening_hours", "brand"], tags.Keys);
+        Assert.Equal(("Dépanneur Sonic", "Nutrinor Énergies"), (tags["name"], tags["brand"]));
+    }
+
+    [Theory]
+    [InlineData("Sonic", "Sonic", "Nutrinor Énergies")]
+    [InlineData("SONIC", "Sonic", "Nutrinor Énergies")]
+    [InlineData("Pétro T", "Petro-T", "Nutrinor Énergies")]
+    [InlineData("Dépanneur Sonic", "Sonic", "Dépanneur Sonic")]
+    [InlineData("Station Nutrinor Énergies Chicoutimi", "Sonic", "Station Nutrinor Énergies Chicoutimi")]
+    [InlineData("Sonic", null, "Sonic")]
+    public void The_name_becomes_the_brand_only_when_it_was_the_old_brand_s(string name, string? oldBrand, string expected)
+    {
+        var tags = new Dictionary<string, string> { ["amenity"] = "fuel", ["name"] = name };
+        if (oldBrand is not null)
+        {
+            tags["brand"] = oldBrand;
+        }
+
+        var changes = OsmEditor.BrandChanges(tags, "Nutrinor Énergies");
+
+        Assert.Equal("Nutrinor Énergies", changes["brand"]);
+        Assert.Equal(expected, changes.TryGetValue("name", out var changed) ? changed : name);
+        Assert.Equal(expected != name, changes.ContainsKey("name"));
+    }
+
+    [Fact]
+    public void An_element_without_a_name_gets_none()
+    {
+        var changes = OsmEditor.BrandChanges(new Dictionary<string, string> { ["amenity"] = "fuel", ["brand"] = "Sonic" }, "Nutrinor Énergies");
+
+        Assert.Equal(new Dictionary<string, string?> { ["brand"] = "Nutrinor Énergies" }, changes);
+    }
+
+    [Theory]
+    [InlineData("Nutrinor Énergies")]
+    [InlineData("NUTRINOR ENERGIES")]
+    [InlineData("Nutrinor-Energies")]
+    public void An_element_already_of_the_station_s_brand_keeps_its_spelling_and_its_Wikidata(string onOsm)
+    {
+        var tags = new Dictionary<string, string> { ["brand"] = onOsm, ["brand:wikidata"] = "Q1234567", ["name"] = onOsm };
+
+        Assert.Empty(OsmEditor.BrandChanges(tags, " Nutrinor Énergies "));
+        Assert.Empty(OsmEditor.BrandChanges(tags, ""));
+    }
+
+    [Fact]
+    public async Task A_version_conflict_sets_the_brand_again_on_the_newer_version_as_it_is()
+    {
+        // Renamed meanwhile, to a name of its own, and given a phone number: those stay, the brand is still set.
+        var newer = OtherBrand.Replace("version=\"9\"", "version=\"10\"").Replace("v=\"SONIC\"", "v=\"Dépanneur du Coin\"")
+            .Replace("<tag k=\"amenity\" v=\"fuel\"/>", "<tag k=\"amenity\" v=\"fuel\"/><tag k=\"phone\" v=\"+1 418 555 0100\"/>");
+        var fetches = 0;
+        var puts = 0;
+        var osm = new OsmStub(r => (r.Method.Method, r.RequestUri!.AbsolutePath) switch
+        {
+            ("GET", _) => OsmStub.Xml(fetches++ == 0 ? OtherBrand : newer),
+            ("PUT", "/api/0.6/changeset/create") => OsmStub.Text("170000001"),
+            ("PUT", "/api/0.6/node/6756481766") => puts++ == 0
+                ? OsmStub.Text("Version mismatch: Provided 9, server had: 10 of Node 6756481766", HttpStatusCode.Conflict)
+                : OsmStub.Text("11"),
+            _ => OsmStub.Text(""),
+        });
+
+        await new OsmEditor(osm.Client).UpdateHoursAsync(Api, Token, BrandEdit, TestContext.Current.CancellationToken);
+
+        var first = Tags(osm.Requests[2].Body, "node");
+        var retried = Tags(osm.Requests[4].Body, "node");
+        Assert.Equal("Nutrinor Énergies", first["name"]);
+        Assert.Equal("10", (string)XDocument.Parse(osm.Requests[4].Body).Root!.Element("node")!.Attribute("version")!);
+        Assert.Equal(
+            ["amenity", "phone", "brand", "name", "opening_hours", "operator", "shop", "check_date:opening_hours"],
+            retried.Keys);
+        Assert.Equal(
+            ("Nutrinor Énergies", "Dépanneur du Coin", "+1 418 555 0100", BrandEdit.Rule),
+            (retried["brand"], retried["name"], retried["phone"], retried["opening_hours"]));
+    }
+
+    [Fact]
+    public async Task The_changeset_s_comment_says_the_brand_was_set_too()
+    {
+        var osm = Sequence(OtherBrand);
+
+        await new OsmEditor(osm.Client).UpdateHoursAsync(Api, Token, BrandEdit, TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            new Dictionary<string, string>
+            {
+                ["created_by"] = "Essence 2026.11.13",
+                ["comment"] = "Update opening hours and brand of Nutrinor Énergies",
+            },
+            Tags(osm.Requests[1].Body, "changeset"));
+    }
+
+    [Fact]
+    public async Task The_element_s_tags_are_read_without_a_token_from_the_API_named()
+    {
+        var osm = new OsmStub(r => r.RequestUri!.AbsolutePath == "/api/0.6/way/456"
+            ? OsmStub.Xml("""<osm><way id="456" version="3"><nd ref="1"/><tag k="amenity" v="fuel"/><tag k="name" v="Dépanneur Sonic"/></way></osm>""")
+            : new HttpResponseMessage(HttpStatusCode.NotFound));
+
+        var tags = await new OsmEditor(osm.Client).ReadTagsAsync(
+            new Uri("https://master.apis.dev.openstreetmap.org/"), new OsmElementRef("way", 456), TestContext.Current.CancellationToken);
+
+        var read = Assert.Single(osm.Requests);
+        Assert.Equal(("GET", "https://master.apis.dev.openstreetmap.org/api/0.6/way/456", (string?)null), (read.Method, read.Url.AbsoluteUri, read.Authorization));
+        Assert.Equal(("Dépanneur Sonic", (string?)null, "Dépanneur Sonic"), (tags!.Name, tags.Brand, tags.Label));
+    }
+
+    [Fact]
+    public async Task Tags_that_can_t_be_read_are_none_and_say_nothing()
+    {
+        static async Task<OsmElementTags?> Read(Func<HttpRequestMessage, HttpResponseMessage> respond) =>
+            await new OsmEditor(new OsmStub(respond).Client).ReadTagsAsync(Api, Edit.Element, TestContext.Current.CancellationToken);
+
+        Assert.Null(await Read(_ => new HttpResponseMessage(HttpStatusCode.Gone)));
+        Assert.Null(await Read(_ => throw new HttpRequestException("No route to host.")));
+        Assert.Null(await Read(_ => OsmStub.Xml("<html>")));
+        Assert.Null(await Read(_ => OsmStub.Xml(Node.Replace("6756481766", "1"))));
+        Assert.NotNull(await Read(_ => OsmStub.Xml(Node)));
+    }
+
+    [Theory]
+    [InlineData("Dépanneur Sonic", "Sonic", "Dépanneur Sonic")]
+    [InlineData(null, "Sonic", "Sonic")]
+    [InlineData("  ", "Sonic", "Sonic")]
+    [InlineData(null, null, null)]
+    public void An_element_is_named_by_its_name_else_its_brand(string? name, string? brand, string? label)
+    {
+        var tags = new Dictionary<string, string> { ["amenity"] = "fuel" };
+        if (name is not null)
+        {
+            tags["name"] = name;
+        }
+
+        if (brand is not null)
+        {
+            tags["brand"] = brand;
+        }
+
+        Assert.Equal(label, new OsmElementTags(tags).Label);
+    }
+
     [Theory]
     [InlineData("node/123", "node", 123L)]
     [InlineData("way/456", "way", 456L)]

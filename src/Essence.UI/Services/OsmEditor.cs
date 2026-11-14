@@ -4,6 +4,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
+using Essence.Contracts;
 using Essence.Hours;
 
 namespace Essence.UI.Services;
@@ -37,9 +38,33 @@ public readonly record struct OsmElementRef(string Type, long Id)
 /// <param name="Rule">The new <c>opening_hours</c>.</param>
 /// <param name="CheckDate">Today in the station's zone, for <c>check_date:opening_hours</c>.</param>
 /// <param name="CreatedBy">The changeset's <c>created_by</c>: <c>Essence 2026.11.13</c>.</param>
-/// <param name="Comment">The changeset's comment: "Update opening hours of Costco".</param>
+/// <param name="Comment">
+/// The changeset's comment: "Update opening hours of Costco", or "Update opening hours and brand of Nutrinor Énergies"
+/// with <paramref name="Brand"/>.
+/// </param>
 /// <param name="Surveyed">The user checked the hours at the station: the changeset's <c>source</c> is <c>survey</c>, and only then.</param>
-public sealed record OsmHoursEdit(OsmElementRef Element, string Rule, DateOnly CheckDate, string CreatedBy, string Comment, bool Surveyed);
+/// <param name="Brand">
+/// The station's brand, as the app shows it, to set on the element too (<see cref="OsmEditor.BrandChanges"/>): the user
+/// ticked "Also set its brand" on an element matched by place only, of another brand or none on OpenStreetMap. Null leaves
+/// its brand as it is.
+/// </param>
+public sealed record OsmHoursEdit(
+    OsmElementRef Element, string Rule, DateOnly CheckDate, string CreatedBy, string Comment, bool Surveyed, string? Brand = null);
+
+/// <summary>An element's tags as OpenStreetMap has them now (<see cref="OsmEditor.ReadTagsAsync"/>): what the hours editor names it by.</summary>
+public sealed record OsmElementTags(IReadOnlyDictionary<string, string> Tags)
+{
+    /// <summary>Its <c>name</c>: "Dépanneur Sonic"; null when it has none.</summary>
+    public string? Name => Value(OsmEditor.NameTag);
+
+    /// <summary>Its <c>brand</c>: "Sonic"; null when it has none.</summary>
+    public string? Brand => Value(OsmEditor.BrandTag);
+
+    /// <summary>What the editor names it by ("OpenStreetMap: Dépanneur Sonic"): its name, else its brand; null for neither.</summary>
+    public string? Label => Name ?? Brand;
+
+    private string? Value(string key) => Tags.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
+}
 
 /// <summary>What stopped an edit, for the editor to say it in the user's language.</summary>
 public enum OsmEditFailure
@@ -82,16 +107,26 @@ public sealed class OsmEditException(OsmEditFailure failure, string message, Htt
 /// <summary>
 /// Sends a correction of a station's hours to OpenStreetMap's API 0.6, as the user, with their own token (<see cref="OsmAccount"/>):
 /// the element as it is now, a changeset of its own, the element with only <c>opening_hours</c> and
-/// <c>check_date:opening_hours</c> changed (every other tag exactly as it was), then the changeset closed. Hours there that
-/// the app can't read (they say more than it can) are never replaced: nothing is opened for them. A version conflict (409:
-/// someone edited it meanwhile) fetches it again and tries once more. The changeset is closed whatever happens once it's
-/// open, so a failure never leaves one open. Never creates or deletes anything. XML is written with <see cref="XmlWriter"/>,
-/// which escapes every value. Pure: the <see cref="HttpClient"/> is given, and every address is absolute.
+/// <c>check_date:opening_hours</c> changed (every other tag exactly as it was), then the changeset closed. Asked to, it
+/// sets the station's brand too (<see cref="BrandChanges"/>), and that's all it changes besides. Hours there that the app
+/// can't read (they say more than it can) are never replaced: nothing is opened for them. A version conflict (409: someone
+/// edited it meanwhile) fetches it again and tries once more, with the same changes made to the newer version. The
+/// changeset is closed whatever happens once it's open, so a failure never leaves one open. Never creates or deletes an
+/// element. XML is written with <see cref="XmlWriter"/>, which escapes every value. Pure: the <see cref="HttpClient"/> is
+/// given, and every address is absolute.
 /// </summary>
 public sealed class OsmEditor(HttpClient http)
 {
     public const string HoursTag = "opening_hours";
     public const string CheckDateTag = "check_date:opening_hours";
+    public const string BrandTag = "brand";
+    public const string NameTag = "name";
+
+    /// <summary>The brand's Wikidata item, which describes the old brand once the brand is another.</summary>
+    public const string BrandWikidataTag = "brand:wikidata";
+
+    /// <summary>Likewise its Wikipedia article.</summary>
+    public const string BrandWikipediaTag = "brand:wikipedia";
 
     /// <summary>The longest of OpenStreetMap's error text shown: past it, the reason is cut short.</summary>
     private const int MaxReasonLength = 200;
@@ -109,7 +144,7 @@ public sealed class OsmEditor(HttpClient http)
             throw new OsmEditException(OsmEditFailure.NotEditable, $"{edit.Element.Type}s aren't edited here.");
         }
 
-        var root = new Uri(apiUrl.AbsoluteUri.TrimEnd('/') + "/api/0.6/");
+        var root = RootOf(apiUrl);
         // Built before a changeset is opened, so what would stop the edit (hours it can't replace) stops it first.
         var upload = WithHours(await FetchAsync(root, accessToken, edit.Element, cancellationToken), edit);
         var changeset = await CreateChangesetAsync(root, accessToken, edit, cancellationToken);
@@ -126,8 +161,8 @@ public sealed class OsmEditor(HttpClient http)
 
                 if (response.StatusCode == HttpStatusCode.Conflict && attempt == 0)
                 {
-                    // Edited by someone else since it was fetched: its newer version, with their changes, gets ours (unless
-                    // they wrote hours it can't replace).
+                    // Edited by someone else since it was fetched: its newer version, with their changes, gets ours, the
+                    // brand's worked out again on it (unless they wrote hours it can't replace).
                     upload = WithHours(await FetchAsync(root, accessToken, edit.Element, cancellationToken), edit);
                     continue;
                 }
@@ -139,6 +174,86 @@ public sealed class OsmEditor(HttpClient http)
         {
             await CloseAsync(root, accessToken, changeset);
         }
+    }
+
+    /// <summary>
+    /// The element's tags as OpenStreetMap has them now, for the hours editor to name it and say its brand. Read without a
+    /// token, as anyone may read the API: none is sent. Null when they can't be had (unreachable, deleted, an answer that
+    /// isn't the element); the editor then says nothing of it, and an edit reads the element again anyway.
+    /// </summary>
+    /// <param name="apiUrl">The API's root: <c>https://api.openstreetmap.org</c>.</param>
+    public async Task<OsmElementTags?> ReadTagsAsync(Uri apiUrl, OsmElementRef element, CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Get, new Uri(RootOf(apiUrl), element.ToString()));
+        try
+        {
+            using var response = await http.SendAsync(request, cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return null;
+            }
+
+            await using var body = await response.Content.ReadAsStreamAsync(cancellationToken);
+            var document = await XDocument.LoadAsync(body, LoadOptions.None, cancellationToken);
+            return document.Root?.Element(element.Type) is { } found && (string?)found.Attribute("id") == IdOf(element)
+                ? new OsmElementTags(TagsOf(found))
+                : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or IOException or XmlException || (ex is TaskCanceledException && !cancellationToken.IsCancellationRequested))
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// What setting the station's brand changes on an element of another brand or none, tag by tag (null removes it):
+    /// <c>brand</c> becomes the station's; <c>brand:wikidata</c> and <c>brand:wikipedia</c> go, since they'd describe the
+    /// old brand; and <c>name</c> becomes the brand only when it was the old brand's (folded as <see cref="SameBrand"/>
+    /// does: "SONIC" is Sonic's), so a name of its own ("Dépanneur Sonic") stays. Every other tag stays as it is. Nothing
+    /// changes when OpenStreetMap already says the station's brand, however it spells it: its Wikidata is then the brand's.
+    /// </summary>
+    /// <param name="tags">The element's tags, as fetched.</param>
+    /// <param name="brand">The station's brand, as the app shows it: "Nutrinor Énergies".</param>
+    public static IReadOnlyDictionary<string, string?> BrandChanges(IReadOnlyDictionary<string, string> tags, string brand)
+    {
+        brand = brand.Trim();
+        var old = tags.GetValueOrDefault(BrandTag);
+        if (brand.Length == 0 || SameBrand(old, brand))
+        {
+            return new Dictionary<string, string?>();
+        }
+
+        var changes = new Dictionary<string, string?>(StringComparer.Ordinal) { [BrandTag] = brand };
+        foreach (var key in (string[])[BrandWikidataTag, BrandWikipediaTag])
+        {
+            if (tags.ContainsKey(key))
+            {
+                changes[key] = null;
+            }
+        }
+
+        if (tags.GetValueOrDefault(NameTag) is { } name && SameBrand(name, old))
+        {
+            changes[NameTag] = brand;
+        }
+
+        return changes;
+    }
+
+    /// <summary>
+    /// The two say the same brand, accents, case and punctuation aside, as the feed's brands are compared
+    /// (<see cref="Brands.Slugify"/>: "Pétro-Canada" is "Petro Canada"); a value with no letter or digit in it only when it
+    /// is the other, case aside. Never when either is missing or blank.
+    /// </summary>
+    public static bool SameBrand(string? a, string? b)
+    {
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b))
+        {
+            return false;
+        }
+
+        var slug = Brands.Slugify(a);
+        return slug.Length > 0 ? slug == Brands.Slugify(b) : string.Equals(a.Trim(), b.Trim(), StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>
@@ -159,8 +274,8 @@ public sealed class OsmEditor(HttpClient http)
     /// <summary>
     /// The element to upload, but for its changeset (<see cref="InChangeset"/>): its id, its version as fetched, a node's
     /// point or a way's nodes in their order, and its tags in their order, exactly as they were, with <c>opening_hours</c>
-    /// and <c>check_date:opening_hours</c> set (added at the end when it had none). Who edited it last and when are left
-    /// out: the API sets them.
+    /// and <c>check_date:opening_hours</c> set (added at the end when it had none), and with the edit's brand, what
+    /// <see cref="BrandChanges"/> says on the element as fetched. Who edited it last and when are left out: the API sets them.
     /// </summary>
     /// <param name="fetched">The element as the API gave it: <c>&lt;osm&gt;&lt;node …&gt;…&lt;/node&gt;&lt;/osm&gt;</c>.</param>
     /// <exception cref="OsmEditException">
@@ -200,11 +315,20 @@ public sealed class OsmEditor(HttpClient http)
             element.Add(nodes.Select(n => new XElement("nd", new XAttribute("ref", n!))));
         }
 
-        var changes = new Dictionary<string, string>(StringComparer.Ordinal)
+        // Each tag changed, to its new value; null removes it.
+        var changes = new Dictionary<string, string?>(StringComparer.Ordinal)
         {
             [HoursTag] = edit.Rule,
             [CheckDateTag] = edit.CheckDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
         };
+        if (edit.Brand is { } brand)
+        {
+            foreach (var (key, value) in BrandChanges(TagsOf(source), brand))
+            {
+                changes[key] = value;
+            }
+        }
+
         foreach (var tag in source.Elements("tag"))
         {
             var key = (string?)tag.Attribute("k");
@@ -213,15 +337,40 @@ public sealed class OsmEditor(HttpClient http)
                 continue;
             }
 
-            element.Add(Tag(key, changes.Remove(key, out var changed) ? changed : (string?)tag.Attribute("v") ?? ""));
+            if (!changes.Remove(key, out var changed))
+            {
+                element.Add(Tag(key, (string?)tag.Attribute("v") ?? ""));
+            }
+            else if (changed is not null)
+            {
+                element.Add(Tag(key, changed));
+            }
         }
 
         foreach (var (key, value) in changes)
         {
-            element.Add(Tag(key, value));
+            if (value is not null)
+            {
+                element.Add(Tag(key, value));
+            }
         }
 
         return element;
+    }
+
+    /// <summary>An element's tags, by key (the first, were one there twice).</summary>
+    private static Dictionary<string, string> TagsOf(XElement element)
+    {
+        var tags = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var tag in element.Elements("tag"))
+        {
+            if ((string?)tag.Attribute("k") is { } key)
+            {
+                tags.TryAdd(key, (string?)tag.Attribute("v") ?? "");
+            }
+        }
+
+        return tags;
     }
 
     /// <summary>The element's upload in its changeset, said after its version: <c>&lt;osm&gt;&lt;node id version changeset …&gt;</c>.</summary>
@@ -319,6 +468,9 @@ public sealed class OsmEditor(HttpClient http)
     }
 
     private static OsmEditException BadAnswer(string message) => new(OsmEditFailure.BadAnswer, message);
+
+    /// <summary>API 0.6 under the API's root: <c>https://api.openstreetmap.org/api/0.6/</c>.</summary>
+    private static Uri RootOf(Uri apiUrl) => new(apiUrl.AbsoluteUri.TrimEnd('/') + "/api/0.6/");
 
     private static string IdOf(OsmElementRef element) => element.Id.ToString(CultureInfo.InvariantCulture);
 

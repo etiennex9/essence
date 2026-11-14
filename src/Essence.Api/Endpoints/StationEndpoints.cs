@@ -159,7 +159,13 @@ public static class StationEndpoints
         }
 
         var current = await snapshot.GetAsync(db, cancellationToken);
-        return TypedResults.Ok(station with { Hours = current.Hours.GetValueOrDefault(id)?.Dto, OsmElement = current.OsmElementOf(id) });
+        var element = current.OsmElementOf(id);
+        return TypedResults.Ok(station with
+        {
+            Hours = current.Hours.GetValueOrDefault(id)?.Dto,
+            OsmElement = element?.Ref,
+            OsmBrandDiffers = element?.BrandDiffers,
+        });
     }
 
     private static async Task<Results<Ok<List<NearbyStation>>, ValidationProblem>> Nearby(
