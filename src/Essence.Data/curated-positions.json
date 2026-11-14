@@ -1,4 +1,113 @@
 {
   "$comment": "Where stations are when the Régie's feed puts them elsewhere, reviewed by hand (README → Position corrections). Each entry comes from /stations/positions, where two independent kinds of position agree far from the feed's point: copy its `entry`, check it, and set `reviewed` to the day you did. A correction applies while the feed's point is within 50 m of feedLatitude/feedLongitude and more than 50 m from the corrected point; otherwise it has expired (the Régie fixed or changed its point) and can be removed. Never take a position from Google Maps or Street View.",
-  "corrections": []
+  "corrections": [
+    {
+      "naturalKey": "254 ch. principal, sainte-jeanne-d'arc|G0W1E0",
+      "latitude": 48.858,
+      "longitude": -72.096985,
+      "feedLatitude": 48.859181,
+      "feedLongitude": -72.095482,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap node/5308453791 and the address node/1855152411 (Photon) agree within 19 m, 171 m from the Régie's point. Added by hand: the element has no house number, so the daily check can't find it."
+    },
+    {
+      "naturalKey": "306 ch. ridge, saint-bernard-de-lacolle|J0J1V0",
+      "latitude": 45.017342,
+      "longitude": -73.454424,
+      "feedLatitude": 45.016988,
+      "feedLongitude": -73.456577,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap node/11090714167 and the address node/6480655345 (Photon) agree within 36 m, 174 m from the Régie's point."
+    },
+    {
+      "naturalKey": "132 rte 132 ouest, new richmond|G0C2B0",
+      "latitude": 48.176281,
+      "longitude": -65.849631,
+      "feedLatitude": 48.174786,
+      "feedLongitude": -65.847888,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap way/429368316, at its house number and postal code, and the bus stop node/11230147568 named after the station agree within 43 m, 211 m from the Régie's point, which OpenStreetMap's addresses put at nos. 124 to 129. Added by hand: Photon has no house at no. 132."
+    },
+    {
+      "naturalKey": "46 rte 138, baie-trinite|G0H1A0",
+      "latitude": 49.424089,
+      "longitude": -67.29122,
+      "feedLatitude": 49.423774,
+      "feedLongitude": -67.287633,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap node/2899379574 and the interpolated address way/143075370 (Photon) agree within 21 m, 262 m from the Régie's point. Added by hand: the element has no address, so the daily check can't find it."
+    },
+    {
+      "naturalKey": "736 rue principale, roxton pond|J0E1Z0",
+      "latitude": 45.468528,
+      "longitude": -72.665827,
+      "feedLatitude": 45.4709,
+      "feedLongitude": -72.6648,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap node/5605755022 and the building at no. 736, way/552228011 (Photon), agree within 24 m, 276 m from the Régie's point. Added by hand: the element has no address, so the daily check can't find it."
+    },
+    {
+      "naturalKey": "1265 ch. du clocher, saint-jean-sur-richelieu|J2Y1A4",
+      "latitude": 45.315882,
+      "longitude": -73.34185,
+      "feedLatitude": 45.3161,
+      "feedLongitude": -73.33773,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap node/14306235273 and the interpolated address way/114412655 (Photon) agree within 16 m, 323 m from the Régie's point. Added by hand: the element has no address, so the daily check can't find it."
+    },
+    {
+      "naturalKey": "1952 cote des cascades, papineauville|J0V1R0",
+      "latitude": 45.66179,
+      "longitude": -75.020277,
+      "feedLatitude": 45.663818,
+      "feedLongitude": -75.024071,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap node/12114619118 and the shop at no. 1952, node/12011210781 (Photon), agree within 31 m, 371 m from the Régie's point; Ultramar's locator (56182) puts the station at its address 140 m from the element. Added by hand: the element has no address, so the daily check can't find it."
+    },
+    {
+      "naturalKey": "7067 boul. newman, montreal|H8N1X1",
+      "latitude": 45.447655,
+      "longitude": -73.610507,
+      "feedLatitude": 45.447465,
+      "feedLongitude": -73.615631,
+      "reviewed": "2026-11-14",
+      "note": "Circle K's locator (6001268) and the address node/11973108312 (Photon) agree within 6 m, 400 m from the Régie's point."
+    },
+    {
+      "naturalKey": "179 rue principale, saint-camille-de-lellis|G0R2S0",
+      "latitude": 46.497917,
+      "longitude": -70.20852,
+      "feedLatitude": 46.494212,
+      "feedLongitude": -70.212765,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap node/5310518011 and the address node/1161837064 (Photon) agree within 24 m, 525 m from the Régie's point, the village's centre. Added by hand: the element has another address on OpenStreetMap (685, G0R), so the daily check can't find it."
+    },
+    {
+      "naturalKey": "105 rue robert-bernard, drummondville|J2C8N1",
+      "latitude": 45.908695,
+      "longitude": -72.516135,
+      "feedLatitude": 45.909749,
+      "feedLongitude": -72.509487,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap way/521994995, the gas bar, and Costco's locator (1127, to 3 decimals) agree within 78 m, and the warehouse at no. 105, node/7655954202 (Photon), is 50 m from Costco's point: 528 m from the Régie's point. The point is the gas bar's. Added by hand: the feed's postal code (J2C 8N1) isn't Costco's (J2C 0P6)."
+    },
+    {
+      "naturalKey": "281 rue principale, mansfield-et-pontefract|J0X1R0",
+      "latitude": 45.853863,
+      "longitude": -76.736303,
+      "feedLatitude": 45.85927,
+      "feedLongitude": -76.739588,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap node/5312347403 and the address node/4195696185 (Photon) agree within 4 m, 653 m from the Régie's point. Added by hand: the element has another address on OpenStreetMap (284, J0X 1V0), so the daily check can't find it."
+    },
+    {
+      "naturalKey": "1918 boul. tadoussac, saint-fulgence|G0V1S0",
+      "latitude": 48.443208,
+      "longitude": -70.709135,
+      "feedLatitude": 48.458942,
+      "feedLongitude": -71.003062,
+      "reviewed": "2026-11-14",
+      "note": "OpenStreetMap way/549635443 and the address node/1266988689 (Photon) agree within 39 m, 21748 m from the Régie's point."
+    }
+  ]
 }

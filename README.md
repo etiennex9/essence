@@ -352,7 +352,11 @@ the 2,473 stations, 163 m to 21.7 km off, with no shift common to them: each is 
 marker, the directions, Best near you's and Best on the way's distances and the hours' matching would all follow the
 wrong point. So a station whose point is known to be off gets a reviewed correction in
 [curated-positions.json](src/Essence.Data/curated-positions.json), shipped in `Essence.Data` so that the API and the
-ingest read the same ones (`PositionCorrections`). The database keeps the Régie's point as it is.
+ingest read the same ones (`PositionCorrections`). The database keeps the Régie's point as it is. The file starts with
+12 of the 13: the daily check below finds 3 of them, and the others, whose OpenStreetMap element has no address or
+another one, or whose postal code isn't the brand's, were added by hand with the same evidence, two independent
+positions within 75 m of each other (their `note` says so). The 13th, 2900 rue Lenoir ouest in Laval, isn't in it: its
+two positions are 105 m apart.
 
 - **Where it applies.** The API's snapshot of the stations puts a corrected station at the corrected point, and every
   answer gives that point: `/stations`, `/stations/{id}` (the details, and the Google Maps directions built from them),
