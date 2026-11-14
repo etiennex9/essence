@@ -99,6 +99,13 @@ public sealed record SourceRecord(
     /// other.
     /// </summary>
     public int? StoreNumber { get; init; }
+
+    /// <summary>
+    /// The brand as the source writes it, when some station of the feed has it, stored as <c>source_brand</c>: for
+    /// OpenStreetMap the element's <c>brand</c>, else <c>operator</c>, else <c>name</c> ("Sonic"). Null for the brands'
+    /// own locators, whose brand goes without saying, and for a name of the place's own, which is never kept.
+    /// </summary>
+    public string? Brand { get; init; }
 }
 
 /// <summary>The feed's stations, for a source that asks only about the places it could match (Shell's details).</summary>

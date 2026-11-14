@@ -70,7 +70,12 @@ public static class StationEndpoints
             .WithSummary("A station with its current prices and opening hours")
             .WithDescription(
                 HoursDescription + " `osmElement` is the OpenStreetMap element the station was matched to, its hours or not "
-                + "(`node/123`, `way/456`, `relation/789`): where the app sends a correction of them. Null when none was.")
+                + "(`node/123`, `way/456`, `relation/789`): where the app sends a correction of them. Null when none was. "
+                + "`osmBrandDiffers` is true when that element was matched by place only, being of another brand or none on "
+                + "OpenStreetMap, so the app offers to set the station's brand on it too; false otherwise, null without an "
+                + "element. `osmBrand` is the element's brand there as Essence last read it (its `brand`, else `operator`, else "
+                + "`name`: `Sonic`), when a feed station has that brand; null for none (a name of its own is no brand), or "
+                + "without an element. An element with no `brand` tag whose name is that brand is named after it.")
             .WithDataVersion();
         group.MapGet("/{id:long}/prices", GetPriceHistory)
             .WithSummary("Price history of a station")
@@ -165,6 +170,7 @@ public static class StationEndpoints
             Hours = current.Hours.GetValueOrDefault(id)?.Dto,
             OsmElement = element?.Ref,
             OsmBrandDiffers = element?.BrandDiffers,
+            OsmBrand = element?.Brand,
         });
     }
 

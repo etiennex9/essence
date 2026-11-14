@@ -124,6 +124,20 @@ public sealed class ClientConfigTests
         Assert.Equal(new SnapshotOsmElement("way/456", brandDiffers), element);
     }
 
+    [Theory]
+    [InlineData("Sonic", "Sonic")]
+    [InlineData("Petroles RL", "Petroles RL")]
+    [InlineData("  ", null)]
+    [InlineData(null, null)]
+    public void The_element_s_brand_is_as_the_last_run_read_it_and_blank_is_none(string? read, string? brand)
+    {
+        // Nutrinor's station on an element named "Sonic", without a brand tag: named after its old brand.
+        var row = new SnapshotHoursRow(
+            new HoursRow(1, "osm", null, false, false, null, null), 48.42, -71.07, "node/5310653589", StationHoursEntry.ByLocation, read);
+
+        Assert.Equal(new SnapshotOsmElement("node/5310653589", BrandDiffers: true, brand), StationSnapshot.OsmElementsOf([row])[1]);
+    }
+
     [Fact]
     public async Task The_settings_endpoint_is_in_the_API_s_description()
     {
@@ -135,6 +149,10 @@ public sealed class ClientConfigTests
         Assert.Contains("\"/client-config\"", document);
         Assert.Contains("osmElement", document);
         Assert.Contains("osmBrandDiffers", document);
+        Assert.Contains("\"osmBrand\"", document);
+        // Explained where the station is described, as the XML docs don't reach the document.
+        Assert.Contains("`osmBrandDiffers` is true when that element was matched by place only", document);
+        Assert.Contains("`osmBrand` is the element", document);
     }
 
     private static WebApplicationFactory<Program> Factory(params (string Key, string Value)[] settings) =>

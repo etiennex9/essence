@@ -49,7 +49,24 @@ public sealed class OsmEditTextsTests : IDisposable
 
         Assert.Equal($"{says} {firstHand}", OsmEditTexts.BrandNote(_l, Tags(("name", "Dépanneur Sonic"), ("brand", "Sonic"))));
         Assert.Equal($"{none} {firstHand}", OsmEditTexts.BrandNote(_l, Tags(("name", "Dépanneur Sonic"))));
+        Assert.Equal($"{none} {firstHand}", OsmEditTexts.BrandNote(_l, Tags(("name", "Dépanneur Sonic")), osmBrand: null));
         Assert.Equal(firstHand, OsmEditTexts.BrandNote(_l, null));
+        Assert.Equal(firstHand, OsmEditTexts.BrandNote(_l, null, osmBrand: "Sonic"));
+    }
+
+    [Theory]
+    [InlineData("en-CA", "OpenStreetMap names it Sonic.", "OpenStreetMap says Ultramar.", "OpenStreetMap has no brand for it.")]
+    [InlineData("fr-CA", "OpenStreetMap l’appelle Sonic.", "OpenStreetMap indique Ultramar.", "OpenStreetMap ne lui donne aucune marque.")]
+    public void An_element_without_a_brand_tag_named_after_the_brand_read_on_it_is_said_to_be_named_so(
+        string culture, string named, string says, string none)
+    {
+        Culture(culture);
+
+        // Nutrinor's station on an element named "Sonic", which Essence read as its brand.
+        Assert.StartsWith($"{named} ", OsmEditTexts.BrandNote(_l, Tags(("name", "Sonic")), osmBrand: "Sonic"));
+        Assert.StartsWith($"{says} ", OsmEditTexts.BrandNote(_l, Tags(("name", "Sonic"), ("brand", "Ultramar")), osmBrand: "Sonic"));
+        // A brand read from its operator: its name is its own, and it has no brand tag.
+        Assert.StartsWith($"{none} ", OsmEditTexts.BrandNote(_l, Tags(("name", "Super Sagamie"), ("operator", "Sonic")), osmBrand: "Sonic"));
     }
 
     [Theory]

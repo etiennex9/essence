@@ -260,6 +260,20 @@ public class HoursDraftTests
         Assert.Null(HoursDraft.BrandToOffer(station with { Brand = "  " }, null));
     }
 
+    [Theory]
+    [InlineData("Indépendant")]
+    [InlineData("INDÉPENDANT")]
+    [InlineData("Independent")]
+    [InlineData("Aucun")]
+    public void The_feed_s_word_for_an_independent_is_no_brand_to_offer(string brand)
+    {
+        // A garage "Indépendant" in the feed, on an element of a name of its own and no brand, matched by place.
+        var station = TestStations.Detail(1, brand) with { OsmElement = "node/123", OsmBrandDiffers = true };
+
+        Assert.Null(HoursDraft.BrandToOffer(station, Tags(("name", "Garage Untel"))));
+        Assert.Null(HoursDraft.BrandToOffer(station, null));
+    }
+
     [Fact]
     public void Setting_the_brand_starts_unticked_is_ticked_only_by_the_user_and_goes_only_with_the_hours()
     {

@@ -54,8 +54,14 @@ public sealed record StationHours(
 /// </param>
 /// <param name="OsmBrandDiffers">
 /// That element was matched to the station by place only: on OpenStreetMap it's of another brand or none, its brand
-/// likely out of date, so the app offers to set the station's brand on it too. False when it's of the station's brand;
-/// null when there's no element, and from an older API.
+/// likely out of date, so the app offers to set the station's brand on it too (when the station has one). False when
+/// it's of the station's brand; null when there's no element, and from an older API.
+/// </param>
+/// <param name="OsmBrand">
+/// The brand that element has on OpenStreetMap, as Essence last read it: its <c>brand</c>, else its <c>operator</c>, else
+/// its <c>name</c> ("Sonic"), when some station of the feed has that brand. Null when it has none (a name of its own,
+/// "Dépanneur Sonic", is no brand), when there's no element, and from an older API. An element with no <c>brand</c> tag
+/// whose name is this is named after its brand: setting the station's brand renames it too.
 /// </param>
 public sealed record StationDetail(
     long Id,
@@ -74,7 +80,8 @@ public sealed record StationDetail(
     IReadOnlyList<CurrentPriceDto> Prices,
     StationHours? Hours = null,
     string? OsmElement = null,
-    bool? OsmBrandDiffers = null);
+    bool? OsmBrandDiffers = null,
+    string? OsmBrand = null);
 
 /// <param name="Hours">Its opening hours; null when no source has them (hours unknown).</param>
 public sealed record NearbyStation(
