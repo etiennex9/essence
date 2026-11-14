@@ -26,7 +26,7 @@
       "feedLatitude": 48.174786,
       "feedLongitude": -65.847888,
       "reviewed": "2026-11-14",
-      "note": "OpenStreetMap way/429368316, at its house number and postal code, and the bus stop node/11230147568 named after the station agree within 43 m, 211 m from the Régie's point, which OpenStreetMap's addresses put at nos. 124 to 129. Added by hand: Photon has no house at no. 132."
+      "note": "OpenStreetMap way/429368316, at its house number and postal code, and the bus stop node/11230147568 named after the station agree within 43 m, 211 m from the Régie's point, which OpenStreetMap's addresses put at nos. 124 to 129. Added by hand: Photon has no house at no. 132, and the daily check doesn't count a bus stop."
     },
     {
       "naturalKey": "46 rte 138, baie-trinite|G0H1A0",
@@ -35,7 +35,7 @@
       "feedLatitude": 49.423774,
       "feedLongitude": -67.287633,
       "reviewed": "2026-11-14",
-      "note": "OpenStreetMap node/2899379574 and the interpolated address way/143075370 (Photon) agree within 21 m, 262 m from the Régie's point. Added by hand: the element has no address, so the daily check can't find it."
+      "note": "OpenStreetMap node/2899379574 and the interpolated address way/143075370 (Photon) agree within 21 m, 262 m from the Régie's point. Added by hand: the element has no address, and the daily check doesn't count an interpolated address."
     },
     {
       "naturalKey": "736 rue principale, roxton pond|J0E1Z0",
@@ -53,7 +53,7 @@
       "feedLatitude": 45.3161,
       "feedLongitude": -73.33773,
       "reviewed": "2026-11-14",
-      "note": "OpenStreetMap node/14306235273 and the interpolated address way/114412655 (Photon) agree within 16 m, 323 m from the Régie's point. Added by hand: the element has no address, so the daily check can't find it."
+      "note": "OpenStreetMap node/14306235273 and the interpolated address way/114412655 (Photon) agree within 16 m, 323 m from the Régie's point. Added by hand: the element has no address, and the daily check doesn't count an interpolated address."
     },
     {
       "naturalKey": "1952 cote des cascades, papineauville|J0V1R0",

@@ -8,15 +8,18 @@ namespace Essence.Ingest.Tests;
 
 /// <summary>
 /// Which stations the ingest lists for review (<see cref="PositionFinder"/>): two kinds of position that agree far from
-/// the feed's point, never one alone, and nothing of the station's at the feed's point. Points from the real cases of
-/// 2026-11-13.
+/// the feed's point, never one alone, and nothing of the station's at the feed's point. Points from the cases of
+/// 2026-11-13: Newman's as they are, Papineauville's adapted so that the check finds it, which it doesn't on the real
+/// data (its correction was added by hand).
 /// </summary>
 public sealed class PositionFinderTests
 {
     /// <summary>About 1 m of latitude, in degrees.</summary>
     private const double Metre = 1 / 111_195.0;
 
-    // Papineauville's Ultramar, 1952 côte des Cascades: the feed puts it about 360 m north-west of where it is.
+    // Papineauville's Ultramar, 1952 côte des Cascades: the feed puts it about 360 m north-west of where it is. Adapted: on
+    // OpenStreetMap the element has no address (here it has the station's), and Ultramar's store 56182 is 140 m south-west
+    // of it (here it's next to it).
     private static readonly PositionStation Papineauville = new(
         10, "1952 cote des cascades, papineauville|J0V1R0", "ultramar", 45.663818, -75.024071, "1952", "J0V1R0",
         "1952 côte des Cascades, PAPINEAUVILLE");

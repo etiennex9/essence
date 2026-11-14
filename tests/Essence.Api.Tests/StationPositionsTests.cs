@@ -336,7 +336,7 @@ public sealed class StationPositionsTests
         Assert.Equal("Stations", get.GetProperty("tags")[0].GetString());
         Assert.Contains("curated-positions.json", get.GetProperty("description").GetString());
         Assert.True(get.GetProperty("responses").TryGetProperty("200", out _));
-        foreach (var path in (string[])["/stations/{id}", "/stations/nearby", "/stations/best", "/stations", "/prices/current"])
+        foreach (var path in (string[])["/stations/{id}", "/stations/nearby", "/stations/best", "/stations", "/prices/current", "/trips/best"])
         {
             Assert.Contains("/stations/positions", paths.GetProperty(path).GetProperty("get").GetProperty("description").GetString());
         }

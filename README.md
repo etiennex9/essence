@@ -353,10 +353,23 @@ marker, the directions, Best near you's and Best on the way's distances and the 
 wrong point. So a station whose point is known to be off gets a reviewed correction in
 [curated-positions.json](src/Essence.Data/curated-positions.json), shipped in `Essence.Data` so that the API and the
 ingest read the same ones (`PositionCorrections`). The database keeps the Régie's point as it is. The file starts with
-12 of the 13: the daily check below finds 3 of them, and the others, whose OpenStreetMap element has no address or
-another one, or whose postal code isn't the brand's, were added by hand with the same evidence, two independent
-positions within 75 m of each other (their `note` says so). The 13th, 2900 rue Lenoir ouest in Laval, isn't in it: its
-two positions are 105 m apart.
+12 of the 13. The daily check below finds 3 of them (Saint-Fulgence, boulevard Newman in Montréal, chemin Ridge in
+Saint-Bernard-de-Lacolle). The 9 others were added by hand from the audit: each rests on two positions within 75 m of
+each other and more than 150 m from the Régie's point, but not always on two the check counts, and their `note` says
+which:
+
+- 5 have an OpenStreetMap element without a house number (Sainte-Jeanne-d'Arc, Roxton Pond, Papineauville) or with
+  another address (Saint-Camille-de-Lellis, Mansfield-et-Pontefract), next to Photon's house, building or shop at the
+  station's address.
+- 2 rest on an address Photon interpolates (a street's range), which the check never counts: Baie-Trinité and chemin
+  du Clocher in Saint-Jean-sur-Richelieu, whose element has no address either.
+- New Richmond's element has the station's address, but the other position is a bus stop named after the station,
+  none of the check's kinds (Photon has no house at no. 132).
+- Costco Drummondville's postal code in the feed (J2C 8N1) isn't Costco's (J2C 0P6). Costco's locator and the
+  warehouse at no. 105 (Photon) agree within 50 m, and the gas bar on OpenStreetMap is 78 m from Costco's point: the
+  correction is the gas bar's own point, where the pumps are, not a mean.
+
+The 13th, 2900 rue Lenoir ouest in Laval, isn't in it: its two positions are 105 m apart.
 
 - **Where it applies.** The API's snapshot of the stations puts a corrected station at the corrected point, and every
   answer gives that point: `/stations`, `/stations/{id}` (the details, and the Google Maps directions built from them),
