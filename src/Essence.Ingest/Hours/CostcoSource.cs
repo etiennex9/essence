@@ -9,8 +9,9 @@ namespace Essence.Ingest.Hours;
 /// <summary>
 /// Costco's gas bars, from its warehouse locator (<see cref="CostcoOptions.Url"/>). Its terms ban automated collection;
 /// the owner accepted that risk for two requests a week, and a curated rule (<see cref="CuratedHoursSource"/>) serves
-/// when it can't be had. Matched to the feed's Costco stations within 600 m: the feed's point and the locator's can be
-/// 540 m apart (Drummondville's), the gas bar being away from the warehouse.
+/// when it can't be had. Matched to the feed's Costco stations within 600 m (<see cref="HoursMatcher.CostcoReachM"/>):
+/// the feed's point and the locator's can be 540 m apart (Drummondville's), the gas bar being away from the warehouse.
+/// Or within 2 km at the same house number and postal code (<see cref="HoursMatcher.AddressReachM"/>).
 /// </summary>
 public sealed class CostcoSource(HoursClient client, IOptions<HoursOptions> options) : IHoursSource
 {
@@ -39,6 +40,7 @@ public sealed class CostcoSource(HoursClient client, IOptions<HoursOptions> opti
     public bool Enabled => options.Value.Costco.Enabled;
     public bool ShippedInImage => false;
     public double MatchRadiusM => 600;
+    public double? OtherBrandReachM => null;
 
     /// <summary>
     /// Asks each point in turn, and keeps one array of the warehouses found, each once (by <c>stlocID</c>) and with only

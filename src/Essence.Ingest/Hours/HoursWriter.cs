@@ -27,7 +27,7 @@ public sealed record HoursWriteOutcome(HoursImport? Import, HoursChanges Changes
 public sealed record DisabledSource(string Source, int Removed);
 
 /// <summary>Database side of the hours: the stations to match, a source's history, and its rows replaced, or removed when it's off.</summary>
-public sealed class HoursWriter(EssenceDbContext db, TimeProvider timeProvider)
+public sealed class HoursWriter(EssenceDbContext db, TimeProvider timeProvider) : IHoursStations
 {
     /// <summary>"EssHours" in ASCII: hours runs never overlap, and never wait for the feed's imports (<see cref="Storage.ImportWriter"/>'s key).</summary>
     private const long AdvisoryLockKey = 0x45_73_73_48_6F_75_72_73;
@@ -41,13 +41,16 @@ public sealed class HoursWriter(EssenceDbContext db, TimeProvider timeProvider)
         var stations = await db.Stations
             .AsNoTracking()
             .Where(s => s.IsActive)
-            .Select(s => new { s.Id, s.NaturalKey, s.Brand, s.Latitude, s.Longitude, s.Address, s.PostalCode })
+            .Select(s => new { s.Id, s.NaturalKey, s.Name, s.Brand, s.Latitude, s.Longitude, s.Address, s.PostalCode })
             .ToListAsync(cancellationToken);
         return new StationSet(
             stations
                 .Select(s => new MatchStation(
                     s.Id, s.NaturalKey, BrandFamily.Of(s.Brand), s.Latitude, s.Longitude, HoursMatcher.HouseNumber(s.Address),
-                    StationKey.NormalizePostalCode(s.PostalCode)))
+                    StationKey.NormalizePostalCode(s.PostalCode))
+                {
+                    StoreNumber = HoursMatcher.StoreNumber(s.Name),
+                })
                 .ToList(),
             updatedAt);
     }
@@ -60,8 +63,8 @@ public sealed class HoursWriter(EssenceDbContext db, TimeProvider timeProvider)
 
     /// <summary>
     /// Replaces the source's rows with the run's matches, in one transaction: rows added, changed and removed, then the
-    /// run's row in <c>hours_imports</c>, <see cref="HoursImportStatus.Unchanged"/> when nothing changed. A re-match that
-    /// changes nothing writes nothing.
+    /// run's row in <c>hours_imports</c>, <see cref="HoursImportStatus.Unchanged"/> when nothing changed, counting the
+    /// matches that count (<see cref="HoursMatch.Counts"/>). A re-match that changes nothing writes nothing.
     /// </summary>
     public async Task<HoursWriteOutcome> WriteAsync(HoursRun run, IReadOnlyList<HoursMatch> matches, CancellationToken cancellationToken)
     {
@@ -87,7 +90,7 @@ public sealed class HoursWriter(EssenceDbContext db, TimeProvider timeProvider)
                 : HoursImportStatus.Succeeded,
             SourceVersion = run.Version,
             Records = run.Records,
-            Matched = matches.Count,
+            Matched = matches.Count(m => m.Counts),
             Changed = changes.Count,
             Warnings = run.Warnings,
         };

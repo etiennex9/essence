@@ -9,11 +9,27 @@ public sealed class StationHoursEntry
     /// <summary>Found by the station's natural key: a curated rule written for that station.</summary>
     public const string ByNaturalKey = "natural_key";
 
+    /// <summary>The store number in the station's name: Couche-Tard's "Couche-Tard #140" is its site 6000140, wherever it is.</summary>
+    public const string ByStoreNumber = "store_number";
+
     /// <summary>Within the source's radius of the station, and of the same brand.</summary>
     public const string ByDistance = "distance";
 
+    /// <summary>
+    /// Beyond the source's radius, but of the same brand with the same house number and postal code, within 2 km
+    /// (<c>HoursMatcher.AddressReachM</c>): one of the two points is off.
+    /// </summary>
+    public const string ByAddress = "address";
+
     /// <summary>A rule for every station of the brand.</summary>
     public const string ByBrand = "brand";
+
+    /// <summary>
+    /// OpenStreetMap's element on the station, of another brand or none, its brand being out of date
+    /// (<c>HoursMatcher</c>): never confirmed, and without the element's hours, which are likely out of date too. It
+    /// says which element to edit.
+    /// </summary>
+    public const string ByLocation = "location";
 
     public long Id { get; set; }
     public long StationId { get; set; }
@@ -23,7 +39,8 @@ public sealed class StationHoursEntry
 
     /// <summary>
     /// The canonical opening_hours rule (Essence.Hours' <c>OpeningHours.ToRule</c>). Null when the source has the station
-    /// but not its hours, as OpenStreetMap often does: the row still says which element to edit.
+    /// but not its hours, as OpenStreetMap often does, or when they aren't taken (<see cref="ByLocation"/>): the row still
+    /// says which element to edit.
     /// </summary>
     public string? OpeningHours { get; set; }
 
@@ -33,15 +50,18 @@ public sealed class StationHoursEntry
     /// <summary>Where a person can check the hours.</summary>
     public string? SourceUrl { get; set; }
 
-    /// <summary><see cref="ByNaturalKey"/>, <see cref="ByDistance"/> or <see cref="ByBrand"/>.</summary>
+    /// <summary>
+    /// <see cref="ByNaturalKey"/>, <see cref="ByStoreNumber"/>, <see cref="ByDistance"/>, <see cref="ByAddress"/>,
+    /// <see cref="ByBrand"/> or <see cref="ByLocation"/>.
+    /// </summary>
     public required string MatchedBy { get; set; }
 
-    /// <summary>How far the source's point is from the station's, for a match by distance.</summary>
+    /// <summary>How far the source's point is from the station's, for a match by distance, address, location or store number.</summary>
     public int? MatchDistanceM { get; set; }
 
     /// <summary>
-    /// The row is surely about this station: its natural key, its brand for a brand's rule, or for a match by distance its
-    /// postal code or house number agrees.
+    /// The row is surely about this station: its natural key, its store number, its brand for a brand's rule, for a match
+    /// by distance its postal code or house number agrees, and by address both do. A match by location never is.
     /// </summary>
     public bool Confirmed { get; set; }
 

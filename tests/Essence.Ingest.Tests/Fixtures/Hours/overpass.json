@@ -1,0 +1,205 @@
+{
+  "version": 0.6,
+  "generator": "Overpass API 0.7.62.11 87bfad18",
+  "osm3s": {
+    "timestamp_osm_base": "2026-11-13T04:09:05Z",
+    "timestamp_areas_base": "2026-11-13T01:56:05Z",
+    "copyright": "The data included in this document is from www.openstreetmap.org. The data is made available under ODbL."
+  },
+  "elements": [
+    {
+      "type": "node",
+      "id": 6756481766,
+      "lat": 45.575341,
+      "lon": -73.7552574,
+      "tags": {
+        "amenity": "fuel",
+        "brand": "Costco",
+        "brand:wikidata": "Q715583",
+        "name": "Essence Costco"
+      }
+    },
+    {
+      "type": "node",
+      "id": 799943379,
+      "lat": 46.3891015,
+      "lon": -72.5525698,
+      "tags": {
+        "addr:city": "Trois-Rivières",
+        "addr:housenumber": "900",
+        "addr:postcode": "G8T 7A6",
+        "addr:province": "Québec",
+        "addr:street": "Boulevard Thibeau",
+        "amenity": "fuel",
+        "brand": "Ultramar",
+        "brand:wikidata": "Q3548078",
+        "check_date:opening_hours": "2025-09-01",
+        "name": "Ultramar",
+        "opening_hours": "Mo-Fr 06:00-23:00; Sa,Su 06:30-23:00"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5360716343,
+      "lat": 45.421893,
+      "lon": -75.7459216,
+      "tags": {
+        "addr:city": "Hull",
+        "addr:housenumber": "376",
+        "addr:postcode": "J9A 1M5",
+        "addr:street": "Boulevard Alexandre-Taché",
+        "amenity": "fuel",
+        "brand": "Esso",
+        "brand:wikidata": "Q867662",
+        "check_date": "2026-09-28",
+        "check_date:opening_hours": "2026-09-28",
+        "name": "Esso",
+        "opening_hours": "Mo-Fr 07:00-23:00; Sa-Su 08:00-23:00",
+        "operator": "Esso"
+      }
+    },
+    {
+      "type": "node",
+      "id": 1907684666,
+      "lat": 46.8122893,
+      "lon": -71.3102475,
+      "tags": {
+        "amenity": "fuel",
+        "brand": "Irving",
+        "brand:wikidata": "Q1673286",
+        "check_date": "2023-04-21",
+        "name": "Irving",
+        "opening_hours": "24/7"
+      }
+    },
+    {
+      "type": "node",
+      "id": 277667516,
+      "lat": 46.8046812,
+      "lon": -71.2439157,
+      "tags": {
+        "addr:housenumber": "750",
+        "addr:street": "Boulevard Charest Ouest",
+        "amenity": "fuel",
+        "brand": "Irving",
+        "brand:wikidata": "Q1673286",
+        "name": "Irving",
+        "opening_hours": "Mo-Su,PH 08:00+"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5333182239,
+      "lat": 46.50003,
+      "lon": -72.8237991,
+      "tags": {
+        "addr:city": "Saint-Boniface",
+        "addr:housenumber": "54",
+        "addr:postcode": "G0X 2L0",
+        "addr:province": "Québec",
+        "addr:street": "Boulevard Trudel Ouest",
+        "amenity": "fuel",
+        "brand": "Sonic",
+        "brand:wikidata": "Q118669677",
+        "name": "Sonic",
+        "opening_hours": "Mo-Fr 05:00-24:00, Sa,Su 06:00-24:00"
+      }
+    },
+    {
+      "type": "way",
+      "id": 368505563,
+      "center": {
+        "lat": 48.3006246,
+        "lon": -68.8651316
+      },
+      "tags": {
+        "addr:city": "Saint-Fabien",
+        "addr:housenumber": "104",
+        "addr:postcode": "G0L 2Z0",
+        "addr:street": "Route 132 Est",
+        "amenity": "fuel",
+        "name": "Ultramar",
+        "opening_hours": "Mo-Su 07:00-22:00",
+        "operator": "Ultramar"
+      }
+    },
+    {
+      "type": "way",
+      "id": 26630403,
+      "center": {
+        "lat": 45.4589862,
+        "lon": -73.4642534
+      },
+      "tags": {
+        "addr:city": "Brossard",
+        "addr:housenumber": "7405",
+        "addr:postcode": "J4Y 1A2",
+        "addr:street": "Boulevard Taschereau",
+        "amenity": "fuel",
+        "brand": "Petro-Canada",
+        "brand:wikidata": "Q1208279",
+        "name": "Petro-Canada"
+      }
+    },
+    {
+      "type": "node",
+      "id": 5334869289,
+      "lat": 46.1659139,
+      "lon": -73.3114916,
+      "tags": {
+        "addr:city": "Saint-Norbert",
+        "addr:housenumber": "1994",
+        "addr:postcode": "J0K 3C0",
+        "addr:street": "Rue Principale",
+        "amenity": "fuel",
+        "name": "Harnois",
+        "opening_hours": "Mo-Fr 06:00-22:00; Sa,Su 07:00-22:00"
+      }
+    },
+    {
+      "type": "node",
+      "id": 4320427121,
+      "lat": 48.5454922,
+      "lon": -68.3951495,
+      "tags": {
+        "addr:city": "Sainte-Luce",
+        "addr:housenumber": "198",
+        "addr:postcode": "G0K 1P0",
+        "addr:street": "Route 132 Ouest",
+        "amenity": "fuel",
+        "name": "Pétro-Canada",
+        "opening_hours": "Mo-Su 06:00-20:00",
+        "operator": "Pétro-Canada"
+      }
+    },
+    {
+      "type": "way",
+      "id": 462637873,
+      "center": {
+        "lat": 45.4166833,
+        "lon": -75.8082287
+      },
+      "tags": {
+        "addr:housenumber": "465",
+        "addr:street": "Chemin Vanier",
+        "amenity": "fuel",
+        "brand": "Couche-Tard",
+        "brand:wikidata": "Q2836957",
+        "check_date": "2026-01-20",
+        "name": "Couche-Tard",
+        "opening_hours": "24/7"
+      }
+    },
+    {
+      "type": "node",
+      "id": 547557657,
+      "lat": 52.2283782,
+      "lon": -77.0599846,
+      "tags": {
+        "amenity": "fuel",
+        "name": "Essence",
+        "opening_hours": "24/7"
+      }
+    }
+  ]
+}
