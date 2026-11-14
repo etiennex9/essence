@@ -317,6 +317,45 @@ public sealed record HoursSourceStatus(
     string? DataVersion);
 
 /// <summary>
+/// Whether every source the ingest reads is doing fine (<c>/health/sources</c>), for a monitor to alert on: answered with
+/// 200 when they all are, 503 when one isn't.
+/// </summary>
+/// <param name="Status"><c>ok</c>, or <c>failing</c> when a source isn't fine or the runs can't be read.</param>
+/// <param name="CheckedAt">When this was worked out.</param>
+/// <param name="Sources">The feed (<c>feed</c>) first, then each hours source that has run and isn't turned off, by name.</param>
+/// <param name="Reason">Null, or <c>database unreachable</c>: the runs couldn't be read, and <paramref name="Sources"/> is empty.</param>
+public sealed record SourceHealthReport(
+    string Status,
+    DateTimeOffset CheckedAt,
+    IReadOnlyList<IngestSourceHealth> Sources,
+    string? Reason = null);
+
+/// <summary>How one source the ingest reads is doing, in <see cref="SourceHealthReport"/>.</summary>
+/// <param name="Source"><c>feed</c> (the Régie's prices), or an hours source: <c>costco</c>, <c>curated</c>…</param>
+/// <param name="Ok">Whether it's fine: the report is <c>failing</c> as soon as one isn't.</param>
+/// <param name="Reason">
+/// Null when it's fine; else <c>failing</c> (an hours source failed or was rejected that many times in a row),
+/// <c>stale</c> (an hours source without a success in that many days), <c>never succeeded</c> (the feed, or an hours source
+/// that failed that many times since its first run), or <c>feed stale</c> (no successful import of the feed for that many
+/// minutes).
+/// </param>
+/// <param name="ConsecutiveFailures">
+/// Failed runs in a row since the last success: for an hours source, its failed or rejected fetches; for the feed, its
+/// failed imports (a download that fails isn't logged as one).
+/// </param>
+/// <param name="LastError">The latest of those failures' error, its first line, in English; null when it hasn't failed since its last success.</param>
+/// <param name="LastSuccessAt">When it last succeeded; null when it never did.</param>
+/// <param name="LastAttemptAt">When it was last tried (for the feed, its latest import), whatever came of it.</param>
+public sealed record IngestSourceHealth(
+    string Source,
+    bool Ok,
+    string? Reason,
+    int ConsecutiveFailures,
+    string? LastError,
+    DateTimeOffset? LastSuccessAt,
+    DateTimeOffset? LastAttemptAt);
+
+/// <summary>
 /// What the apps need of their server's settings (<c>/client-config</c>): the Android app picks its server at run time, so
 /// what differs between deployments comes from the server rather than the build.
 /// </summary>
