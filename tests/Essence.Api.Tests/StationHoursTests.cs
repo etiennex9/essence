@@ -87,7 +87,7 @@ public sealed class StationHoursTests
     {
         var feed = new DateTimeOffset(2026, 11, 12, 8, 5, 1, TimeSpan.Zero);
 
-        Assert.True(DataVersion.IsNotModified(feed, feed, hoursChangedAt: null));
+        Assert.True(DataVersion.IsNotModified(feed, feed, changedAt: null));
         Assert.True(DataVersion.IsNotModified(feed, feed, feed.AddDays(-1)));
         Assert.True(DataVersion.IsNotModified(feed, feed, feed));
         Assert.False(DataVersion.IsNotModified(feed, feed, feed.AddSeconds(1)));

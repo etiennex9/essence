@@ -26,7 +26,7 @@ public static class TripEndpoints
                 + "none, the whole range counts, or else the nearest station. Québec only: a destination outside Québec's boundary, "
                 + "a start outside its box, or either more than 1 km from a road is refused with 422, and so is a trip with no "
                 + "route. 503 when the routing server is down. " + StationEndpoints.LeftOutDescription + " "
-                + StationEndpoints.HoursDescription)
+                + StationEndpoints.PositionDescription + " " + StationEndpoints.HoursDescription)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
             .WithDataVersion(clockDependent: true);

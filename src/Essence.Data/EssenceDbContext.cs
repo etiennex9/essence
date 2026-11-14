@@ -5,7 +5,11 @@ namespace Essence.Data;
 
 public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options) : DbContext(options)
 {
-    /// <summary>Name of the GiST index on <c>ll_to_earth(latitude, longitude)</c>, created with raw SQL in the initial migration.</summary>
+    /// <summary>
+    /// Name of the GiST index on <c>ll_to_earth(latitude, longitude)</c>, created with raw SQL in the initial migration.
+    /// The API no longer queries by distance in SQL (its snapshot of the stations has their corrected points, which the
+    /// table doesn't), so nothing reads it now; it's kept for queries by hand.
+    /// </summary>
     public const string EarthIndexName = "ix_stations_earth";
 
     public DbSet<FuelType> FuelTypes => Set<FuelType>();
@@ -16,6 +20,7 @@ public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options)
     public DbSet<Import> Imports => Set<Import>();
     public DbSet<StationHoursEntry> StationHours => Set<StationHoursEntry>();
     public DbSet<HoursImport> HoursImports => Set<HoursImport>();
+    public DbSet<PositionCandidate> PositionCandidates => Set<PositionCandidate>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -95,6 +100,15 @@ public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options)
                 v => Enum.Parse<HoursImportStatus>(v, true));
             // Each source's latest runs: its last success, and the failures since.
             e.HasIndex(x => new { x.Source, x.FinishedAt });
+        });
+
+        modelBuilder.Entity<PositionCandidate>(e =>
+        {
+            // At most one per station; the ingest replaces them all at each run.
+            e.HasKey(x => x.StationId);
+            e.Property(x => x.StationId).ValueGeneratedNever();
+            e.Property(x => x.Evidence).HasColumnType("jsonb");
+            e.HasOne(x => x.Station).WithMany().HasForeignKey(x => x.StationId).OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

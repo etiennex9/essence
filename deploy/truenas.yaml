@@ -62,6 +62,9 @@ services:
       TZ: UTC
       ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_writer;Password=CHANGE_ME_WRITER_PASSWORD;GSS Encryption Mode=Disable
       Archive__Path: /data/archive
+      # The address search below, where the daily check of the stations' positions looks up their addresses (README →
+      # Position corrections); the stations it lists are at http://<NAS address>:30180/api/stations/positions.
+      Positions__GeocodingUrl: http://geocoding:2322/
     volumes:
       - type: bind
         source: /mnt/POOL/apps/essence/data

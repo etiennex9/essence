@@ -233,6 +233,52 @@ namespace Essence.Data.Migrations
                     b.ToTable("imports", (string)null);
                 });
 
+            modelBuilder.Entity("Essence.Data.Entities.PositionCandidate", b =>
+                {
+                    b.Property<long>("StationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("station_id");
+
+                    b.Property<int>("DistanceM")
+                        .HasColumnType("integer")
+                        .HasColumnName("distance_m");
+
+                    b.Property<string>("Evidence")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("evidence");
+
+                    b.Property<double>("FeedLatitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("feed_latitude");
+
+                    b.Property<double>("FeedLongitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("feed_longitude");
+
+                    b.Property<DateTimeOffset>("FoundAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("found_at");
+
+                    b.Property<double>("Latitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("latitude");
+
+                    b.Property<double>("Longitude")
+                        .HasColumnType("double precision")
+                        .HasColumnName("longitude");
+
+                    b.Property<string>("NaturalKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("natural_key");
+
+                    b.HasKey("StationId")
+                        .HasName("pk_position_candidates");
+
+                    b.ToTable("position_candidates", (string)null);
+                });
+
             modelBuilder.Entity("Essence.Data.Entities.PriceHistory", b =>
                 {
                     b.Property<long>("Id")
@@ -528,6 +574,18 @@ namespace Essence.Data.Migrations
                     b.Navigation("FuelType");
 
                     b.Navigation("PriceHistory");
+
+                    b.Navigation("Station");
+                });
+
+            modelBuilder.Entity("Essence.Data.Entities.PositionCandidate", b =>
+                {
+                    b.HasOne("Essence.Data.Entities.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_position_candidates_stations_station_id");
 
                     b.Navigation("Station");
                 });

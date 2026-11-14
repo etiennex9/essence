@@ -61,7 +61,7 @@ public sealed class HoursSchedule(IOptions<HoursOptions> options, TimeProvider t
     }
 
     /// <summary>A local time's instant: one the clock skips is read with the offset from before, one it repeats is the first.</summary>
-    private static DateTimeOffset Instant(DateTime local, TimeZoneInfo zone)
+    internal static DateTimeOffset Instant(DateTime local, TimeZoneInfo zone)
     {
         local = DateTime.SpecifyKind(local, DateTimeKind.Unspecified);
         var offset = zone.IsInvalidTime(local)
