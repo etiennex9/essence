@@ -48,8 +48,13 @@ public readonly record struct OsmElementRef(string Type, long Id)
 /// ticked "Also set its brand" on an element matched by place only, of another brand or none on OpenStreetMap. Null leaves
 /// its brand as it is.
 /// </param>
+/// <param name="OsmBrand">
+/// The element's brand as Essence last read it (<see cref="StationDetail.OsmBrand"/>: its <c>brand</c>, <c>operator</c>
+/// or <c>name</c>, "Sonic"), which tells, when it has no <c>brand</c> tag, a name that's its old brand from one of its own.
+/// </param>
 public sealed record OsmHoursEdit(
-    OsmElementRef Element, string Rule, DateOnly CheckDate, string CreatedBy, string Comment, bool Surveyed, string? Brand = null);
+    OsmElementRef Element, string Rule, DateOnly CheckDate, string CreatedBy, string Comment, bool Surveyed, string? Brand = null,
+    string? OsmBrand = null);
 
 /// <summary>An element's tags as OpenStreetMap has them now (<see cref="OsmEditor.ReadTagsAsync"/>): what the hours editor names it by.</summary>
 public sealed record OsmElementTags(IReadOnlyDictionary<string, string> Tags)
@@ -62,6 +67,12 @@ public sealed record OsmElementTags(IReadOnlyDictionary<string, string> Tags)
 
     /// <summary>What the editor names it by ("OpenStreetMap: Dépanneur Sonic"): its name, else its brand; null for neither.</summary>
     public string? Label => Name ?? Brand;
+
+    /// <summary>
+    /// With no <c>brand</c> tag, it's named after the brand Essence read on it (<paramref name="osmBrand"/>,
+    /// <see cref="StationDetail.OsmBrand"/>): "Sonic" is Sonic's, "Dépanneur Sonic" a name of its own.
+    /// </summary>
+    public bool IsNamedAfterBrand(string? osmBrand) => Brand is null && OsmEditor.SameBrand(Name, osmBrand);
 
     private string? Value(string key) => Tags.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
 }
@@ -209,16 +220,20 @@ public sealed class OsmEditor(HttpClient http)
     /// What setting the station's brand changes on an element of another brand or none, tag by tag (null removes it):
     /// <c>brand</c> becomes the station's; <c>brand:wikidata</c> and <c>brand:wikipedia</c> go, since they'd describe the
     /// old brand; and <c>name</c> becomes the brand only when it was the old brand's (folded as <see cref="SameBrand"/>
-    /// does: "SONIC" is Sonic's), so a name of its own ("Dépanneur Sonic") stays. Every other tag stays as it is. Nothing
-    /// changes when OpenStreetMap already says the station's brand, however it spells it: its Wikidata is then the brand's.
+    /// does: "SONIC" is Sonic's), so a name of its own ("Dépanneur Sonic") stays. The old brand is its <c>brand</c>, else,
+    /// on an element without one, the brand Essence read on it (<paramref name="osmBrand"/>): older elements often have
+    /// only <c>name=Sonic</c>, which Essence reads as their brand, and which would otherwise say Sonic beside the new brand.
+    /// Every other tag stays as it is. Nothing changes when OpenStreetMap already says the station's brand, however it
+    /// spells it (its Wikidata is then the brand's), nor for a station without one: the feed's "Indépendant" is no brand.
     /// </summary>
     /// <param name="tags">The element's tags, as fetched.</param>
     /// <param name="brand">The station's brand, as the app shows it: "Nutrinor Énergies".</param>
-    public static IReadOnlyDictionary<string, string?> BrandChanges(IReadOnlyDictionary<string, string> tags, string brand)
+    /// <param name="osmBrand">The element's brand as Essence last read it (<see cref="StationDetail.OsmBrand"/>): "Sonic"; null for none, or unknown.</param>
+    public static IReadOnlyDictionary<string, string?> BrandChanges(IReadOnlyDictionary<string, string> tags, string brand, string? osmBrand = null)
     {
         brand = brand.Trim();
-        var old = tags.GetValueOrDefault(BrandTag);
-        if (brand.Length == 0 || SameBrand(old, brand))
+        var tagged = Text(tags, BrandTag);
+        if (Brands.IsNone(brand) || SameBrand(tagged, brand))
         {
             return new Dictionary<string, string?>();
         }
@@ -232,13 +247,17 @@ public sealed class OsmEditor(HttpClient http)
             }
         }
 
-        if (tags.GetValueOrDefault(NameTag) is { } name && SameBrand(name, old))
+        if (Text(tags, NameTag) is { } name && SameBrand(name, tagged ?? osmBrand) && !SameBrand(name, brand))
         {
             changes[NameTag] = brand;
         }
 
         return changes;
     }
+
+    /// <summary>A tag's value, trimmed; null when it's missing or blank.</summary>
+    private static string? Text(IReadOnlyDictionary<string, string> tags, string key) =>
+        tags.TryGetValue(key, out var value) && !string.IsNullOrWhiteSpace(value) ? value.Trim() : null;
 
     /// <summary>
     /// The two say the same brand, accents, case and punctuation aside, as the feed's brands are compared
@@ -323,7 +342,7 @@ public sealed class OsmEditor(HttpClient http)
         };
         if (edit.Brand is { } brand)
         {
-            foreach (var (key, value) in BrandChanges(TagsOf(source), brand))
+            foreach (var (key, value) in BrandChanges(TagsOf(source), brand, edit.OsmBrand))
             {
                 changes[key] = value;
             }

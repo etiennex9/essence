@@ -1272,6 +1272,9 @@
   <data name="OsmNoBrandNow" xml:space="preserve">
     <value>OpenStreetMap ne lui donne aucune marque.</value>
   </data>
+  <data name="OsmBrandNamed" xml:space="preserve">
+    <value>OpenStreetMap l’appelle {0}.</value>
+  </data>
   <data name="OsmBrandFirstHand" xml:space="preserve">
     <value>Seulement pour ce que vous savez de première main : OpenStreetMap n’accepte ni Google Maps ni Street View comme source.</value>
   </data>

@@ -230,7 +230,8 @@ per station (see **Which hours show**), and the app shows them.
     or none, when it's within 50 m, no other feed station (of any brand, matched or not) is within 150 m of the element,
     and no other free element is within 50 m of the station. The element's hours aren't taken, its brand suggesting
     they're as old: the row (`location`, never confirmed, no rule) only says which element a correction made in the app
-    goes to, and the details say so (`osmBrandDiffers`), for the editor to offer the station's brand with the hours.
+    goes to, and the details say so (`osmBrandDiffers`, with the brand read there, `osmBrand`), for the editor to offer
+    the station's brand with the hours.
     Nutrinor Chicoutimi on boulevard Saint-Paul stays without one: its element is 62 m away, and 54 m from the
     Petro-Canada next door.
 - **Checks.** A run whose source gives no records, or that matches fewer stations than 80 % of the last good run, is
@@ -248,9 +249,11 @@ per station (see **Which hours show**), and the app shows them.
   whose details the last run asked for). Only the download whose rows are serving is matched again: one left older on
   disk (keeping the newer one failed) waits for the next run.
 - **Tables.** `station_hours` has one row per station and source: the rule (null when a source has the place but not its
-  hours, or doesn't give them), the source's id for the place and a link, how it was matched (`natural_key`,
-  `store_number`, `distance`, `address`, `brand` or `location`) and how far, whether that's confirmed, whether the
-  source says it's closed for now, when the source says it was checked, and when it was fetched. `hours_imports` logs
+  hours, or doesn't give them), the source's id for the place and a link, the brand it writes for the place
+  (`source_brand`: OpenStreetMap's `brand`, else `operator`, else `name`, only when a feed station has that brand, so
+  never a name of the place's own), how it was matched (`natural_key`, `store_number`, `distance`, `address`, `brand` or
+  `location`) and how far, whether that's confirmed, whether the source says it's closed for now, when the source says
+  it was checked, and when it was fetched. `hours_imports` logs
   each source's runs (`matched` leaving out the matches by location only): `succeeded`, `unchanged`, `rematched`
   (matched again from the last download because the stations changed: nothing was fetched, so it's no success),
   `rejected`, `failed` or `disabled` (see **Turning a source off**), with the version of the download (its SHA-256), its
@@ -312,7 +315,7 @@ per station (see **Which hours show**), and the app shows them.
   on the device (localStorage on the web, Android's secure storage, left out of its backups): the Essence server never
   sees it, and there are still no Essence accounts. Once linked, and when the station was matched to an OpenStreetMap
   node or way (`osmElement`), **Also update OpenStreetMap** sends the hours on Save: the element as it is now, a changeset
-  (`created_by=Essence <version>`, the comment "Update opening hours of <name>", and `source=survey` only when **I
+  (`created_by=Essence <version>`, the comment "Update opening hours of `<name>`", and `source=survey` only when **I
   checked these at the station** is ticked), the element with only `opening_hours` and `check_date:opening_hours` (today,
   in the station's zone) changed, every other tag as it was, then the changeset closed, which happens whatever went wrong
   once it was open. A version conflict (someone edited it meanwhile) fetches it again and tries once more. The app then
@@ -322,12 +325,16 @@ per station (see **Which hours show**), and the app shows them.
   OpenStreetMap's own, sending only says when they were checked, so the box starts unticked. The editor names the
   element the hours go to, as OpenStreetMap has it now ("OpenStreetMap: Dépanneur Sonic", its name, else its brand, read
   without the token; nothing is said when it can't be read). For an element matched by location only
-  (`osmBrandDiffers`), it also offers **Also set its brand to <brand>**, saying what OpenStreetMap says now: unticked,
+  (`osmBrandDiffers`), it also offers **Also set its brand to `<brand>`**, saying what OpenStreetMap says now: unticked,
   and only for what the user knows first-hand, as OpenStreetMap takes neither Google Maps nor Street View as a source.
+  A station without a brand gets no offer, the feed's "Indépendant" included: OpenStreetMap's `brand` is a chain's.
   Ticked, the same edit sets `brand` to the station's, removes `brand:wikidata` and `brand:wikipedia` (they'd describe
   the old brand), and sets `name` to it only when the name was the old brand's (accents, case and punctuation aside), so
-  a name of its own stays; the comment becomes "Update opening hours and brand of <name>", and a version conflict does
-  it all again on the newer version. Nothing changes when OpenStreetMap already says the station's brand. The brand goes
+  a name of its own stays. The old brand is the element's `brand`, else, on an element without one, the brand the last
+  run read on it (`osmBrand`): many older elements are only `name=Sonic`, which becomes the new brand too, while
+  "Dépanneur Sonic", read as no brand, stays; the note then says "OpenStreetMap names it Sonic". The comment becomes
+  "Update opening hours and brand of `<name>`", and a version conflict does it all again on the newer version. Nothing
+  changes when OpenStreetMap already says the station's brand. The brand goes
   only with the hours, never on its own: hours the box leaves unticked leave it unticked too. It isn't kept on the
   device, only the hours are. A relation isn't edited
   (the editor links to OpenStreetMap's own editor instead), and a station without an element gets **Add it on
@@ -339,7 +346,7 @@ per station (see **Which hours show**), and the app shows them.
 | Endpoint | |
 |---|---|
 | `GET /stations?region&brand&active&q&page&pageSize` | Stations, paged. `q` searches the name, address and postal code. |
-| `GET /stations/{id}` | One station with its current prices, opening hours (`hours`, null when unknown) and OpenStreetMap element (`osmElement`: `node/123`, `way/456`, `relation/789`, its hours or not; null when it wasn't matched to one), with `osmBrandDiffers` (true when it was matched by location only, being of another brand or none on OpenStreetMap; null without an element). |
+| `GET /stations/{id}` | One station with its current prices, opening hours (`hours`, null when unknown) and OpenStreetMap element (`osmElement`: `node/123`, `way/456`, `relation/789`, its hours or not; null when it wasn't matched to one), with `osmBrandDiffers` (true when it was matched by location only, being of another brand or none on OpenStreetMap; null without an element) and `osmBrand` (its brand there as the last run read it, its `brand`, else `operator`, else `name`, when a feed station has that brand: `Sonic`; null for none, or without an element). |
 | `GET /stations/nearby?lat&lon&radiusKm=5&fuel&limit=20` | Active stations within a radius, closest first, with their opening hours. |
 | `GET /stations/best?lat&lon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&radiusKm=10&ignoreHours` | Where to fill up near a point: the pick, the closest, the cheapest and a few others that save, and the stations left out because they'd be closed on arrival (see below). |
 | `GET /trips/best?fromLat&fromLon&toLat&toLon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&rangeKm&spareKm=30&ignoreHours` | Where to fill up on the way to a destination: the route, where to stop, the stations along it ranked by detour, and those left out because they'd be closed on arrival (see below). |

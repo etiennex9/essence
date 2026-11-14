@@ -105,7 +105,7 @@
                         </fieldset>
                         @if (brand is not null)
                         {
-                            <p class="hint">@OsmEditTexts.BrandNote(L, _tags)</p>
+                            <p class="hint">@OsmEditTexts.BrandNote(L, _tags, Station.OsmBrand)</p>
                         }
                         @if (built is not null && Station.Hours is { } server && HoursDraft.SameAs(server, built))
                         {
@@ -386,7 +386,8 @@
         {
             // Not cancelled if the details close meanwhile: the user asked for it to be sent.
             var changeset = await Osm.SendHoursAsync(
-                new OsmHoursEdit(element, hours.ToRule(), Today(), await CreatedByAsync(), OsmEditTexts.Comment(L, Name, brand), _surveyed, brand),
+                new OsmHoursEdit(
+                    element, hours.ToRule(), Today(), await CreatedByAsync(), OsmEditTexts.Comment(L, Name, brand), _surveyed, brand, Station.OsmBrand),
                 CancellationToken.None);
             _sentPage = Osm.Settings?.ChangesetPage(changeset);
         }

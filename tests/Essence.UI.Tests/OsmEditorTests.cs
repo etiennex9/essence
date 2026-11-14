@@ -437,13 +437,23 @@ public class OsmEditorTests
     }
 
     [Theory]
-    [InlineData("Sonic", "Sonic", "Nutrinor Énergies")]
-    [InlineData("SONIC", "Sonic", "Nutrinor Énergies")]
-    [InlineData("Pétro T", "Petro-T", "Nutrinor Énergies")]
-    [InlineData("Dépanneur Sonic", "Sonic", "Dépanneur Sonic")]
-    [InlineData("Station Nutrinor Énergies Chicoutimi", "Sonic", "Station Nutrinor Énergies Chicoutimi")]
-    [InlineData("Sonic", null, "Sonic")]
-    public void The_name_becomes_the_brand_only_when_it_was_the_old_brand_s(string name, string? oldBrand, string expected)
+    [InlineData("Sonic", "Sonic", null, "Nutrinor Énergies")]
+    [InlineData("SONIC", "Sonic", null, "Nutrinor Énergies")]
+    [InlineData("Pétro T", "Petro-T", null, "Nutrinor Énergies")]
+    [InlineData("Dépanneur Sonic", "Sonic", null, "Dépanneur Sonic")]
+    [InlineData("Station Nutrinor Énergies Chicoutimi", "Sonic", null, "Station Nutrinor Énergies Chicoutimi")]
+    // No brand tag, as older elements often have: a name Essence read as their brand is the old brand's.
+    [InlineData("Sonic", null, "Sonic", "Nutrinor Énergies")]
+    [InlineData("SONIC", null, "Sonic", "Nutrinor Énergies")]
+    [InlineData("Petroles RL", null, "Petroles RL", "Nutrinor Énergies")]
+    // A name of its own, which Essence read as no brand, or a brand read from the operator: it stays.
+    [InlineData("Dépanneur Sonic", null, null, "Dépanneur Sonic")]
+    [InlineData("Super Sagamie", null, "Sonic", "Super Sagamie")]
+    // Unknown (an older API): only the brand tag says the old brand.
+    [InlineData("Sonic", null, null, "Sonic")]
+    // The brand tag says the old brand, whatever was read before.
+    [InlineData("Sonic", "Ultramar", "Sonic", "Sonic")]
+    public void The_name_becomes_the_brand_only_when_it_was_the_old_brand_s(string name, string? oldBrand, string? osmBrand, string expected)
     {
         var tags = new Dictionary<string, string> { ["amenity"] = "fuel", ["name"] = name };
         if (oldBrand is not null)
@@ -451,11 +461,82 @@ public class OsmEditorTests
             tags["brand"] = oldBrand;
         }
 
-        var changes = OsmEditor.BrandChanges(tags, "Nutrinor Énergies");
+        var changes = OsmEditor.BrandChanges(tags, "Nutrinor Énergies", osmBrand);
 
         Assert.Equal("Nutrinor Énergies", changes["brand"]);
         Assert.Equal(expected, changes.TryGetValue("name", out var changed) ? changed : name);
         Assert.Equal(expected != name, changes.ContainsKey("name"));
+    }
+
+    [Fact]
+    public void A_name_that_s_already_the_station_s_brand_keeps_its_spelling()
+    {
+        var tags = new Dictionary<string, string> { ["amenity"] = "fuel", ["name"] = "NUTRINOR ENERGIES" };
+
+        var changes = OsmEditor.BrandChanges(tags, "Nutrinor Énergies", osmBrand: "Nutrinor Énergies");
+
+        Assert.Equal(new Dictionary<string, string?> { ["brand"] = "Nutrinor Énergies" }, changes);
+    }
+
+    [Theory]
+    [InlineData("Indépendant")]
+    [InlineData("INDEPENDANT")]
+    [InlineData("Independent")]
+    [InlineData("Aucun")]
+    [InlineData("  ")]
+    public void A_station_without_a_brand_gives_the_element_none(string brand)
+    {
+        var tags = new Dictionary<string, string> { ["amenity"] = "fuel", ["name"] = "Garage Untel" };
+
+        Assert.Empty(OsmEditor.BrandChanges(tags, brand));
+    }
+
+    [Fact]
+    public async Task An_element_named_after_its_old_brand_without_a_brand_tag_is_renamed_with_the_brand()
+    {
+        // Nutrinor Énergies at 253 rue Principale, Saint-Nazaire: on OpenStreetMap a node named "Sonic", with no brand.
+        const string named = """
+            <osm><node id="5310653589" version="2" lat="48.58" lon="-71.55">
+              <tag k="addr:housenumber" v="253"/><tag k="amenity" v="fuel"/><tag k="name" v="Sonic"/>
+            </node></osm>
+            """;
+        var osm = Sequence(named);
+
+        await new OsmEditor(osm.Client).UpdateHoursAsync(
+            Api, Token, BrandEdit with { Element = new OsmElementRef("node", 5310653589), OsmBrand = "Sonic" },
+            TestContext.Current.CancellationToken);
+
+        Assert.Equal(
+            """<?xml version="1.0" encoding="utf-8"?><osm><node id="5310653589" version="2" changeset="170000001" lat="48.58" lon="-71.55">"""
+            + """<tag k="addr:housenumber" v="253" /><tag k="amenity" v="fuel" /><tag k="name" v="Nutrinor Énergies" />"""
+            + """<tag k="opening_hours" v="Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30" /><tag k="check_date:opening_hours" v="2026-11-13" />"""
+            + """<tag k="brand" v="Nutrinor Énergies" /></node></osm>""",
+            osm.Requests[2].Body);
+    }
+
+    [Fact]
+    public async Task A_version_conflict_renames_an_element_named_after_its_old_brand_again_on_the_newer_version()
+    {
+        const string named = """
+            <osm><node id="6756481766" version="9" lat="48.42" lon="-71.07"><tag k="amenity" v="fuel"/><tag k="name" v="Sonic"/></node></osm>
+            """;
+        var newer = named.Replace("version=\"9\"", "version=\"10\"").Replace("<tag k=\"amenity\" v=\"fuel\"/>", "<tag k=\"amenity\" v=\"fuel\"/><tag k=\"phone\" v=\"+1 418 555 0100\"/>");
+        var (fetches, puts) = (0, 0);
+        var osm = new OsmStub(r => (r.Method.Method, r.RequestUri!.AbsolutePath) switch
+        {
+            ("GET", _) => OsmStub.Xml(fetches++ == 0 ? named : newer),
+            ("PUT", "/api/0.6/changeset/create") => OsmStub.Text("170000001"),
+            ("PUT", "/api/0.6/node/6756481766") => puts++ == 0
+                ? OsmStub.Text("Version mismatch: Provided 9, server had: 10 of Node 6756481766", HttpStatusCode.Conflict)
+                : OsmStub.Text("11"),
+            _ => OsmStub.Text(""),
+        });
+
+        await new OsmEditor(osm.Client).UpdateHoursAsync(Api, Token, BrandEdit with { OsmBrand = "Sonic" }, TestContext.Current.CancellationToken);
+
+        var retried = Tags(osm.Requests[4].Body, "node");
+        Assert.Equal(["amenity", "phone", "name", "opening_hours", "check_date:opening_hours", "brand"], retried.Keys);
+        Assert.Equal(("Nutrinor Énergies", "Nutrinor Énergies", "+1 418 555 0100"), (retried["name"], retried["brand"], retried["phone"]));
     }
 
     [Fact]
@@ -573,6 +654,30 @@ public class OsmEditorTests
         }
 
         Assert.Equal(label, new OsmElementTags(tags).Label);
+    }
+
+    [Theory]
+    [InlineData("Sonic", null, "Sonic", true)]
+    [InlineData("SONIC", null, "Sonic", true)]
+    [InlineData("Dépanneur Sonic", null, "Sonic", false)]
+    [InlineData("Sonic", null, null, false)]
+    [InlineData("Sonic", "Sonic", "Sonic", false)]
+    [InlineData(null, null, "Sonic", false)]
+    public void An_element_without_a_brand_tag_is_named_after_the_brand_read_on_it_only_when_its_name_is_that(
+        string? name, string? brand, string? osmBrand, bool named)
+    {
+        var tags = new Dictionary<string, string> { ["amenity"] = "fuel" };
+        if (name is not null)
+        {
+            tags["name"] = name;
+        }
+
+        if (brand is not null)
+        {
+            tags["brand"] = brand;
+        }
+
+        Assert.Equal(named, new OsmElementTags(tags).IsNamedAfterBrand(osmBrand));
     }
 
     [Theory]

@@ -459,6 +459,10 @@ namespace Essence.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("source");
 
+                    b.Property<string>("SourceBrand")
+                        .HasColumnType("text")
+                        .HasColumnName("source_brand");
+
                     b.Property<DateTimeOffset?>("SourceCheckedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("source_checked_at");

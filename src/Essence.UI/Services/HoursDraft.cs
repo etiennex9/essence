@@ -199,10 +199,12 @@ public sealed class HoursDraft
     /// station's, when its element was matched by place only (<see cref="StationDetail.OsmBrandDiffers"/>: of another brand
     /// or none on OpenStreetMap, which is often years out of date), unless OpenStreetMap says it already now (<paramref name="now"/>,
     /// when it could be read). Null when there's none to offer: an element of the station's brand, a station without one
-    /// (an independent), or an older API that doesn't say.
+    /// (an independent, which the feed may call "Indépendant": OpenStreetMap's <c>brand</c> is a chain's, <see cref="Brands.IsNone"/>),
+    /// or an older API that doesn't say.
     /// </summary>
     public static string? BrandToOffer(StationDetail station, OsmElementTags? now) =>
-        station.OsmBrandDiffers == true && station.Brand?.Trim() is { Length: > 0 } brand && !OsmEditor.SameBrand(now?.Brand, brand)
+        station.OsmBrandDiffers == true && !Brands.IsNone(station.Brand) && station.Brand.Trim() is var brand
+        && !OsmEditor.SameBrand(now?.Brand, brand)
             ? brand
             : null;
 

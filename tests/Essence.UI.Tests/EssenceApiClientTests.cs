@@ -157,20 +157,43 @@ public class EssenceApiClientTests
         Assert.Equal(differs, result.Value!.OsmBrandDiffers);
     }
 
+    [Theory]
+    [InlineData(",\"osmElement\":\"node/5310653589\",\"osmBrandDiffers\":true,\"osmBrand\":\"Sonic\"", "Sonic")]
+    [InlineData(",\"osmElement\":\"way/221282039\",\"osmBrandDiffers\":true,\"osmBrand\":null", null)]
+    [InlineData(",\"osmElement\":\"way/456\",\"osmBrandDiffers\":true", null)]
+    [InlineData("", null)]
+    public async Task A_station_s_details_say_the_brand_read_on_its_element_or_nothing_from_an_older_API(string fields, string? brand)
+    {
+        var json = $$"""
+            {"id":42,"name":"Nutrinor Energies","brand":"Nutrinor Énergies","status":"En opération","address":"253 rue Principale",
+             "postalCode":"G0W2V0","region":"Saguenay-Lac-Saint-Jean","latitude":48.58,"longitude":-71.55,"isActive":true,
+             "firstSeenAt":"2026-10-01T00:00:00Z","lastSeenAt":"2026-11-11T00:00:00Z","updatedAt":"2026-11-11T00:00:00Z",
+             "prices":[],"hours":null{{fields}}}
+            """;
+        var (client, _) = Client(_ => Json(json));
+
+        var result = await client.GetStationAsync(42, TestContext.Current.CancellationToken);
+
+        Assert.Equal(brand, result.Value!.OsmBrand);
+    }
+
     [Fact]
     public void An_older_app_reads_the_details_as_before_whether_its_element_was_matched_by_place_only_or_not()
     {
-        var station = TestStations.Detail(42, "Nutrinor Énergies") with { OsmElement = "way/456", OsmBrandDiffers = true };
+        var station = TestStations.Detail(42, "Nutrinor Énergies") with { OsmElement = "way/456", OsmBrandDiffers = true, OsmBrand = "Sonic" };
         var web = new JsonSerializerOptions(JsonSerializerDefaults.Web);
 
         var json = JsonSerializer.Serialize(station, web);
         var older = JsonSerializer.Deserialize<OlderStationDetail>(json, web);
 
-        Assert.EndsWith(""","osmElement":"way/456","osmBrandDiffers":true}""", json);
+        Assert.EndsWith(""","osmElement":"way/456","osmBrandDiffers":true,"osmBrand":"Sonic"}""", json);
         Assert.Equal(new OlderStationDetail(42, "Nutrinor Énergies", "way/456"), older);
     }
 
-    /// <summary>The details as an app from before <see cref="StationDetail.OsmBrandDiffers"/> reads them (the fields it needs).</summary>
+    /// <summary>
+    /// The details as an app from before <see cref="StationDetail.OsmBrandDiffers"/> and <see cref="StationDetail.OsmBrand"/>
+    /// reads them (the fields it needs).
+    /// </summary>
     private sealed record OlderStationDetail(long Id, string? Brand, string? OsmElement = null);
 
     [Fact]

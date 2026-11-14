@@ -16,14 +16,21 @@ public static class OsmEditTexts
     public static string ElementName(IStringLocalizer<Strings> l, OsmElementTags tags) => tags.Label ?? l["OsmUnnamed"];
 
     /// <summary>
-    /// The note under "Also set its brand to …": what OpenStreetMap says now ("OpenStreetMap says Sonic.", or that it has no
-    /// brand for it), when the element could be read, then that it's only for what the user knows first-hand, OpenStreetMap
-    /// not taking Google Maps or Street View as a source.
+    /// The note under "Also set its brand to …": what OpenStreetMap says now, when the element could be read ("OpenStreetMap
+    /// says Sonic.", its <c>brand</c>; "OpenStreetMap names it Sonic.", with no <c>brand</c> but named after the brand
+    /// Essence read on it, a name that changes with the brand; or that it has no brand for it), then that it's only for
+    /// what the user knows first-hand, OpenStreetMap not taking Google Maps or Street View as a source.
     /// </summary>
-    public static string BrandNote(IStringLocalizer<Strings> l, OsmElementTags? now) =>
+    /// <param name="osmBrand">The element's brand as Essence last read it (<see cref="StationDetail.OsmBrand"/>); null for none, or unknown.</param>
+    public static string BrandNote(IStringLocalizer<Strings> l, OsmElementTags? now, string? osmBrand = null) =>
         now is null
             ? l["OsmBrandFirstHand"]
-            : $"{(now.Brand is { } brand ? l["OsmBrandNow", brand] : l["OsmNoBrandNow"])} {l["OsmBrandFirstHand"]}";
+            : $"{Now(l, now, osmBrand)} {l["OsmBrandFirstHand"]}";
+
+    private static string Now(IStringLocalizer<Strings> l, OsmElementTags now, string? osmBrand) =>
+        now.Brand is { } brand ? l["OsmBrandNow", brand]
+        : now.IsNamedAfterBrand(osmBrand) ? l["OsmBrandNamed", now.Name!]
+        : l["OsmNoBrandNow"];
 
     /// <summary>
     /// The changeset's comment: "Update opening hours of Costco", or "Update opening hours and brand of Nutrinor Énergies"

@@ -35,7 +35,10 @@ public sealed class OverpassSourceTests
         Assert.Equal(12, parsed.Records.Count);
         // Costco Laval's pumps: no hours in OpenStreetMap.
         Assert.Equal(
-            new SourceRecord("node/6756481766", "costco", 45.575341, -73.7552574, null, null, null, "https://www.openstreetmap.org/node/6756481766", null, false),
+            new SourceRecord("node/6756481766", "costco", 45.575341, -73.7552574, null, null, null, "https://www.openstreetmap.org/node/6756481766", null, false)
+            {
+                Brand = "Costco",
+            },
             Record("node/6756481766"));
     }
 
@@ -69,6 +72,16 @@ public sealed class OverpassSourceTests
         // A name only.
         Assert.Equal("harnois", Record("node/5334869289").BrandFamily);
         Assert.Equal("essence", Record("node/547557657").BrandFamily);
+    }
+
+    [Fact]
+    public void The_brand_read_is_kept_as_written_for_the_app_to_tell_a_name_that_s_the_brand_s()
+    {
+        Assert.Equal("Petro-Canada", Record("way/26630403").Brand);
+        Assert.Equal("Ultramar", Record("way/368505563").Brand);
+        Assert.Equal("Pétro-Canada", Record("node/4320427121").Brand);
+        // A name only, the brand's: "Harnois" is named after its brand.
+        Assert.Equal("Harnois", Record("node/5334869289").Brand);
     }
 
     [Fact]
@@ -157,7 +170,7 @@ public sealed class OverpassSourceTests
         Assert.DoesNotContain("wikidata", kept);
         Assert.Contains("2026-11-13T04:09:05Z", kept);
         Assert.Equal(
-            Parse().Records.Select(r => r.Ref == "node/547557657" ? r with { BrandFamily = null } : r),
+            Parse().Records.Select(r => r.Ref == "node/547557657" ? r with { BrandFamily = null, Brand = null } : r),
             source.Parse(fetched.Raw).Records);
     }
 
@@ -173,7 +186,9 @@ public sealed class OverpassSourceTests
 
         Assert.DoesNotContain("Untel", Encoding.UTF8.GetString(fetched.Raw));
         Assert.Contains("\"Ultramar\"", Encoding.UTF8.GetString(fetched.Raw));
-        Assert.Null(source.Parse(fetched.Raw).Records.Single(r => r.Ref == "node/5334869289").BrandFamily);
+        var garage = source.Parse(fetched.Raw).Records.Single(r => r.Ref == "node/5334869289");
+        Assert.Null(garage.BrandFamily);
+        Assert.Null(garage.Brand);
     }
 
     [Fact]

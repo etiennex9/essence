@@ -33,7 +33,9 @@ public sealed record SnapshotHours(StationHours Dto, OpeningHours Hours, TimeZon
 /// <summary>A row of <c>station_hours</c>, with where its station is (for its time zone).</summary>
 /// <param name="SourceRef">The source's id for the place: for OpenStreetMap, the element (<c>node/6756481766</c>).</param>
 /// <param name="MatchedBy">How the row was matched to the station (<see cref="StationHoursEntry.MatchedBy"/>).</param>
-public sealed record SnapshotHoursRow(HoursRow Row, double? Latitude, double? Longitude, string? SourceRef = null, string? MatchedBy = null);
+/// <param name="SourceBrand">The brand the source writes for the place (<see cref="StationHoursEntry.SourceBrand"/>).</param>
+public sealed record SnapshotHoursRow(
+    HoursRow Row, double? Latitude, double? Longitude, string? SourceRef = null, string? MatchedBy = null, string? SourceBrand = null);
 
 /// <summary>A station's OpenStreetMap element, as <see cref="StationSnapshot.OsmElementsOf"/> found it.</summary>
 /// <param name="Ref"><c>node/123</c>, <c>way/456</c> or <c>relation/789</c>.</param>
@@ -41,7 +43,11 @@ public sealed record SnapshotHoursRow(HoursRow Row, double? Latitude, double? Lo
 /// Matched by place only (<see cref="StationHoursEntry.ByLocation"/>): on OpenStreetMap it's of another brand or none
 /// (<see cref="StationDetail.OsmBrandDiffers"/>).
 /// </param>
-public sealed record SnapshotOsmElement(string Ref, bool BrandDiffers);
+/// <param name="Brand">
+/// Its brand there as the last run read it, when a feed station has it (<see cref="StationHoursEntry.SourceBrand"/>,
+/// <see cref="StationDetail.OsmBrand"/>): "Sonic"; null for none.
+/// </param>
+public sealed record SnapshotOsmElement(string Ref, bool BrandDiffers, string? Brand = null);
 
 /// <param name="Version">The import it was loaded for (<see cref="DataVersion"/>); null before the first one.</param>
 /// <param name="HoursVersion">
@@ -138,7 +144,8 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
                     h.Station.Latitude,
                     h.Station.Longitude,
                     h.SourceRef,
-                    h.MatchedBy))
+                    h.MatchedBy,
+                    h.SourceBrand))
                 .ToListAsync(cancellationToken);
             var hours = ChooseHours(hourRows, lastSuccesses, now, _staleAfter);
             return _current = new Snapshot(
@@ -182,8 +189,8 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
     /// <summary>
     /// Each station's OpenStreetMap element, from its <c>osm</c> row, with a rule or without one (OpenStreetMap often has the
     /// place but not its hours): <c>node/123</c>, <c>way/456</c> or <c>relation/789</c>, and whether it was matched by place
-    /// only (<see cref="StationHoursEntry.ByLocation"/>), its brand there another or none. A reference of another shape is
-    /// left out, so the app is never sent elsewhere than to an element.
+    /// only (<see cref="StationHoursEntry.ByLocation"/>), its brand there another or none, with that brand as it's written
+    /// there. A reference of another shape is left out, so the app is never sent elsewhere than to an element.
     /// </summary>
     public static IReadOnlyDictionary<long, SnapshotOsmElement> OsmElementsOf(IEnumerable<SnapshotHoursRow> rows)
     {
@@ -192,7 +199,8 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
         {
             if (row.Row.Source == HoursPrecedence.Osm && IsOsmElement(row.SourceRef))
             {
-                elements[row.Row.StationId] = new SnapshotOsmElement(row.SourceRef!, row.MatchedBy == StationHoursEntry.ByLocation);
+                elements[row.Row.StationId] = new SnapshotOsmElement(
+                    row.SourceRef!, row.MatchedBy == StationHoursEntry.ByLocation, string.IsNullOrWhiteSpace(row.SourceBrand) ? null : row.SourceBrand);
             }
         }
 
