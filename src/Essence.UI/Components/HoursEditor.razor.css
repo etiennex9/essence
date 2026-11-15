@@ -98,12 +98,32 @@ fieldset {
     border-top: 0.5px solid var(--ess-border);
 }
 
-/* Mon · Closed · 06:00 to 21:30, on one row from 328 px. */
+/* Mon · ☐ · 6:00 a.m. to 11:00 p.m. on one row, with "Closed" once above the checkboxes rather than on each row: a
+   phone's 12-hour times ("11:00 p.m.", plus Android's arrow) need the room. The checkboxes' column is fixed, so the
+   heading lines up with it. */
+.days-head,
 .day {
     display: grid;
-    grid-template-columns: 2.6em auto minmax(0, 1fr) auto minmax(0, 1fr);
+    grid-template-columns: 2.4em 28px minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
-    gap: 6px;
+    gap: 4px;
+}
+
+.days-head {
+    padding-top: 6px;
+}
+
+/* Centered on the checkboxes, and as wide as its word: it may reach over the columns beside it, empty on this row. */
+.closed-head {
+    grid-column: 2;
+    display: flex;
+    justify-content: center;
+    font-size: 12px;
+    white-space: nowrap;
+    color: var(--ess-text-muted);
+}
+
+.day {
     padding: 4px 0;
     border-bottom: 0.5px solid var(--ess-border);
 }
@@ -114,10 +134,8 @@ fieldset {
 }
 
 .day .closed {
+    justify-content: center;
     min-height: 40px;
-    gap: 4px;
-    font-size: 13px;
-    color: var(--ess-text-muted);
 }
 
 .day .closed input {
@@ -135,7 +153,7 @@ input[type="time"] {
     width: 100%;
     min-width: 0;
     height: 40px;
-    padding: 0 6px;
+    padding: 0 4px;
     border: 0.5px solid var(--ess-border-strong);
     border-radius: 8px;
     background: var(--ess-surface);
