@@ -64,8 +64,8 @@ public sealed class OpeningHours : IEquatable<OpeningHours>
     /// <summary>
     /// Reads opening_hours: "24/7", or rules separated by "; ", each <c>[days] hours</c>. The days are a comma list of
     /// Mo Tu We Th Fr Sa Su, ranges of them ("Mo-Fr", or "Fr-Mo" across the weekend) and PH; no days means every day. The
-    /// hours are "off", "closed", or a comma list of "HH:MM-HH:MM": an end of "24:00" or "23:59" is midnight, and an end
-    /// before the start is on the next day. Days a rule doesn't name are closed, and a later rule replaces the hours of
+    /// hours are "off", "closed", or a comma list of "HH:MM-HH:MM": an end of "24:00" or "23:59" is midnight, an end
+    /// before the start is on the next day, and "00:00-00:00" is all day. Days a rule doesn't name are closed, and a later rule replaces the hours of
     /// the days it names, as in OpenStreetMap, holidays that fall on them included: "PH off; Mo-Su 06:00-22:00" is open on
     /// holidays. PH goes last: before a rule that would leave its hours on only some holidays, it's refused.
     /// <para>
