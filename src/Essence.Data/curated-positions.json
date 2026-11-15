@@ -29,6 +29,15 @@
       "note": "OpenStreetMap way/429368316, at its house number and postal code, and the bus stop node/11230147568 named after the station agree within 43 m, 211 m from the Régie's point, which OpenStreetMap's addresses put at nos. 124 to 129. Added by hand: Photon has no house at no. 132, and the daily check doesn't count a bus stop."
     },
     {
+      "naturalKey": "2900 rue lenoir ouest, laval|H7R6E9",
+      "latitude": 45.560837,
+      "longitude": -73.81761,
+      "feedLatitude": 45.558813,
+      "feedLongitude": -73.816342,
+      "reviewed": "2026-11-15",
+      "note": "OpenStreetMap node/10016706067, an Ultramar, and Ultramar's locator (1391, at 4150 A boul. Chomedey, the same postal code) are 105 m apart, on the corner lot of Chomedey and Lenoir, 246 m and 341 m from the Régie's point, a street-level geocode on rue Lenoir. The point is OpenStreetMap's. Added by hand in review: the two are further apart than the daily check's 75 m."
+    },
+    {
       "naturalKey": "46 rte 138, baie-trinite|G0H1A0",
       "latitude": 49.424089,
       "longitude": -67.29122,

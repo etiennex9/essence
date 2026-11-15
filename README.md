@@ -353,10 +353,10 @@ marker, the directions, Best near you's and Best on the way's distances and the 
 wrong point. So a station whose point is known to be off gets a reviewed correction in
 [curated-positions.json](src/Essence.Data/curated-positions.json), shipped in `Essence.Data` so that the API and the
 ingest read the same ones (`PositionCorrections`). The database keeps the Régie's point as it is. The file starts with
-12 of the 13. The daily check below finds 3 of them (Saint-Fulgence, boulevard Newman in Montréal, chemin Ridge in
-Saint-Bernard-de-Lacolle). The 9 others were added by hand from the audit: each rests on two positions within 75 m of
-each other and more than 150 m from the Régie's point, but not always on two the check counts, and their `note` says
-which:
+all 13. The daily check below finds 3 of them (Saint-Fulgence, boulevard Newman in Montréal, chemin Ridge in
+Saint-Bernard-de-Lacolle). The 10 others were added by hand from the audit: each rests on two positions more than 150 m
+from the Régie's point, within 75 m of each other but for one, and not always on two the check counts; their `note`
+says which:
 
 - 5 have an OpenStreetMap element without a house number (Sainte-Jeanne-d'Arc, Roxton Pond, Papineauville) or with
   another address (Saint-Camille-de-Lellis, Mansfield-et-Pontefract), next to Photon's house, building or shop at the
@@ -368,8 +368,9 @@ which:
 - Costco Drummondville's postal code in the feed (J2C 8N1) isn't Costco's (J2C 0P6). Costco's locator and the
   warehouse at no. 105 (Photon) agree within 50 m, and the gas bar on OpenStreetMap is 78 m from Costco's point: the
   correction is the gas bar's own point, where the pumps are, not a mean.
-
-The 13th, 2900 rue Lenoir ouest in Laval, isn't in it: its two positions are 105 m apart.
+- 2900 rue Lenoir ouest in Laval: OpenStreetMap's Ultramar and Ultramar's locator (at 4150 A boulevard Chomedey) are
+  105 m apart, on the corner lot of the two streets, past the check's 75 m; accepted in review, at OpenStreetMap's
+  point.
 
 - **Where it applies.** The API's snapshot of the stations puts a corrected station at the corrected point, and every
   answer gives that point: `/stations`, `/stations/{id}` (the details, and the Google Maps directions built from them),
