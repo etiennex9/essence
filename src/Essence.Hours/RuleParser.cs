@@ -343,7 +343,10 @@ internal sealed class RuleParser
         var end = Minutes(to, end: true);
         if (end == start)
         {
-            throw Fail($"\"{from.Text}-{to.Text}\" starts and ends at the same time: all day is \"00:00-24:00\".");
+            // OpenStreetMap's mappers write all day "00:00-00:00" too. Another time ("12:00-12:00") is too unclear to guess.
+            return start == 0
+                ? TimeRange.AllDay
+                : throw Fail($"\"{from.Text}-{to.Text}\" starts and ends at the same time: all day is \"00:00-24:00\".");
         }
 
         // An end before the start is on the next day; one at 23:59 is made midnight by OpeningHours.Merge.
