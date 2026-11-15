@@ -39,6 +39,7 @@
             @if (!draft.AlwaysOpen)
             {
                 <div class="days">
+                    <div class="days-head" aria-hidden="true"><span class="closed-head">@L["HoursClosedDay"]</span></div>
                     @foreach (var day in draft.Days)
                     {
                         <div class="day @(day.Closed ? "is-closed" : null) @(_invalid == day.Day ? "is-invalid" : null)" role="group"
@@ -46,7 +47,7 @@
                             <span class="name" aria-hidden="true">@ShortDayName(day.Day)</span>
                             <label class="check closed">
                                 <input type="checkbox" checked="@day.Closed" @onchange="e => SetClosed(day, e.Value is true)" />
-                                @L["HoursClosedDay"]
+                                <span class="visually-hidden">@L["HoursClosedDay"]</span>
                             </label>
                             <input type="time" step="60" value="@day.Opens" disabled="@day.Closed" aria-label="@L["HoursOpens"]"
                                    aria-invalid="@(_invalid == day.Day && day.Opens.Length == 0 ? "true" : null)"
