@@ -16,7 +16,7 @@ namespace Essence.Ingest.Hours;
 /// Every element is a record, its hours or not (about 184 have <c>opening_hours</c>), so a station knows which element
 /// to edit; hours that can't be read for sure, even leniently, leave the record without them, with a warning. Matched to
 /// the feed's stations of the same brand (<c>brand</c>, else <c>operator</c>, else <c>name</c>) within 150 m, confirmed by
-/// the postal code or the house number, or within 2 km at the same house number and postal code. OpenStreetMap's hours
+/// the postal code or the house number, or within 10 km at the same house number and postal code. OpenStreetMap's hours
 /// are shown, never trusted to leave a station out.
 /// </para>
 /// <para>

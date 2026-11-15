@@ -184,10 +184,11 @@ public sealed class ShellSourceTests
 
     [Theory]
     [InlineData("2125 ch. Sainte-Foy, Québec", "G1V 1R9", 46.798, true)] // 1 km from 10052586, at its address.
-    [InlineData("2125 ch. Sainte-Foy, Québec", "G1V 1R9", 46.808, false)] // 2.1 km.
+    [InlineData("2125 ch. Sainte-Foy, Québec", "G1V 1R9", 46.878, true)] // 9.9 km.
+    [InlineData("2125 ch. Sainte-Foy, Québec", "G1V 1R9", 46.880, false)] // 10.1 km.
     [InlineData("2125 ch. Sainte-Foy, Québec", "G1V 1S1", 46.798, false)] // The number only.
     [InlineData("2200 ch. Sainte-Foy, Québec", "G1V 1R9", 46.798, false)] // The postal code only.
-    public async Task A_feed_Shell_station_with_none_within_reach_has_the_one_at_its_address_within_2_km_asked_about_and_matched(
+    public async Task A_feed_Shell_station_with_none_within_reach_has_the_one_at_its_address_within_10_km_asked_about_and_matched(
         string address, string postalCode, double latitude, bool asked)
     {
         var requests = new List<string>();

@@ -99,10 +99,11 @@ public static partial class HoursMatcher
 
     /// <summary>
     /// How far a record may be from a station of its brand with the same house number and postal code, both left free
-    /// by the match by distance: one of the two points is off, by a street (Ultramar's locator) or a village (the feed).
-    /// Further, the same number in the same rural postal code is as likely another road.
+    /// by the match by distance: one of the two points is off, by a street or a few villages (Ultramar's locator puts
+    /// Warwick's station 8.9 km from it, the feed's point being right) or a village (the feed). With the number, the
+    /// postal code and the brand all agreeing, another station is unlikely even this far, and two match neither.
     /// </summary>
-    public const double AddressReachM = 2_000;
+    public const double AddressReachM = 10_000;
 
     /// <summary>
     /// How far from a record matched by location (<see cref="IHoursSource.OtherBrandReachM"/>) any other feed station must
