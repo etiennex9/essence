@@ -16,7 +16,7 @@ public sealed class StationHoursEntry
     public const string ByDistance = "distance";
 
     /// <summary>
-    /// Beyond the source's radius, but of the same brand with the same house number and postal code, within 2 km
+    /// Beyond the source's radius, but of the same brand with the same house number and postal code, within 10 km
     /// (<c>HoursMatcher.AddressReachM</c>): one of the two points is off.
     /// </summary>
     public const string ByAddress = "address";
