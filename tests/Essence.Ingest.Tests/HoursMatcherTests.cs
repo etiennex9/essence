@@ -330,8 +330,10 @@ public sealed class HoursMatcherTests
 
     [Theory]
     [InlineData(1_900, true)]
-    [InlineData(2_100, false)]
-    public void A_record_too_far_for_its_station_matches_it_by_address_when_both_its_number_and_postal_code_agree_within_2_km(int metres, bool matches)
+    [InlineData(8_900, true)] // Warwick's Ultramar, by its locator.
+    [InlineData(9_900, true)]
+    [InlineData(10_100, false)]
+    public void A_record_too_far_for_its_station_matches_it_by_address_when_both_its_number_and_postal_code_agree_within_10_km(int metres, bool matches)
     {
         var station = Station(1, "100 rue Principale, Stoke", "J0B 3G0", "Ultramar", 45.5, -71.8);
         var record = Ultramar("2037", "100 PRINCIPALE", "J0B 3G0", North(45.5, metres), -71.8);
