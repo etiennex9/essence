@@ -4,6 +4,7 @@
 @inject TripState Trips
 @inject SavedPlaces Places
 @inject ServicesStatus Services
+@inject StationHoursView HoursViews
 @inject TimeProvider Time
 @inject IJSRuntime JS
 @inject IStringLocalizer<Strings> L
@@ -220,7 +221,8 @@
                         @* The pick, or the station chosen: one past the range too, even when none is reachable. *@
                         @if (shown is not null)
                         {
-                            var (saves, tone, why) = TripTexts(shown, plan, query);
+                            var arrival = Arrival(shown);
+                            var (saves, tone, why) = arrival.Apply(TripTexts(shown, plan, query));
                             <section class="hero" aria-labelledby="ess-trip-pick" @ref="_hero">
                                 <div class="top">
                                     @Logo(shown.Brand, "logo")
@@ -232,7 +234,7 @@
                                                 <span class="tag">@L["Members"]</span>
                                             }
                                         </h3>
-                                        <p>@($"{shown.Address} · {L["KmAlong", Math.Round(shown.KmAlong)]} · {Detour(shown)}")</p>
+                                        <p>@($"{shown.Address} · {L["KmAlong", Math.Round(shown.KmAlong)]} · {Detour(shown)}")@Closes(arrival)</p>
                                     </div>
                                     <span class="big">@Price(shown.PriceCents)<small> ¢/L</small></span>
                                 </div>
@@ -245,12 +247,12 @@
                                     <p class="why">@why</p>
                                 }
                                 <div class="actions">
-                                    <a class="go" target="_blank" rel="noopener"
-                                       href="@GoogleMaps.DirectionsVia(destination.Latitude, destination.Longitude, shown.Latitude, shown.Longitude, navigate: true)">
+                                    <GoLink class="go" Href="@GoogleMaps.DirectionsVia(destination.Latitude, destination.Longitude, shown.Latitude, shown.Longitude, navigate: true)"
+                                            Hours="shown.Hours" Latitude="shown.Latitude" Longitude="shown.Longitude" EtaMinutes="shown.ToMin" Name="@NameOf(shown.Brand)">
                                         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"
                                              stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Directions" /></svg>
                                         @L["GoViaGoogleMaps"]
-                                    </a>
+                                    </GoLink>
                                     <button type="button" class="secondary" @onclick="() => OnOpenStation.InvokeAsync(shown.Id)">@L["Details"]</button>
                                 </div>
                             </section>
@@ -262,17 +264,18 @@
                             var cheapest = stations.Where(s => s.Reachable).OrderBy(s => s.PriceCents).ThenBy(s => s.CostDollars).First();
                             <div class="tiles" role="group" aria-label="@L["StationShownLabel"]">
                                 @Tile(plan.ReferenceOnTheWay ? L["NoDetour"] : L["SmallestDetour"], reference.Id, reference.Brand, reference.PriceCents,
-                                    reference.Id == shown?.Id, TripSub(reference))
-                                @Tile(L["BestValue"], pick.Id, pick.Brand, pick.PriceCents, pick.Id == shown?.Id, TripSub(pick))
+                                    reference.Id == shown?.Id, TripSub(reference), tag: Arrival(reference).Tag)
+                                @Tile(L["BestValue"], pick.Id, pick.Brand, pick.PriceCents, pick.Id == shown?.Id, TripSub(pick), tag: Arrival(pick).Tag)
                                 @if (third is not null)
                                 {
                                     @Tile(L["BiggestSaving"], third.Id, third.Brand, third.PriceCents, third.Id == shown?.Id, TripSub(third),
-                                        third.OverDetourLimit ? L["OverMinutes", query.MaxDetourMinutes] : L["Saves", Money(third.SavesDollars)])
+                                        third.OverDetourLimit ? L["OverMinutes", query.MaxDetourMinutes] : L["Saves", Money(third.SavesDollars)],
+                                        Arrival(third).Tag)
                                 }
                                 else
                                 {
                                     @Tile(L["Cheapest"], cheapest.Id, cheapest.Brand, cheapest.PriceCents, cheapest.Id == shown?.Id,
-                                        cheapest.Id == pick.Id ? L["SameAsBest"] : TripSub(cheapest))
+                                        cheapest.Id == pick.Id ? L["SameAsBest"] : TripSub(cheapest), tag: Arrival(cheapest).Tag)
                                 }
                             </div>
                         }
@@ -304,6 +307,7 @@
                                                     {
                                                         <span class="tag">@L["Members"]</span>
                                                     }
+                                                    @HoursTag(Arrival(station))
                                                 </span>
                                                 <span class="address">@station.Address</span>
                                                 <span class="price">@Price(station.PriceCents)</span>
@@ -314,6 +318,7 @@
                                 </ul>
                             }
                         }
+                        @LeftOut(plan.LeftOut)
                     </div>
                 }
             }
@@ -420,7 +425,8 @@
                         var reference = Find(result, result.ReferenceId) ?? pick;
                         var cheapest = Find(result, result.CheapestId) ?? pick;
                         var shown = Best.Shown ?? pick;
-                        var (saves, tone, why) = NearTexts(shown, result, query);
+                        var arrival = Arrival(shown);
+                        var (saves, tone, why) = arrival.Apply(NearTexts(shown, result, query));
                         @if (result.RadiusKm is null)
                         {
                             <p class="message">@L["BestNothingWithin", WideRadiusKm]</p>
@@ -437,7 +443,7 @@
                                             <span class="tag">@L["Members"]</span>
                                         }
                                     </h3>
-                                    <p>@shown.Address · @Away(shown)</p>
+                                    <p>@shown.Address · @Away(shown)@Closes(arrival)</p>
                                 </div>
                                 <span class="big">@Price(shown.PriceCents)<small> ¢/L</small></span>
                             </div>
@@ -450,11 +456,12 @@
                                 <p class="why">@why</p>
                             }
                             <div class="actions">
-                                <a class="go" target="_blank" rel="noopener" href="@GoogleMaps.Directions(shown.Latitude, shown.Longitude, navigate: true)">
+                                <GoLink class="go" Href="@GoogleMaps.Directions(shown.Latitude, shown.Longitude, navigate: true)"
+                                        Hours="shown.Hours" Latitude="shown.Latitude" Longitude="shown.Longitude" EtaMinutes="shown.EtaMin" Name="@NameOf(shown.Brand)">
                                     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"
                                          stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Directions" /></svg>
                                     @L["GoGoogleMaps"]
-                                </a>
+                                </GoLink>
                                 <button type="button" class="secondary" @onclick="() => OnOpenStation.InvokeAsync(shown.Id)">@L["Details"]</button>
                             </div>
                         </section>
@@ -462,11 +469,12 @@
                         @if (result.Stations.Count > 1)
                         {
                             <div class="tiles" role="group" aria-label="@L["StationShownLabel"]">
-                                @Tile(L["Closest"], reference.Id, reference.Brand, reference.PriceCents, reference.Id == shown.Id, NearSub(reference))
+                                @Tile(L["Closest"], reference.Id, reference.Brand, reference.PriceCents, reference.Id == shown.Id, NearSub(reference),
+                                    tag: Arrival(reference).Tag)
                                 @Tile(L["BestValue"], pick.Id, pick.Brand, pick.PriceCents, pick.Id == shown.Id,
-                                    pick.Id == reference.Id ? L["SameAsClosest"] : NearSub(pick))
+                                    pick.Id == reference.Id ? L["SameAsClosest"] : NearSub(pick), tag: Arrival(pick).Tag)
                                 @Tile(L["Cheapest"], cheapest.Id, cheapest.Brand, cheapest.PriceCents, cheapest.Id == shown.Id,
-                                    cheapest.Id == pick.Id ? L["SameAsBest"] : NearSub(cheapest))
+                                    cheapest.Id == pick.Id ? L["SameAsBest"] : NearSub(cheapest), tag: Arrival(cheapest).Tag)
                             </div>
                         }
 
@@ -488,6 +496,7 @@
                                                 {
                                                     <span class="tag">@L["Members"]</span>
                                                 }
+                                                @HoursTag(Arrival(station))
                                             </span>
                                             <span class="address">@station.Address · @Away(station)</span>
                                             <span class="price">@Price(station.PriceCents)</span>
@@ -508,6 +517,8 @@
                                 }
                             </ul>
                         }
+
+                        @LeftOut(result.LeftOut)
                     }
                 </div>
             }
@@ -547,6 +558,14 @@
 
     private Pane? _pane;
     private ElementReference _hero;
+
+    /// <summary>The earliest change among the arrivals this render shows so far (<see cref="Shown"/>).</summary>
+    private DateTimeOffset? _refreshAt;
+
+    /// <summary>When <see cref="_arrivalTimer"/> renders the pane again; null when it doesn't.</summary>
+    private DateTimeOffset? _arrivalRefreshAt;
+
+    private ITimer? _arrivalTimer;
 
     /// <summary>A station was just chosen: the pane scrolls up to the hero, which shows it, if it's scrolled past.</summary>
     private bool _revealHero;
@@ -704,6 +723,7 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        ScheduleArrivalRefresh();
         if (_opening is { } opening)
         {
             _opening = null;
@@ -865,7 +885,8 @@
             }
 
             (point, answer) = (new GeoPoint(station.Latitude, station.Longitude), plan);
-            text = Announcement(NameOf(station.Brand), TripTexts(station, plan, query).Saves);
+            var arrival = Arrival(station);
+            text = arrival.Announcement(L["ShownStation", NameOf(station.Brand)], TripTexts(station, plan, query));
         }
         else
         {
@@ -876,7 +897,8 @@
             }
 
             (point, answer) = (new GeoPoint(station.Latitude, station.Longitude), result);
-            text = Announcement(NameOf(station.Brand), NearTexts(station, result, query).Saves);
+            var arrival = Arrival(station);
+            text = arrival.Announcement(L["ShownStation", NameOf(station.Brand)], NearTexts(station, result, query));
         }
 
         _announcement = (id, answer, text);
@@ -920,9 +942,77 @@
         return true;
     }
 
-    /// <summary>"Shown above: Costco. Saves $3.10."</summary>
-    private string Announcement(string name, string? saves) =>
-        saves is null ? L["ShownStation", name] : $"{L["ShownStation", name]} {saves}.";
+    /// <summary>The station's hours when the driver gets there, now plus its time there (ETA), at this render.</summary>
+    private ArrivalView Arrival(RankedStation station) =>
+        Shown(HoursViews.Arrive(station.Hours, station.Latitude, station.Longitude, Time.GetUtcNow(), station.EtaMin, NameOf(station.Brand)));
+
+    /// <summary>The station's hours when the car gets there, now plus its time from the trip's start, at this render.</summary>
+    private ArrivalView Arrival(TripStation station) =>
+        Shown(HoursViews.Arrive(station.Hours, station.Latitude, station.Longitude, Time.GetUtcNow(), station.ToMin, NameOf(station.Brand)));
+
+    /// <summary>
+    /// An arrival this render shows: the pane renders again when the earliest of them changes (<see cref="_arrivalTimer"/>),
+    /// so a station that starts closing soon gets its tag, and Go its warning, though nothing else renders the pane.
+    /// </summary>
+    private ArrivalView Shown(ArrivalView arrival)
+    {
+        _refreshAt = ArrivalView.Earliest(_refreshAt, arrival.RefreshAt(Time.GetUtcNow()));
+        return arrival;
+    }
+
+    /// <summary>After a render, a timer for the earliest change among the arrivals it showed, which renders the pane again then.</summary>
+    private void ScheduleArrivalRefresh()
+    {
+        var at = _refreshAt;
+        _refreshAt = null;
+        if (at == _arrivalRefreshAt)
+        {
+            return;
+        }
+
+        _arrivalTimer?.Dispose();
+        _arrivalTimer = null;
+        _arrivalRefreshAt = at;
+        if (_disposed || at is not { } moment)
+        {
+            return;
+        }
+
+        // A second past the change, so it's surely past it then; one already past runs at once.
+        var due = moment - Time.GetUtcNow() + TimeSpan.FromSeconds(1);
+        _arrivalTimer = Time.CreateTimer(_ => InvokeAsync(OnArrivalChanged), null, due > TimeSpan.Zero ? due : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+    }
+
+    private void OnArrivalChanged()
+    {
+        _arrivalRefreshAt = null;
+        if (!_disposed)
+        {
+            StateHasChanged();
+        }
+    }
+
+    /// <summary>The hero's address line's ending when the station closes soon after the driver gets there: " · Closes 9:30 p.m.", in amber.</summary>
+    private static RenderFragment Closes(ArrivalView arrival) => arrival.Suffix is not { } suffix
+        ? _ => { }
+        : @<span>@(" · ")<span class="closes">@suffix</span></span>;
+
+    /// <summary>A row's tag, beside Members: "Closes 9:30 p.m." or "Closed" when the driver gets there.</summary>
+    private static RenderFragment HoursTag(ArrivalView arrival) => arrival.Tag is not { } tag
+        ? _ => { }
+        : @<span class="tag">@tag</span>;
+
+    /// <summary>
+    /// The stations the ranking left out for their hours, cheaper than the pick: one muted line at the end, never above the
+    /// tiles. "Costco left out: closed by the time you’d get there (closes 9:30 p.m.)." Two stations of a brand left out for
+    /// the same reason (two Costcos, closed until 6:00 a.m.) say it once.
+    /// </summary>
+    private RenderFragment LeftOut(IReadOnlyList<LeftOutStation>? leftOut)
+    {
+        var now = Time.GetUtcNow();
+        var texts = (leftOut ?? []).Select(s => HoursViews.LeftOut(s, NameOf(s.Brand), now)).OfType<string>().Distinct().ToList();
+        return texts.Count == 0 ? _ => { } : @<p class="left-out">@string.Join(" ", texts)</p>;
+    }
 
     /// <summary>What the hero says of a station near you, by how it compares (<see cref="HeroCase"/>): a headline, its tone, and why.</summary>
     private (string? Saves, string? Tone, string? Why) NearTexts(RankedStation station, BestNearby result, BestQuery query)
@@ -1087,7 +1177,8 @@
 
     /// <summary>A tile: it puts its station on top, and it's pressed while that station is there.</summary>
     /// <param name="note">A last line, for what makes the station stand out: what it saves, or that it's past the longest detour.</param>
-    private RenderFragment Tile(string label, long id, string? brand, decimal priceCents, bool on, string sub, string? note = null) =>
+    /// <param name="tag">The station's hours when the driver gets there, as rows have them: "Closes 9:30 p.m.", "Closed".</param>
+    private RenderFragment Tile(string label, long id, string? brand, decimal priceCents, bool on, string sub, string? note = null, string? tag = null) =>
         @<button type="button" class="tile @(on ? "is-on" : null)" aria-pressed="@(on ? "true" : "false")" @onclick="() => SelectAsync(id)">
             <span class="label">@label</span>
             <span class="name">@($"{NameOf(brand)} {Price(priceCents)}")</span>
@@ -1095,6 +1186,10 @@
             @if (note is not null)
             {
                 <span class="note">@note</span>
+            }
+            @if (tag is not null)
+            {
+                <span class="tag">@tag</span>
             }
         </button>;
 
@@ -1181,5 +1276,6 @@
         }
 
         _self?.Dispose();
+        _arrivalTimer?.Dispose();
     }
 }

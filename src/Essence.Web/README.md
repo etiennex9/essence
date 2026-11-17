@@ -55,6 +55,8 @@ It opens on <http://localhost:5173>, which is the API's default `CORS_ORIGIN`. T
 To see stations' hours at another moment, open it with `?now=` and a date and time with its offset, e.g.
 <http://localhost:5173/?now=2026-11-11T21:15:00-05:00>: the app's `TimeProvider` (`SimulatedTime.cs`) starts there and
 moves on with the real clock. It's there in a Debug build in the Development environment only, as with `dotnet watch`.
+Which stations Best near you leaves out for being closed is the API's to say: start it with the same moment in
+`Clock__Now` (see the main README).
 
 Geolocation only works in a secure context: `https://` or `http://localhost`. To try it on an Android phone over USB, forward
 both ports and open `http://localhost:5173` in the phone's Chrome:

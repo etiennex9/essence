@@ -173,6 +173,41 @@ public class TripStateTests
     }
 
     [Fact]
+    public async Task A_trip_stored_before_the_hours_loads_without_them_and_a_newer_one_keeps_them()
+    {
+        _json = PlanJson.Replace("\"overDetourLimit\":false}", """
+            "overDetourLimit":false,"hours":{"rule":"Mo-Fr 06:00-21:30","source":"costco","trusted":true,"confirmed":true,
+             "checkedAt":null,"link":null,"temporarilyClosed":false},"toMin":61.5}
+            """);
+        var trip = NewTrip();
+        await trip.StartAsync(Montreal, Quebec);
+
+        var newer = NewTrip();
+        await newer.LoadAsync();
+        Assert.Equal(((double?)61.5, "Mo-Fr 06:00-21:30"), (newer.Shown!.ToMin, newer.Shown.Hours!.Rule));
+
+        // As the version before stored it: no hours, no time from the start, nothing left out.
+        var stored = JsonNode.Parse((await _session.GetAsync(TripState.StorageKey))!)!.AsObject();
+        var plan = stored["plan"]!.AsObject();
+        Assert.True(plan.Remove("leftOut"));
+        foreach (var station in plan["stations"]!.AsArray())
+        {
+            Assert.True(station!.AsObject().Remove("hours"));
+            Assert.True(station.AsObject().Remove("toMin"));
+        }
+
+        await _session.SetAsync(TripState.StorageKey, stored.ToJsonString());
+        var older = NewTrip();
+        await older.LoadAsync();
+
+        Assert.True(older.IsOpen);
+        Assert.Equal(3, older.Shown!.Id);
+        Assert.Null(older.Shown.ToMin);
+        Assert.Null(older.Shown.Hours);
+        Assert.Null(older.Plan!.LeftOut);
+    }
+
+    [Fact]
     public async Task Planning_from_elsewhere_shows_the_pick_again()
     {
         _json = StationsJson;

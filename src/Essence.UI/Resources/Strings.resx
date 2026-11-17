@@ -1095,4 +1095,49 @@
   <data name="HoursFromOsm" xml:space="preserve">
     <value>OpenStreetMap, edited {0}</value>
   </data>
+  <data name="ClosesSoonAfterArrival" xml:space="preserve">
+    <value>Closes at {0}, about {1} min after you get there.</value>
+  </data>
+  <data name="ClosedOnArrival" xml:space="preserve">
+    <value>Closed by the time you get there (closes {0}).</value>
+  </data>
+  <data name="ClosedOnArrivalOpens" xml:space="preserve">
+    <value>Closed when you get there (opens {0}).</value>
+  </data>
+  <data name="OpensTime" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="OpensDayTime" xml:space="preserve">
+    <value>{0} {1}</value>
+  </data>
+  <data name="LeftOutClosed" xml:space="preserve">
+    <value>{0} left out: closed by the time you’d get there (closes {1}).</value>
+  </data>
+  <data name="LeftOutClosedOpens" xml:space="preserve">
+    <value>{0} left out: closed when you’d get there (opens {1}).</value>
+  </data>
+  <data name="LeftOutClosedNow" xml:space="preserve">
+    <value>{0} left out: closed when you’d get there.</value>
+  </data>
+  <data name="LeftOutTemporarilyClosed" xml:space="preserve">
+    <value>{0} left out: temporarily closed.</value>
+  </data>
+  <data name="ClosingDialogTitle" xml:space="preserve">
+    <value>{0} closes at {1}</value>
+  </data>
+  <data name="ClosingDialogClosed" xml:space="preserve">
+    <value>{0} is closed</value>
+  </data>
+  <data name="ClosingDialogArrive" xml:space="preserve">
+    <value>You’d get there around {0}.</value>
+  </data>
+  <data name="ClosingDialogOpens" xml:space="preserve">
+    <value>Opens {0}.</value>
+  </data>
+  <data name="ClosingDialogTemporarily" xml:space="preserve">
+    <value>Its source says it’s closed for now.</value>
+  </data>
+  <data name="GoAnyway" xml:space="preserve">
+    <value>Go anyway</value>
+  </data>
 </root>

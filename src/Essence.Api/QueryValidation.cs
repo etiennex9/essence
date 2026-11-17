@@ -25,6 +25,50 @@ internal sealed class QueryErrors
     public ValidationProblem ToProblem() => TypedResults.ValidationProblem(_errors);
 }
 
+/// <summary>
+/// The <c>ignoreHours</c> parameter of <c>/stations/best</c> and <c>/trips/best</c>: the stations whose hours the device
+/// corrected, which the server's hours never leave out.
+/// </summary>
+public static class IgnoredHours
+{
+    /// <summary>At most this many ids.</summary>
+    public const int MaxIds = 50;
+
+    public const string Error = "Station ids (whole numbers above 0) separated by commas, at most 50.";
+
+    /// <summary>
+    /// The ids in <paramref name="text"/>, separated by commas (spaces around them allowed); none when it's missing or blank.
+    /// Null when it isn't that: an id that isn't a whole number above 0, an empty one ("1,,2"), or more than
+    /// <see cref="MaxIds"/>.
+    /// </summary>
+    public static HashSet<long>? Parse(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return [];
+        }
+
+        var parts = text.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length > MaxIds)
+        {
+            return null;
+        }
+
+        var ids = new HashSet<long>(parts.Length);
+        foreach (var part in parts)
+        {
+            if (!long.TryParse(part, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var id) || id <= 0)
+            {
+                return null;
+            }
+
+            ids.Add(id);
+        }
+
+        return ids;
+    }
+}
+
 internal static class FuelLookup
 {
     /// <summary>Finds a fuel type by code, ignoring case and accents ("regulier" matches "Régulier").</summary>

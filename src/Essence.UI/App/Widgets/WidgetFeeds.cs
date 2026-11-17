@@ -63,7 +63,7 @@ public sealed class WidgetFeeds(
             ? l["Closest"].Value
             : l["Saves", Formatting.Money(pick.SavesDollars, culture)].Value;
         var distance = l[best.ByRoad ? "DistanceByRoad" : "DistanceApprox", Formatting.Km(pick.DistanceKm, culture)];
-        var detail = $"{distance} · {saving}";
+        var detail = WithHours($"{distance} · {saving}", ArrivalNote(pick.Hours, pick.Latitude, pick.Longitude, pick.EtaMin));
         return View(title, fuel, [Line(pick.Id, pick.Brand, detail, pick.PriceCents, $"/?station={pick.Id}")], tap, start.Fix);
     }
 
@@ -143,6 +143,29 @@ public sealed class WidgetFeeds(
     }
 
     /// <summary>
+    /// What the pick's line on Best near a place and Best on a frequent route says of its hours, as a favorite's
+    /// (<see cref="HoursNote"/>), but when the driver gets there, <paramref name="etaMinutes"/> after the refresh: "Closed ·
+    /// opens 6:00 a.m." while it's closed now and still then; "Closes 9:30 p.m." when it closes before the driver gets there,
+    /// or open then, within <see cref="ClosesSoonOnWidget"/> of the refresh; nothing otherwise.
+    /// </summary>
+    private string? ArrivalNote(StationHours? hours, double latitude, double longitude, double? etaMinutes)
+    {
+        var now = time.GetUtcNow();
+        var arrival = _hours.Arrive(hours, latitude, longitude, now, etaMinutes, name: "");
+        return arrival.Kind switch
+        {
+            ArrivalKind.Closed or ArrivalKind.TemporarilyClosed => _hours.Describe(hours, latitude, longitude, now).Status,
+            ArrivalKind.ClosesBefore => _hours.Describe(hours, latitude, longitude, now).Closes,
+            ArrivalKind.Open or ArrivalKind.ClosesSoon when arrival.ClosesAt - now <= ClosesSoonOnWidget =>
+                _hours.Describe(hours, latitude, longitude, arrival.ArriveAt).Closes,
+            _ => null,
+        };
+    }
+
+    /// <summary>The detail with the hours' note after it, when there's one.</summary>
+    private static string WithHours(string detail, string? note) => note is null ? detail : $"{detail} · {note}";
+
+    /// <summary>
     /// The station Best on the way would pick from <paramref name="from"/> to <paramref name="to"/>. The range is left out: a
     /// widget shows for hours, longer than a dashboard reading lasts (and the API doesn't count it under 100 km).
     /// </summary>
@@ -195,6 +218,7 @@ public sealed class WidgetFeeds(
         var detail = pick.Id == plan.ReferenceId || pick.SavesDollars <= 0
             ? where
             : $"{where} · {l["Saves", Formatting.Money(pick.SavesDollars, culture)]}";
+        detail = WithHours(detail, ArrivalNote(pick.Hours, pick.Latitude, pick.Longitude, pick.ToMin));
         var line = TripLink(from, to, places, pick.Id);
         return View(title, fuel, [Line(pick.Id, pick.Brand, detail, pick.PriceCents, line)], line, start.Fix);
     }

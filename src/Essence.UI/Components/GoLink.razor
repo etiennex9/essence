@@ -1,0 +1,100 @@
+@implements IDisposable
+@inject StationHoursView HoursViews
+@inject TimeProvider Time
+
+@* A link to Google Maps' directions to a station (Best near you's and the trip's Go, the details' Directions): a plain link
+   opening a new tab, unless the station closes soon after the driver gets there or is closed then, when it asks first
+   (ClosingDialog). Its hours are checked at each render, now plus how long getting there takes, and it renders again when
+   that changes as time goes by, so a tap asks first when it should. *@
+@{
+    var now = Time.GetUtcNow();
+    var arrival = HoursViews.Arrive(Hours, Latitude, Longitude, now, EtaMinutes, Name);
+    _warns = arrival.Warns;
+    _refreshAt = arrival.RefreshAt(now);
+}
+<a @attributes="Attributes" href="@Href" target="_blank" rel="noopener" @onclick="OnClickAsync" @onclick:preventDefault="arrival.Warns">@ChildContent</a>
+@if (arrival.Warns)
+{
+    <ClosingDialog @ref="_dialog" Title="@(arrival.DialogTitle!)" Lines="arrival.DialogLines" Href="@Href" />
+}
+
+@code {
+    private ClosingDialog? _dialog;
+
+    /// <summary>The link asks first, as last rendered.</summary>
+    private bool _warns;
+
+    /// <summary>When the last render's arrival changes next; <see cref="_timer"/> renders the link again then.</summary>
+    private DateTimeOffset? _refreshAt;
+
+    private DateTimeOffset? _timerAt;
+    private ITimer? _timer;
+    private bool _disposed;
+
+    /// <summary>Google Maps' directions.</summary>
+    [Parameter, EditorRequired]
+    public string Href { get; set; } = "";
+
+    /// <summary>The station's hours; null when unknown, and the link never asks.</summary>
+    [Parameter]
+    public Essence.Contracts.StationHours? Hours { get; set; }
+
+    [Parameter]
+    public double? Latitude { get; set; }
+
+    [Parameter]
+    public double? Longitude { get; set; }
+
+    /// <summary>How long getting there takes, in minutes; null when it isn't known, and its hours are checked now.</summary>
+    [Parameter]
+    public double? EtaMinutes { get; set; }
+
+    /// <summary>The station's name in the warning: its brand, or "Independent".</summary>
+    [Parameter, EditorRequired]
+    public string Name { get; set; } = "";
+
+    [Parameter]
+    public RenderFragment? ChildContent { get; set; }
+
+    /// <summary>The link's other attributes: its class.</summary>
+    [Parameter(CaptureUnmatchedValues = true)]
+    public IReadOnlyDictionary<string, object>? Attributes { get; set; }
+
+    /// <summary>With a warning, the click opens it instead of the link (its default prevented); without one, the link opens.</summary>
+    private Task OnClickAsync() => _warns && _dialog is not null ? _dialog.ShowAsync() : Task.CompletedTask;
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (_refreshAt == _timerAt || _disposed)
+        {
+            return;
+        }
+
+        _timer?.Dispose();
+        _timer = null;
+        _timerAt = _refreshAt;
+        if (_refreshAt is not { } at)
+        {
+            return;
+        }
+
+        // A second past the change, so it's surely past it then; one already past runs at once.
+        var due = at - Time.GetUtcNow() + TimeSpan.FromSeconds(1);
+        _timer = Time.CreateTimer(_ => InvokeAsync(OnArrivalChanged), null, due > TimeSpan.Zero ? due : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
+    }
+
+    private void OnArrivalChanged()
+    {
+        _timerAt = null;
+        if (!_disposed)
+        {
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _timer?.Dispose();
+    }
+}

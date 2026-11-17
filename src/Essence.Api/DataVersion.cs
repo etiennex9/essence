@@ -10,14 +10,27 @@ namespace Essence.Api;
 /// repeated request whose <c>If-Modified-Since</c> is still current gets a 304 without running the handler. The stations'
 /// opening hours change apart from the feed, once a week: <c>Last-Modified</c> stays the feed's, so the map's "prices as
 /// of" and its refreshes don't move, but no 304 is given for a version older than when the hours last changed
-/// (<see cref="Snapshot.HoursChangedAt"/>).
+/// (<see cref="Snapshot.HoursChangedAt"/>). An answer that checks the hours against the clock gets no 304 once its version
+/// is more than <see cref="ClockDependentFor"/> old.
 /// </summary>
 public static class DataVersion
 {
+    /// <summary>
+    /// An answer that depends on the clock (<c>clockDependent</c>) gets a 304 only this long after its version: past it, a
+    /// station closing in the meantime may change it with no new data. The feed's imports land about every 5 minutes.
+    /// </summary>
+    public static readonly TimeSpan ClockDependentFor = TimeSpan.FromMinutes(10);
+
     private static readonly object UncachedKey = new();
 
-    public static RouteHandlerBuilder WithDataVersion(this RouteHandlerBuilder builder) =>
-        builder.AddEndpointFilter(FilterAsync).Produces(StatusCodes.Status304NotModified);
+    /// <param name="clockDependent">
+    /// The answer depends on the time it's asked at, not only the data (Best near you and Best on the way check each
+    /// station's hours at the arrival): no 304 once the version is more than <see cref="ClockDependentFor"/> old.
+    /// </param>
+    public static RouteHandlerBuilder WithDataVersion(this RouteHandlerBuilder builder, bool clockDependent = false) =>
+        builder
+            .AddEndpointFilter((context, next) => FilterAsync(context, next, clockDependent))
+            .Produces(StatusCodes.Status304NotModified);
 
     /// <summary>
     /// This answer isn't the data's alone (Best near you estimated while the routing server was down): it's sent without
@@ -31,10 +44,17 @@ public static class DataVersion
     /// <c>If-Modified-Since</c> names the second they changed in may not have the change.
     /// </summary>
     /// <param name="hoursChangedAt">When the hours last changed (<see cref="Snapshot.HoursChangedAt"/>); null if never.</param>
-    public static bool IsNotModified(DateTimeOffset? ifModifiedSince, DateTimeOffset version, DateTimeOffset? hoursChangedAt) =>
-        ifModifiedSince >= version && !(UpToTheSecond(hoursChangedAt) > ifModifiedSince);
+    /// <param name="clockDependentAt">
+    /// For an answer that depends on the clock, the time now: no 304 once the version is more than
+    /// <see cref="ClockDependentFor"/> older. Null for one that doesn't.
+    /// </param>
+    public static bool IsNotModified(
+        DateTimeOffset? ifModifiedSince, DateTimeOffset version, DateTimeOffset? hoursChangedAt, DateTimeOffset? clockDependentAt = null) =>
+        ifModifiedSince >= version
+        && !(UpToTheSecond(hoursChangedAt) > ifModifiedSince)
+        && !(clockDependentAt - version > ClockDependentFor);
 
-    private static async ValueTask<object?> FilterAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
+    private static async ValueTask<object?> FilterAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next, bool clockDependent)
     {
         var http = context.HttpContext;
 
@@ -48,7 +68,8 @@ public static class DataVersion
             return await next(context);
         }
 
-        if (IsNotModified(http.Request.GetTypedHeaders().IfModifiedSince, version, snapshot.HoursChangedAt))
+        var clockAt = clockDependent ? http.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow() : (DateTimeOffset?)null;
+        if (IsNotModified(http.Request.GetTypedHeaders().IfModifiedSince, version, snapshot.HoursChangedAt, clockAt))
         {
             SetHeaders(http.Response, version);
             return TypedResults.StatusCode(StatusCodes.Status304NotModified);

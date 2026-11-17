@@ -152,11 +152,12 @@
             <div class="actions">
                 @if (_station is { Latitude: { } lat, Longitude: { } lon })
                 {
-                    <a class="directions" target="_blank" rel="noopener" href="@GoogleMaps.Directions(lat, lon)">
+                    <GoLink class="directions" Href="@GoogleMaps.Directions(lat, lon)" Hours="_station.Hours" Latitude="lat" Longitude="lon"
+                            EtaMinutes="Eta" Name="@Title">
                         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
                              stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Directions" /></svg>
                         @L["Directions"]
-                    </a>
+                    </GoLink>
                 }
                 @{
                     var compared = Comparison.Contains(_station.Id);
@@ -213,6 +214,13 @@
     [Parameter]
     public GeoPoint? UserLocation { get; set; }
 
+    /// <summary>
+    /// How long getting to the station takes, by road, when the details were opened from Best near you or the trip (its ETA
+    /// there); null otherwise, and Directions estimates it from the straight line.
+    /// </summary>
+    [Parameter]
+    public double? EtaMinutes { get; set; }
+
     /// <summary>When the map's prices were imported: once they're newer than the pane's, the pane refreshes too.</summary>
     [Parameter]
     public DateTimeOffset? DataAsOf { get; set; }
@@ -232,6 +240,12 @@
     private double? Distance => (UserLocation, _station) is ({ } user, { Latitude: { } lat, Longitude: { } lon })
         ? Geo.DistanceKm(user, new GeoPoint(lat, lon))
         : null;
+
+    /// <summary>
+    /// How long getting there takes, for Directions' warning when the station closes soon after: Best's ETA, or the
+    /// straight line's estimate (as the API's without routing); null without a location, and its hours are checked now.
+    /// </summary>
+    private double? Eta => EtaMinutes ?? (Distance is { } km ? StationHoursView.EstimatedMinutes(km) : null);
 
     protected override async Task OnInitializedAsync()
     {

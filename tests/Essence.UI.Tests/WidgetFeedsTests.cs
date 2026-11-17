@@ -237,6 +237,49 @@ public sealed class WidgetFeedsTests : IDisposable
         Assert.Equal(detail, Plain(Assert.Single(view.Lines).Detail));
     }
 
+    [Theory]
+    [InlineData(20, 15, 8, "2.0 km · Saves $3.10 · Closes 9:30 p.m.")]
+    [InlineData(21, 25, 10, "2.0 km · Saves $3.10 · Closes 9:30 p.m.")]
+    [InlineData(21, 45, 8, "2.0 km · Saves $3.10 · Closed · opens 6:00 a.m.")]
+    [InlineData(15, 0, 8, "2.0 km · Saves $3.10")]
+    [InlineData(5, 50, 20, "2.0 km · Saves $3.10")]
+    public async Task Best_near_a_place_says_when_its_pick_closes_or_that_it_s_closed_when_you_get_there(
+        int hour, int minute, double etaMinutes, string detail)
+    {
+        // Wednesday, Laval's time, on a device in another zone. At 5:50, 20 minutes away, it's open by the time you get there.
+        _time.SetUtcNow(new DateTimeOffset(2026, 11, 11, hour, minute, 0, TimeSpan.FromHours(-5)));
+        _time.SetLocalTimeZone(TimeZoneInfo.Utc);
+        await new SavedPlaces(_preferences).SaveAsync(PlaceKind.Home, HomePoint);
+        Answer(BestPath(HomePoint), Best(pick: 2, reference: 1, "3.10", $$""","hours":{{CostcoHours}},"etaMin":{{etaMinutes}}"""));
+
+        var view = await _feeds.BestNearAsync(new WidgetPlaceRef(PlaceKind.Home), TestContext.Current.CancellationToken);
+
+        Assert.Equal(detail, Plain(Assert.Single(view.Lines).Detail));
+    }
+
+    [Theory]
+    [InlineData("en-CA", 19, 30, 130, "No detour · Saves $1.26 · Closes 9:30 p.m.")]
+    [InlineData("fr-CA", 19, 30, 130, "Sans détour · Économie de 1,26 $ · Ferme à 21 h 30")]
+    [InlineData("en-CA", 5, 0, 90, "No detour · Saves $1.26")]
+    [InlineData("en-CA", 5, 0, 30, "No detour · Saves $1.26 · Closed · opens 6:00 a.m.")]
+    public async Task Best_on_a_frequent_route_counts_the_time_to_the_station(
+        string culture, int hour, int minute, double toMinutes, string detail)
+    {
+        // 7:30 p.m. and 130 minutes to it: it closes on the way, more than 90 minutes after the refresh. At 5:00 a.m. and 90
+        // minutes, it's open when the car gets there: nothing to say, though it's closed now.
+        CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo(culture);
+        _time.SetUtcNow(new DateTimeOffset(2026, 11, 11, hour, minute, 0, TimeSpan.FromHours(-5)));
+        var places = new SavedPlaces(_preferences);
+        await places.SaveAsync(PlaceKind.Home, HomePoint);
+        await places.SaveAsync(PlaceKind.Work, FarPoint);
+        Answer(TripPath(HomePoint, FarPoint), TripJson(
+            pick: 3, reference: 1, "0", "0", "1.26", $$""","hours":{{CostcoHours}},"toMin":{{toMinutes}}"""));
+
+        var view = await _feeds.TripAsync(new WidgetPlaceRef(PlaceKind.Home), new WidgetPlaceRef(PlaceKind.Work), TestContext.Current.CancellationToken);
+
+        Assert.Equal(detail, Plain(Assert.Single(view.Lines).Detail));
+    }
+
     [Fact]
     public async Task A_favorite_closed_for_now_says_so_in_french()
     {
@@ -535,10 +578,11 @@ public sealed class WidgetFeedsTests : IDisposable
         CultureInfo.InvariantCulture,
         $"/trips/best?fromLat={from.Latitude:0.######}&fromLon={from.Longitude:0.######}&toLat={to.Latitude:0.######}&toLon={to.Longitude:0.######}&fuel=R%C3%A9gulier&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&spareKm=30");
 
-    private static HttpResponseMessage Best(long pick, long reference, string saves) => TestHttp.Json($$"""
+    /// <param name="more">More of the pick's fields, as JSON after a comma: its hours and ETA.</param>
+    private static HttpResponseMessage Best(long pick, long reference, string saves, string more = "") => TestHttp.Json($$"""
         {"pick":{"id":{{pick}},"name":null,"brand":"Shell","address":"{{pick}} rue Principale","latitude":45.5,"longitude":-73.56,
           "priceCents":166.9,"distanceKm":{{pick}},"durationMin":{{2 * pick}},"costDollars":66.99,"savesDollars":{{saves}},
-          "membersOnly":false,"overDetourLimit":false,"savingUncertain":false},
+          "membersOnly":false,"overDetourLimit":false,"savingUncertain":false{{more}}},
          "referenceId":{{reference}},"closestId":1,"cheapestId":{{pick}},"stations":[],"radiusKm":10,"byRoad":true}
         """);
 
@@ -554,12 +598,14 @@ public sealed class WidgetFeedsTests : IDisposable
     private static HttpResponseMessage Trip(long pick, long reference, double detourKm, double detourMin, string saves) =>
         TripJson(pick, reference, detourKm.ToString(CultureInfo.InvariantCulture), detourMin.ToString(CultureInfo.InvariantCulture), saves);
 
-    private static HttpResponseMessage TripJson(long pick, long reference, string detourKm, string detourMin, string saves) => TestHttp.Json($$"""
+    /// <param name="more">More of the pick's fields, as JSON after a comma: its hours and time from the start.</param>
+    private static HttpResponseMessage TripJson(long pick, long reference, string detourKm, string detourMin, string saves, string more = "") =>
+        TestHttp.Json($$"""
         {"path":[[-73.5673,45.5017],[-73.5662,45.4995]],"distanceKm":12.3,"durationMin":18,"halfWidthKm":2,"longTrip":false,
          "stopBeforeKm":null,"lowFuel":false,
          "stations":[{"id":{{pick}},"name":null,"brand":"Petro-Canada","address":"1 boul. Saint-Joseph","latitude":45.5,"longitude":-73.56,
            "priceCents":159.9,"kmAlong":5,"distanceKm":5,"detourKm":{{detourKm}},"detourMin":{{detourMin}},"costDollars":64.50,
-           "savesDollars":{{saves}},"membersOnly":false,"reachable":true,"overDetourLimit":false}],
+           "savesDollars":{{saves}},"membersOnly":false,"reachable":true,"overDetourLimit":false{{more}}}],
          "pickId":{{pick}},"referenceId":{{reference}},"referenceOnTheWay":true,"biggestSavingId":null}
         """);
 }

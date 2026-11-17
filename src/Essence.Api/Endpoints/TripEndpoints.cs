@@ -25,10 +25,11 @@ public static class TripEndpoints
                 + "dashboard says is left) less `spareKm` says which stations can be reached and where to stop; when it reaches "
                 + "none, the whole range counts, or else the nearest station. Québec only: a destination outside Québec's boundary, "
                 + "a start outside its box, or either more than 1 km from a road is refused with 422, and so is a trip with no "
-                + "route. 503 when the routing server is down.")
+                + "route. 503 when the routing server is down. " + StationEndpoints.LeftOutDescription + " "
+                + StationEndpoints.HoursDescription)
             .ProducesProblem(StatusCodes.Status422UnprocessableEntity)
             .ProducesProblem(StatusCodes.Status503ServiceUnavailable)
-            .WithDataVersion();
+            .WithDataVersion(clockDependent: true);
         return app;
     }
 
@@ -37,6 +38,7 @@ public static class TripEndpoints
         StationSnapshot snapshot,
         OsrmClient osrm,
         DataServiceMonitor services,
+        TimeProvider time,
         ILoggerFactory loggers,
         [Description("Latitude of the start, in degrees.")] double fromLat,
         [Description("Longitude of the start, in degrees.")] double fromLon,
@@ -50,8 +52,10 @@ public static class TripEndpoints
         [Description("The longest detour, in minutes: a station whose detour takes longer is listed, not picked.")]
         double maxDetourMin = 10,
         [Description("The range the dashboard shows, in km. Counted on trips of 100 km or more.")] double? rangeKm = null,
-        [Description("The km of range never counted on.")] double spareKm = 30)
+        [Description("The km of range never counted on.")] double spareKm = 30,
+        [Description(StationEndpoints.IgnoreHoursDescription)] string? ignoreHours = null)
     {
+        var ignored = IgnoredHours.Parse(ignoreHours);
         var errors = new QueryErrors()
             .Require(fromLat is >= -90 and <= 90, nameof(fromLat), "Must be between -90 and 90.")
             .Require(fromLon is >= -180 and <= 180, nameof(fromLon), "Must be between -180 and 180.")
@@ -64,9 +68,10 @@ public static class TripEndpoints
             .Require(maxDetourMin is >= 0 and <= StationEndpoints.MaxDetourMinutes, nameof(maxDetourMin),
                 $"Must be between 0 and {StationEndpoints.MaxDetourMinutes}.")
             .Require(rangeKm is null or (>= 0 and <= MaxRangeKm), nameof(rangeKm), $"Must be between 0 and {MaxRangeKm}.")
-            .Require(spareKm is >= 0 and <= MaxSpareKm, nameof(spareKm), $"Must be between 0 and {MaxSpareKm}.");
+            .Require(spareKm is >= 0 and <= MaxSpareKm, nameof(spareKm), $"Must be between 0 and {MaxSpareKm}.")
+            .Require(ignored is not null, nameof(ignoreHours), IgnoredHours.Error);
         var fuelType = await StationEndpoints.ResolveFuelAsync(db, fuel, errors, cancellationToken);
-        if (errors.Any || fuelType is null)
+        if (errors.Any || fuelType is null || ignored is null)
         {
             return errors.ToProblem();
         }
@@ -115,7 +120,8 @@ public static class TripEndpoints
             var fuelId = fuelType.Id;
             var byId = new Dictionary<long, SnapshotStation>();
             var near = new List<RouteStation>();
-            foreach (var station in (await snapshot.GetAsync(db, cancellationToken)).Stations)
+            var current = await snapshot.GetAsync(db, cancellationToken);
+            foreach (var station in current.Stations)
             {
                 var price = station.Prices.FirstOrDefault(p => p.FuelTypeId == fuelId);
                 if (price is null || !Eligibility.IsEligible(station.Status, price.IsAvailable, price.PriceCents, station.MembersOnly, costco)
@@ -131,7 +137,16 @@ public static class TripEndpoints
             // 3. At most 100 candidates; past the range (the whole of it, for the low-fuel case), only the first ones.
             var range = rangeKm is { } km ? new FuelRange(km, spareKm) : null;
             var maxKmAlong = range is not null && tripKm >= OnTheWay.LongTripKm ? range.RangeKm + halfWidthKm : (double?)null;
-            var candidates = OnTheWay.SelectCandidates(near, maxKmAlong);
+            // Those likely closed when the car gets there (at the route's pace) aren't a stretch's closest: open ones are.
+            var now = time.GetUtcNow();
+            var routeMinutes = route.DurationSeconds / 60;
+            bool LikelyLeftOut(RouteStation s) =>
+                !ignored.Contains(s.Id)
+                && Arrivals.IsClosed(
+                    current.Hours.GetValueOrDefault(s.Id)?.Arrival,
+                    now.AddMinutes(tripKm > 0 ? s.KmAlong / tripKm * routeMinutes : 0));
+
+            var candidates = OnTheWay.SelectCandidates(near, maxKmAlong, LikelyLeftOut);
 
             // 4. The stations on their own roads, then start → destination and → each station, and each station →
             // destination. On any road, like the route, so the ends snap where the route's did.
@@ -151,8 +166,14 @@ public static class TripEndpoints
                 }
             }
 
-            // 5–6. The range, then the ranking.
-            var ranking = OnTheWay.Rank(roads, tripKm, new Car((decimal)fillL, (decimal)per100Km), maxDetourMin, range);
+            // 5. Stations closed when the car gets there are left out, so the first reached and the reference are open ones.
+            var (kept, leftOut) = Arrivals.LeaveOutClosed(
+                roads.Candidates, c => current.Hours.GetValueOrDefault(c.Id)?.Arrival, c => now.AddMinutes(c.ToMinutes), ignored, c => c.Id);
+            roads = roads with { Candidates = kept };
+
+            // 6–7. The range, then the ranking.
+            var car = new Car((decimal)fillL, (decimal)per100Km);
+            var ranking = OnTheWay.Rank(roads, tripKm, car, maxDetourMin, range);
             var tripStations = ranking.Ranked
                 .OrderBy(r => r.Candidate.KmAlong)
                 .ThenBy(r => r.Id)
@@ -163,15 +184,21 @@ public static class TripEndpoints
                         station.Id, station.Name, station.Brand, station.Address, station.Latitude, station.Longitude,
                         r.Candidate.PriceCents, Math.Round(r.Candidate.KmAlong, 1), Math.Round(r.Candidate.ToKm, 1),
                         Math.Round(r.DetourKm, 1), Math.Round(r.DetourMinutes, 1), r.Cost, r.Saves, station.MembersOnly, r.Reachable,
-                        r.OverDetourLimit);
+                        r.OverDetourLimit, current.Hours.GetValueOrDefault(station.Id)?.Dto, Math.Round(r.Candidate.ToMinutes, 1));
                 })
                 .ToList();
 
+            var directKm = roads.DirectKm;
             return TypedResults.Ok(new TripPlan(
                 [.. line.Simplified.Select(p => new[] { Math.Round(p.Longitude, 5), Math.Round(p.Latitude, 5) })],
                 Math.Round(tripKm, 1), Math.Round(route.DurationSeconds / 60, 1), halfWidthKm, ranking.LongTrip,
                 ranking.StopBeforeKm is { } stop ? Math.Round(stop, 1) : null, ranking.LowFuel, tripStations, ranking.Pick?.Id,
-                ranking.Reference?.Id, ranking.ReferenceOnTheWay, ranking.BiggestSaving?.Id));
+                ranking.Reference?.Id, ranking.ReferenceOnTheWay, ranking.BiggestSaving?.Id,
+                LeftOutStations.Of(
+                    leftOut.Select(c => new LeftOutCandidate(
+                        byId[c.Id], c.PriceCents, Costs.Fill(c.PriceCents, car, Math.Max(0, c.ToKm + c.OnwardKm - directKm)), c.ToMinutes)),
+                    current.Hours,
+                    ranking.Pick?.Candidate.PriceCents)));
         }
         catch (OsrmException ex)
         {

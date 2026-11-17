@@ -1095,4 +1095,49 @@
   <data name="HoursFromOsm" xml:space="preserve">
     <value>OpenStreetMap, modifiées en {0}</value>
   </data>
+  <data name="ClosesSoonAfterArrival" xml:space="preserve">
+    <value>Ferme à {0}, environ {1} min après votre arrivée.</value>
+  </data>
+  <data name="ClosedOnArrival" xml:space="preserve">
+    <value>Fermé à votre arrivée (ferme à {0}).</value>
+  </data>
+  <data name="ClosedOnArrivalOpens" xml:space="preserve">
+    <value>Fermé à votre arrivée (ouvre {0}).</value>
+  </data>
+  <data name="OpensTime" xml:space="preserve">
+    <value>à {0}</value>
+  </data>
+  <data name="OpensDayTime" xml:space="preserve">
+    <value>{0} à {1}</value>
+  </data>
+  <data name="LeftOutClosed" xml:space="preserve">
+    <value>{0} écarté : fermé à votre arrivée (ferme à {1}).</value>
+  </data>
+  <data name="LeftOutClosedOpens" xml:space="preserve">
+    <value>{0} écarté : fermé à votre arrivée (ouvre {1}).</value>
+  </data>
+  <data name="LeftOutClosedNow" xml:space="preserve">
+    <value>{0} écarté : fermé à votre arrivée.</value>
+  </data>
+  <data name="LeftOutTemporarilyClosed" xml:space="preserve">
+    <value>{0} écarté : fermé temporairement.</value>
+  </data>
+  <data name="ClosingDialogTitle" xml:space="preserve">
+    <value>{0} ferme à {1}</value>
+  </data>
+  <data name="ClosingDialogClosed" xml:space="preserve">
+    <value>{0} est fermé</value>
+  </data>
+  <data name="ClosingDialogArrive" xml:space="preserve">
+    <value>Vous y seriez vers {0}.</value>
+  </data>
+  <data name="ClosingDialogOpens" xml:space="preserve">
+    <value>Ouvre {0}.</value>
+  </data>
+  <data name="ClosingDialogTemporarily" xml:space="preserve">
+    <value>D’après sa source, il est fermé pour l’instant.</value>
+  </data>
+  <data name="GoAnyway" xml:space="preserve">
+    <value>Y aller quand même</value>
+  </data>
 </root>

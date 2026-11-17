@@ -123,6 +123,11 @@ public sealed record ImportDto(
 /// within 25 km has a price, and <paramref name="Stations"/> holds the closest one at any distance.
 /// </param>
 /// <param name="ByRoad">Distances are by road; otherwise they're estimated (straight line × 1.3).</param>
+/// <param name="LeftOut">
+/// Stations left out because their trusted hours say they'll be closed when the driver gets there, or their source that
+/// they're closed for now: at most 2, only those cheaper per litre than the pick, lowest fill-up cost first. Null when none
+/// was, and from an older API.
+/// </param>
 public sealed record BestNearby(
     RankedStation? Pick,
     long? ReferenceId,
@@ -130,7 +135,8 @@ public sealed record BestNearby(
     long? CheapestId,
     IReadOnlyList<RankedStation> Stations,
     double? RadiusKm,
-    bool ByRoad);
+    bool ByRoad,
+    IReadOnlyList<LeftOutStation>? LeftOut = null);
 
 /// <param name="PriceCents">Cents per litre of the fuel asked for.</param>
 /// <param name="DistanceKm">One way, by road or estimated (<see cref="BestNearby.ByRoad"/>).</param>
@@ -140,6 +146,11 @@ public sealed record BestNearby(
 /// <param name="MembersOnly">A Costco: it sells to members only.</param>
 /// <param name="OverDetourLimit">Its round trip takes longer than the closest's by more than the longest detour: not picked.</param>
 /// <param name="SavingUncertain">It saves by the estimate, but not with roads twice the straight line (a river between): not picked.</param>
+/// <param name="Hours">Its opening hours; null when no source has them, and from an older API.</param>
+/// <param name="EtaMin">
+/// How long getting there takes, one way: by road (<paramref name="DurationMin"/>), or estimated like the distance. Its
+/// hours were checked at the time of the answer plus this. Null from an older API.
+/// </param>
 public sealed record RankedStation(
     long Id,
     string? Name,
@@ -154,7 +165,9 @@ public sealed record RankedStation(
     decimal SavesDollars,
     bool MembersOnly,
     bool OverDetourLimit,
-    bool SavingUncertain);
+    bool SavingUncertain,
+    StationHours? Hours = null,
+    double? EtaMin = null);
 
 /// <summary>Where to fill up on the way to a destination (<c>/trips/best</c>), counting the gas the detour burns.</summary>
 /// <param name="Path">The route to draw, simplified: [longitude, latitude] pairs from the start.</param>
@@ -176,6 +189,11 @@ public sealed record RankedStation(
 /// </param>
 /// <param name="ReferenceOnTheWay">The reference is on the way (a stop adds at most 1 km and 2 min); otherwise it's the smallest detour.</param>
 /// <param name="BiggestSavingId">The station that saves the most, past the longest detour included; null when it's the pick.</param>
+/// <param name="LeftOut">
+/// Stations left out because their trusted hours say they'll be closed when the car gets there, or their source that
+/// they're closed for now: at most 2, only those cheaper per litre than the pick, lowest fill-up cost first. Null when none
+/// was, and from an older API.
+/// </param>
 public sealed record TripPlan(
     double[][] Path,
     double DistanceKm,
@@ -188,7 +206,8 @@ public sealed record TripPlan(
     long? PickId,
     long? ReferenceId,
     bool ReferenceOnTheWay,
-    long? BiggestSavingId);
+    long? BiggestSavingId,
+    IReadOnlyList<LeftOutStation>? LeftOut = null);
 
 /// <param name="PriceCents">Cents per litre of the fuel asked for.</param>
 /// <param name="KmAlong">How far along the route the station is.</param>
@@ -199,6 +218,8 @@ public sealed record TripPlan(
 /// <param name="MembersOnly">A Costco: it sells to members only.</param>
 /// <param name="Reachable">The range gets there (always, when no range counts).</param>
 /// <param name="OverDetourLimit">Its detour takes longer than the longest detour: not picked.</param>
+/// <param name="Hours">Its opening hours; null when no source has them, and from an older API.</param>
+/// <param name="ToMin">From the start to the station, by road: its hours were checked at the time of the answer plus this. Null from an older API.</param>
 public sealed record TripStation(
     long Id,
     string? Name,
@@ -215,7 +236,27 @@ public sealed record TripStation(
     decimal SavesDollars,
     bool MembersOnly,
     bool Reachable,
-    bool OverDetourLimit);
+    bool OverDetourLimit,
+    StationHours? Hours = null,
+    double? ToMin = null);
+
+/// <summary>
+/// A station Best near you or Best on the way left out (<see cref="BestNearby.LeftOut"/>, <see cref="TripPlan.LeftOut"/>):
+/// its trusted hours say it'll be closed when the driver gets there, or its source that it's closed for now.
+/// </summary>
+/// <param name="PriceCents">Cents per litre of the fuel asked for, cheaper than the pick's.</param>
+/// <param name="Hours">The hours it was left out by.</param>
+/// <param name="EtaMin">How long getting there would take, one way (from the start, on a trip): it's closed at the time of the answer plus this.</param>
+public sealed record LeftOutStation(
+    long Id,
+    string? Name,
+    string? Brand,
+    string Address,
+    double Latitude,
+    double Longitude,
+    decimal PriceCents,
+    StationHours Hours,
+    double EtaMin);
 
 /// <summary>A place to go to, from the address search (<c>/places/search</c>) or for a point (<c>/places/reverse</c>).</summary>
 /// <param name="Label">What the place is called: "1000 Rue De La Gauchetière Ouest", "Rue Gaucher", "Laval", or a named place.</param>

@@ -350,13 +350,19 @@
     margin-top: 10px;
 }
 
+/* The hero's address line's ending when the station closes soon after the driver gets there. */
+.who .closes {
+    color: var(--ess-warning-text);
+}
+
 .actions {
     display: flex;
     gap: 8px;
     margin-top: 12px;
 }
 
-.go {
+/* Go: a GoLink (its own component), so reached through ::deep. */
+.actions ::deep .go {
     flex: 1;
     display: flex;
     align-items: center;
@@ -371,7 +377,7 @@
     text-decoration: none;
 }
 
-.go:hover {
+.actions ::deep .go:hover {
     filter: brightness(1.08);
 }
 
@@ -563,6 +569,19 @@
     font-size: 11px;
     font-weight: 600;
     color: var(--ess-warning-text);
+}
+
+/* Closes soon after the driver gets there, or closed then: a tag like Members', on its own line in a tile. */
+.tile .tag {
+    margin-top: 1px;
+}
+
+/* The stations left out for their hours: one muted line at the end, under every station shown. */
+.left-out {
+    margin: 12px 0 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--ess-text-muted);
 }
 
 /* ---- Going somewhere? ---- */
