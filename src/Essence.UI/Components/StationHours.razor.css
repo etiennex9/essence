@@ -50,7 +50,14 @@
     color: inherit;
 }
 
-/* "These hours are wrong", "Add the hours": a link-like button with a 44 px target. */
+/* "These hours are wrong" (or "Add the hours") and "Check the hours on Google Maps": a button and a link alike, each a
+   44 px target, side by side when there's room. */
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    column-gap: 20px;
+}
+
 .correct {
     display: inline-flex;
     align-items: center;
@@ -61,6 +68,7 @@
     background: none;
     color: var(--ess-accent);
     font: 500 14px var(--ess-font);
+    text-decoration: none;
     cursor: pointer;
 }
 

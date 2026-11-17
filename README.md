@@ -283,7 +283,9 @@ per station (see **Which hours show**), and the app shows them.
 - **In the app.** The hours are read in the station's own time zone (Eastern, or Atlantic on the Îles-de-la-Madeleine),
   never the device's. A station's details say "Open until 9:30 p.m." (amber in its last 30 minutes), "Closed · opens
   6:00 a.m.", "Open 24 hours" or "Temporarily closed" on the line under its address, warn when a holiday's hours may
-  differ, and list the week with where the hours come from, or "Hours unknown". The map's pill of a station closed now is
+  differ, and list the week with where the hours come from, or "Hours unknown". Under them, **Check the hours on Google
+  Maps** is a plain link to the station there (its brand, else its name, and its address): Google's terms forbid keeping
+  its hours or using them with a map that isn't Google's, so they never come back into Essence. The map's pill of a station closed now is
   grey, and gets room for its price after the open ones; Favorites and the comparison say "Closed", or "Closes 9:30 p.m."
   in its last 30 minutes, and the Favorites widget says when a favorite closes within 90 minutes of its refresh, or that
   it's closed.
@@ -325,7 +327,9 @@ per station (see **Which hours show**), and the app shows them.
   says "Sent to OpenStreetMap" with a link to the changeset, or OpenStreetMap's reason; the correction stays saved on the
   device either way. **A brand's hours are never sent on their own:** hours equal to the ones shown from a brand (or
   Essence's own) leave the box unticked, and can't be sent until the user says they checked them at the station; equal to
-  OpenStreetMap's own, sending only says when they were checked, so the box starts unticked. The editor names the
+  OpenStreetMap's own, sending only says when they were checked, so the box starts unticked. Under the boxes, the editor
+  says to send only what the user knows first-hand: OpenStreetMap takes neither Google Maps nor Street View as a source,
+  and the details link to Google Maps. The editor names the
   element the hours go to, as OpenStreetMap has it now ("OpenStreetMap: Dépanneur Sonic", its name, else its brand, read
   without the token; nothing is said when it can't be read). For an element matched by location only
   (`osmBrandDiffers`), it also offers **Also set its brand to `<brand>`**, saying what OpenStreetMap says now: unticked,

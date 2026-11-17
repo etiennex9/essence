@@ -104,10 +104,9 @@
                                 </label>
                             }
                         </fieldset>
-                        @if (brand is not null)
-                        {
-                            <p class="hint">@OsmEditTexts.BrandNote(L, _tags, Station.OsmBrand)</p>
-                        }
+                        @* First-hand only, the hours as much as the brand: the details link to Google Maps, which OpenStreetMap
+                           doesn't take as a source. *@
+                        <p class="hint">@(brand is not null ? OsmEditTexts.BrandNote(L, _tags, Station.OsmBrand) : L["OsmBrandFirstHand"])</p>
                         @if (built is not null && Station.Hours is { } server && HoursDraft.SameAs(server, built))
                         {
                             <p class="hint">@(HoursDraft.IsBrand(server) ? L["OsmBrandHours", Name] : L["OsmSameHours"])</p>

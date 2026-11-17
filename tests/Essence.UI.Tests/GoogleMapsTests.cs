@@ -36,4 +36,25 @@ public class GoogleMapsTests
             CultureInfo.CurrentCulture = previous;
         }
     }
+
+    [Fact]
+    public void A_branded_station_is_looked_up_by_its_brand_and_address() =>
+        Assert.Equal(
+            "https://www.google.com/maps/search/?api=1&query=Petro-Canada%2C%2056%20du%20Cur%C3%A9-Labelle%2C%20Sainte-Th%C3%A9r%C3%A8se%20J7E%202X8",
+            GoogleMaps.Search("Petro-Canada", "9358-1452 Québec inc.", "56 du Curé-Labelle , Sainte-Thérèse", "J7E 2X8"));
+
+    [Theory]
+    [InlineData("Indépendant", "Station du Village", "Station du Village, 627 boul. Léry, Léry J6N 1B2")]
+    [InlineData(null, "Station du Village", "Station du Village, 627 boul. Léry, Léry J6N 1B2")]
+    [InlineData("Aucun", "9214-4609 Québec inc.", "627 boul. Léry, Léry J6N 1B2")]
+    [InlineData(null, "9214-4609 QUEBEC INC", "627 boul. Léry, Léry J6N 1B2")]
+    [InlineData(null, " ", "627 boul. Léry, Léry J6N 1B2")]
+    public void An_independent_is_looked_up_by_its_name_unless_it_s_only_a_numbered_company_s(string? brand, string? name, string query) =>
+        Assert.Equal(query, Uri.UnescapeDataString(GoogleMaps.Search(brand, name, "627 boul.  Léry, Léry", "J6N 1B2").Split("query=")[1]));
+
+    [Fact]
+    public void The_query_is_escaped_whole() =>
+        Assert.Equal(
+            "https://www.google.com/maps/search/?api=1&query=Esso%2C%20166%20rue%20Turgeon%20%26%20boul.%20Labelle",
+            GoogleMaps.Search("Esso", null, "166 rue Turgeon & boul. Labelle", null));
 }
