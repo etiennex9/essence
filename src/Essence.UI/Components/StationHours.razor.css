@@ -50,7 +50,7 @@
     color: inherit;
 }
 
-/* "These hours are wrong", or "Add the hours" and "Check the hours on Google Maps": a button and a link alike, each a
+/* "These hours are wrong" (or "Add the hours") and "Check the hours on Google Maps": a button and a link alike, each a
    44 px target, side by side when there's room. */
 .actions {
     display: flex;

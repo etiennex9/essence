@@ -2,8 +2,8 @@
 
 @* A station's week in its details (StationHoursView): the days in a row with the same hours, today's in bold, and where
    the hours come from; or that they're unknown. Then "These hours are wrong", or "Add the hours", which opens the editor
-   (HoursEditor), and when they're unknown, a link to the station on Google Maps to read Google's (only a link: Google's
-   terms keep its hours out of an app with another map). The parent gives the section its heading. *@
+   (HoursEditor), and a link to the station on Google Maps to read Google's (only a link: Google's terms keep its hours
+   out of an app with another map). The parent gives the section its heading. *@
 @if (View.Kind == HoursKind.Unknown)
 {
     <p class="unknown">@L["HoursUnknown"]</p>
@@ -39,11 +39,8 @@ else
         <button type="button" class="correct" @onclick="() => _editor?.ShowAsync() ?? Task.CompletedTask">
             @(View.Kind == HoursKind.Unknown ? L["AddHours"] : L["HoursWrong"])
         </button>
-        @if (View.Kind == HoursKind.Unknown)
-        {
-            <a class="correct" href="@GoogleMaps.Search(station.Brand, station.Name, station.Address, station.PostalCode)"
-               target="_blank" rel="noopener">@L["HoursOnGoogleMaps"]</a>
-        }
+        <a class="correct" href="@GoogleMaps.Search(station.Brand, station.Name, station.Address, station.PostalCode)"
+           target="_blank" rel="noopener">@L["HoursOnGoogleMaps"]</a>
     </div>
     <HoursEditor @ref="_editor" Station="station" Name="@Name" />
 }

@@ -8,8 +8,8 @@ namespace Essence.UI.Services;
 public static partial class GoogleMaps
 {
     /// <summary>
-    /// The station looked up on Google Maps, to read the hours Google has for a station Essence has none for. It's
-    /// looked up by its brand (else its name, unless that's only a numbered company's, "9214-4609 Québec inc.") and its
+    /// The station looked up on Google Maps, to read the hours Google has for it, when Essence has none or the user doubts
+    /// them. It's looked up by its brand (else its name, unless that's only a numbered company's, "9214-4609 Québec inc.") and its
     /// address. Only a link the user follows: nothing of Google's comes back to Essence, whose map isn't Google's.
     /// </summary>
     public static string Search(string? brand, string? name, string address, string? postalCode)
