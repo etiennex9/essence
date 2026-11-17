@@ -1146,6 +1146,9 @@
   <data name="AddHours" xml:space="preserve">
     <value>Add the hours</value>
   </data>
+  <data name="HoursOnGoogleMaps" xml:space="preserve">
+    <value>Check the hours on Google Maps</value>
+  </data>
   <data name="HoursEditorTitle" xml:space="preserve">
     <value>Correct the hours</value>
   </data>
