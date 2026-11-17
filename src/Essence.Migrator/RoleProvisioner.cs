@@ -35,7 +35,7 @@ internal static class RoleProvisioner
             GRANT SELECT ON ALL TABLES IN SCHEMA public TO {ReaderRole};
 
             GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO {WriterRole};
-            GRANT DELETE ON current_prices TO {WriterRole};
+            GRANT DELETE ON current_prices, station_hours TO {WriterRole};
             GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {WriterRole};
             REVOKE INSERT, UPDATE ON "__EFMigrationsHistory" FROM {WriterRole};
             """, cancellationToken);

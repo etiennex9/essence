@@ -3,8 +3,10 @@ using Essence.Data;
 using Essence.Ingest;
 using Essence.Ingest.Backfill;
 using Essence.Ingest.Feed;
+using Essence.Ingest.Hours;
 using Essence.Ingest.Scheduling;
 using Essence.Ingest.Storage;
+using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -36,6 +38,13 @@ builder.Services.AddOptions<ArchiveOptions>()
     .Validate(o => !string.IsNullOrWhiteSpace(o.Path) && o.RetentionDays > 0, "Archive:Path is required and Archive:RetentionDays must be positive.")
     .ValidateOnStart();
 
+var hoursSection = builder.Configuration.GetSection(HoursOptions.SectionName);
+var hours = hoursSection.Get<HoursOptions>() ?? new HoursOptions();
+builder.Services.AddOptions<HoursOptions>()
+    .Bind(hoursSection)
+    .Validate(o => o.Validate() is null, hours.Validate() ?? "The Hours settings are invalid.")
+    .ValidateOnStart();
+
 builder.Services.AddSingleton<PollScheduler>();
 builder.Services.AddSingleton<RawArchive>();
 builder.Services.AddScoped<ImportWriter>();
@@ -60,6 +69,41 @@ builder.Services.AddHttpClient<FeedClient>(client =>
         o.CircuitBreaker.SamplingDuration = feed.RequestTimeout * 2;
     });
 
+builder.Services.AddSingleton(provider => new HoursSchedule(
+    provider.GetRequiredService<IOptions<HoursOptions>>(), provider.GetRequiredService<TimeProvider>(), Random.Shared));
+builder.Services.AddSingleton<HoursCache>();
+builder.Services.AddScoped<HoursWriter>();
+// In the order of their first runs after a start, a minute apart (HoursSchedule.Stagger).
+builder.Services.AddTransient<IHoursSource, CuratedHoursSource>();
+builder.Services.AddTransient<IHoursSource, CostcoSource>();
+
+builder.Services.AddHttpClient<HoursClient>(client =>
+    {
+        client.Timeout = Timeout.InfiniteTimeSpan; // The resilience pipeline owns timeouts.
+        client.MaxResponseContentBufferSize = 32 * 1024 * 1024;
+        client.DefaultRequestHeaders.UserAgent.ParseAdd(hours.UserAgent);
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler
+    {
+        AutomaticDecompression = DecompressionMethods.All,
+        PooledConnectionLifetime = TimeSpan.FromMinutes(5),
+    })
+    .AddStandardResilienceHandler(o =>
+    {
+        o.AttemptTimeout.Timeout = hours.RequestTimeout;
+        // The pipeline wants at least one retry: with none asked, nothing is handled as worth retrying. A source's run
+        // then makes only the requests it needs, and a failed run is tried again later (Hours:Backoff).
+        o.Retry.MaxRetryAttempts = Math.Max(1, hours.RetryCount);
+        if (hours.RetryCount == 0)
+        {
+            o.Retry.ShouldHandle = _ => ValueTask.FromResult(false);
+        }
+
+        o.TotalRequestTimeout.Timeout = hours.RequestTimeout * (hours.RetryCount + 1) + TimeSpan.FromSeconds(15);
+        o.CircuitBreaker.SamplingDuration = hours.RequestTimeout * 2;
+    });
+
 builder.Services.AddHostedService<IngestWorker>();
+builder.Services.AddHostedService<HoursWorker>();
 
 builder.Build().Run();

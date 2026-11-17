@@ -87,6 +87,66 @@ namespace Essence.Data.Migrations
                     b.ToTable("fuel_types", (string)null);
                 });
 
+            modelBuilder.Entity("Essence.Data.Entities.HoursImport", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Changed")
+                        .HasColumnType("integer")
+                        .HasColumnName("changed");
+
+                    b.Property<string>("Error")
+                        .HasColumnType("text")
+                        .HasColumnName("error");
+
+                    b.Property<DateTimeOffset>("FinishedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("finished_at");
+
+                    b.Property<int>("Matched")
+                        .HasColumnType("integer")
+                        .HasColumnName("matched");
+
+                    b.Property<int>("Records")
+                        .HasColumnType("integer")
+                        .HasColumnName("records");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source");
+
+                    b.Property<string>("SourceVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("source_version");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("status");
+
+                    b.Property<int>("Warnings")
+                        .HasColumnType("integer")
+                        .HasColumnName("warnings");
+
+                    b.HasKey("Id")
+                        .HasName("pk_hours_imports");
+
+                    b.HasIndex("Source", "FinishedAt")
+                        .HasDatabaseName("ix_hours_imports_source_finished_at");
+
+                    b.ToTable("hours_imports", (string)null);
+                });
+
             modelBuilder.Entity("Essence.Data.Entities.Import", b =>
                 {
                     b.Property<long>("Id")
@@ -360,6 +420,84 @@ namespace Essence.Data.Migrations
                     b.ToTable("station_changes", (string)null);
                 });
 
+            modelBuilder.Entity("Essence.Data.Entities.StationHoursEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Confirmed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("confirmed");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fetched_at");
+
+                    b.Property<long>("HoursImportId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("hours_import_id");
+
+                    b.Property<int?>("MatchDistanceM")
+                        .HasColumnType("integer")
+                        .HasColumnName("match_distance_m");
+
+                    b.Property<string>("MatchedBy")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("matched_by");
+
+                    b.Property<string>("OpeningHours")
+                        .HasColumnType("text")
+                        .HasColumnName("opening_hours");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source");
+
+                    b.Property<DateTimeOffset?>("SourceCheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("source_checked_at");
+
+                    b.Property<string>("SourceRef")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source_ref");
+
+                    b.Property<string>("SourceUrl")
+                        .HasColumnType("text")
+                        .HasColumnName("source_url");
+
+                    b.Property<long>("StationId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("station_id");
+
+                    b.Property<bool>("TemporarilyClosed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("temporarily_closed");
+
+                    b.HasKey("Id")
+                        .HasName("pk_station_hours");
+
+                    b.HasIndex("HoursImportId")
+                        .HasDatabaseName("ix_station_hours_hours_import_id");
+
+                    b.HasIndex("Source")
+                        .HasDatabaseName("ix_station_hours_source");
+
+                    b.HasIndex("StationId", "Source")
+                        .IsUnique()
+                        .HasDatabaseName("ix_station_hours_station_id_source");
+
+                    b.ToTable("station_hours", (string)null);
+                });
+
             modelBuilder.Entity("Essence.Data.Entities.CurrentPrice", b =>
                 {
                     b.HasOne("Essence.Data.Entities.FuelType", "FuelType")
@@ -437,6 +575,27 @@ namespace Essence.Data.Migrations
                         .HasConstraintName("fk_station_changes_stations_station_id");
 
                     b.Navigation("Import");
+
+                    b.Navigation("Station");
+                });
+
+            modelBuilder.Entity("Essence.Data.Entities.StationHoursEntry", b =>
+                {
+                    b.HasOne("Essence.Data.Entities.HoursImport", "HoursImport")
+                        .WithMany()
+                        .HasForeignKey("HoursImportId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_station_hours_hours_imports_hours_import_id");
+
+                    b.HasOne("Essence.Data.Entities.Station", "Station")
+                        .WithMany()
+                        .HasForeignKey("StationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_station_hours_stations_station_id");
+
+                    b.Navigation("HoursImport");
 
                     b.Navigation("Station");
                 });

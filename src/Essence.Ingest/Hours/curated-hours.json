@@ -1,0 +1,13 @@
+{
+  "$comment": "Hours written down by hand, for when a source can't be fetched or has none. A station's rule (by its address and postal code, as in the feed) beats its brand's. Each rule is opening_hours as Essence.Hours reads it, checked on the day given, at the link given.",
+  "brands": [
+    {
+      "brand": "Costco",
+      "rule": "Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30",
+      "checked": "2026-11-11",
+      "link": "https://www.costco.ca/w/-/locations",
+      "note": "The gas bars' hours, not the warehouses': the same at all 18 Québec warehouses in Costco's locator, and confirmed by the owner for Laval."
+    }
+  ],
+  "stations": []
+}

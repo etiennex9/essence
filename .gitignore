@@ -19,7 +19,8 @@ TestResults/
 *.trx
 coverage*.xml
 
-# Local secrets and data (the raw archive defaults to ./data/archive when running outside Docker)
+# Local secrets and data (the raw archive defaults to ./data/archive, and the hours sources' last downloads to
+# ./data/hours, when running outside Docker)
 .env
 /data/
 

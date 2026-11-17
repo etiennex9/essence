@@ -14,6 +14,8 @@ public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options)
     public DbSet<PriceHistory> PriceHistory => Set<PriceHistory>();
     public DbSet<CurrentPrice> CurrentPrices => Set<CurrentPrice>();
     public DbSet<Import> Imports => Set<Import>();
+    public DbSet<StationHoursEntry> StationHours => Set<StationHoursEntry>();
+    public DbSet<HoursImport> HoursImports => Set<HoursImport>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -74,6 +76,25 @@ public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options)
             // Failed attempts may repeat a generated_at; only one successful import per version.
             e.HasIndex(x => x.GeneratedAt).IsUnique().HasFilter("status = 'succeeded'");
             e.HasIndex(x => x.Sha256);
+        });
+
+        modelBuilder.Entity<StationHoursEntry>(e =>
+        {
+            e.Property(x => x.TemporarilyClosed).HasDefaultValue(false);
+            e.HasOne(x => x.Station).WithMany().OnDelete(DeleteBehavior.Restrict);
+            e.HasOne(x => x.HoursImport).WithMany().OnDelete(DeleteBehavior.Restrict);
+            // One row per station and source; a source's run reads and replaces its own rows.
+            e.HasIndex(x => new { x.StationId, x.Source }).IsUnique();
+            e.HasIndex(x => x.Source);
+        });
+
+        modelBuilder.Entity<HoursImport>(e =>
+        {
+            e.Property(x => x.Status).HasConversion(
+                v => v.ToString().ToLowerInvariant(),
+                v => Enum.Parse<HoursImportStatus>(v, true));
+            // Each source's latest runs: its last success, and the failures since.
+            e.HasIndex(x => new { x.Source, x.FinishedAt });
         });
     }
 }
