@@ -68,6 +68,26 @@ Do the same for `gps` and `fused`, and `remove-test-provider` each one after. `a
 io.github.etiennex9.essence android.permission.ACCESS_BACKGROUND_LOCATION` switches *Allow all the time*, and `adb shell am
 broadcast -a androidx.work.diagnostics.REQUEST_DIAGNOSTICS -p io.github.etiennex9.essence` logs WorkManager's jobs.
 
+## Corrected hours and OpenStreetMap
+
+Hours the user corrects in a station's details are kept with the favorites, per server (`essence.hours`), so the widgets
+go by them too and send them as `ignoreHours` ([README → Opening hours](../../README.md#opening-hours)). To send a
+correction to OpenStreetMap as well, the user links their own account (About, or the hours editor) with the server's
+OpenStreetMap application, which `/client-config` names ([README → Deploy → OpenStreetMap
+edits](../../README.md#openstreetmap-edits)): register `essence://osm-auth` among its redirect URIs. The sign-in opens in
+a Custom Tab (MAUI's `WebAuthenticator`, `Services/MauiOsm.cs`), and OpenStreetMap's answer comes back to
+`essence://osm-auth`, which only `OsmAuthCallbackActivity` takes: the widgets' links (`essence://open/…`) go to
+`MainActivity` by name, and `DeepLinks` never reads the sign-in's. The token is kept in MAUI's `SecureStorage` (Android's
+keystore), not in the preferences the widgets read, and Android's backups and transfers leave its file out
+(`io.github.etiennex9.essence.microsoft.maui.essentials.preferences.xml`): restored elsewhere it couldn't be decrypted,
+and the user links again. The account isn't per server, but its token goes only to the API it was linked for: since any
+server can be picked here, the app doesn't take a server's word for where OpenStreetMap is. It refuses one that names an
+API other than its sign-in's own (the same host, or `www.` and `api.openstreetmap.org`) or an address that isn't https,
+and a server naming another API than the account's asks for the account to be linked again.
+
+To check it against OpenStreetMap's development server, point a local api at it (`OSM_CLIENT_ID`, `OSM_AUTH_URL` and
+`OSM_API_URL` in `.env`) with an application registered there, run the app as below, and link from About.
+
 ## Run it on a phone
 
 Install the MAUI Android workload: Visual Studio's *.NET Multi-platform App UI development* workload, or

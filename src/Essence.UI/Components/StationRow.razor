@@ -1,4 +1,6 @@
+@implements IDisposable
 @inject StationHoursView HoursViews
+@inject StationHoursOverrides Overrides
 @inject IStringLocalizer<Strings> L
 
 @* A station in the favorites or the comparison: the row's main button, which opens its details. The parent puts it in a
@@ -102,9 +104,23 @@
         ? $" · {Geo.DistanceKm(user, new GeoPoint(lat, lon)).ToString("0.0", CultureInfo.CurrentCulture)} km"
         : "";
 
+    protected override void OnInitialized() => Overrides.Changed += OnHoursCorrected;
+
     protected override void OnParametersSet()
     {
         _brand = BrandCatalog.For(Station.Brand);
-        _hours = HoursViews.Describe(Station.Hours, Station.Latitude, Station.Longitude, Now);
+        ShowHours();
     }
+
+    /// <summary>The station's hours as the app goes by them: the user's correction, else the saved station's.</summary>
+    private void ShowHours() =>
+        _hours = HoursViews.Describe(HoursViews.HoursOf(Station.Id, Station.Hours), Station.Latitude, Station.Longitude, Now);
+
+    private void OnHoursCorrected() => _ = InvokeAsync(() =>
+    {
+        ShowHours();
+        StateHasChanged();
+    });
+
+    public void Dispose() => Overrides.Changed -= OnHoursCorrected;
 }

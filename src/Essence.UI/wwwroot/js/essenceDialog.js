@@ -1,7 +1,9 @@
 // The app's native modal <dialog>s, which close by themselves on Esc and on Android's Back, plus a click on the backdrop
 // for browsers without closedby="any". About's (AboutDialog.razor, attachDialog) loads its changelog a month at a time:
 // when the "Older versions" button at the end of the list comes near the bottom of the view, .NET is asked for the next
-// month. The warning before Go when a station closes soon (ClosingDialog.razor, attachModal) only opens and closes.
+// month. The warning before Go when a station closes soon (ClosingDialog.razor, attachModal) only opens and closes. So
+// does the hours editor (HoursEditor.razor, attachModal without the backdrop's click, and closedby="closerequest"): a tap
+// beside a form would throw away what was typed in it, so only Esc, Back and its own buttons close it.
 
 const LOAD_AHEAD_PX = 200;
 
@@ -79,8 +81,9 @@ export function attachDialog(dialog, scroller, more, dotnet) {
     };
 }
 
-export function attachModal(dialog) {
-    const detach = closeOnBackdrop(dialog);
+// closeOutside: a click on the backdrop closes it (false for a form).
+export function attachModal(dialog, closeOutside = true) {
+    const detach = closeOutside ? closeOnBackdrop(dialog) : () => {};
     return {
         open() {
             if (!dialog.open) {

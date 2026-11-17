@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Essence</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 32px 16px;
+            font: 16px/1.5 system-ui, sans-serif;
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Where OpenStreetMap's sign-in sends its answer (the OAuth application's redirect URI): hands the code and the state
+         to the page that opened the sign-in (essenceOsm.js), which checks the state and trades the code for a token, then
+         closes. OpenStreetMap's Cross-Origin-Opener-Policy leaves this window without an opener, so the answer goes through
+         a BroadcastChannel of this origin; postMessage too when there's an opener, to this origin only. Nothing else is
+         loaded, and the code is taken out of the address at once. -->
+    <p id="message">You can close this window.</p>
+    <script>
+        (function () {
+            var params = new URLSearchParams(window.location.search);
+            var answer = { type: "essence-osm-auth", code: params.get("code"), state: params.get("state"), error: params.get("error") };
+            history.replaceState(null, "", window.location.pathname);
+            if ("BroadcastChannel" in window) {
+                var channel = new BroadcastChannel("essence-osm-auth");
+                channel.postMessage(answer);
+                channel.close();
+            }
+
+            if (window.opener) {
+                window.opener.postMessage(answer, window.location.origin);
+            }
+
+            if (/^fr\b/i.test(navigator.language)) {
+                document.documentElement.lang = "fr";
+                document.getElementById("message").textContent = "Vous pouvez fermer cette fenêtre.";
+            }
+
+            window.close();
+        })();
+    </script>
+</body>
+
+</html>

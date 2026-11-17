@@ -62,6 +62,11 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_reader;Password=${ESSENCE_READER_PASSWORD};GSS Encryption Mode=Disable
       Cors__AllowedOrigins__0: ${CORS_ORIGIN:-http://localhost:5173}
+      # The OpenStreetMap OAuth 2 application users link their own account with (README → Deploy → OpenStreetMap edits),
+      # and where it signs in and edits: OSM_AUTH_URL and OSM_API_URL to OpenStreetMap's development server for tests.
+      Osm__ClientId: ${OSM_CLIENT_ID:-}
+      Osm__AuthUrl: ${OSM_AUTH_URL:-https://www.openstreetmap.org}
+      Osm__ApiUrl: ${OSM_API_URL:-https://api.openstreetmap.org}
     ports:
       - "${API_PORT:-8080}:8080"
     depends_on:

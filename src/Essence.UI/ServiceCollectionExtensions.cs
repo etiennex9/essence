@@ -12,7 +12,9 @@ public static class ServiceCollectionExtensions
     /// <see cref="ISessionStore"/> first, and its own <see cref="TimeProvider"/> (the web app's simulated time in Development),
     /// and likewise its own <see cref="IReleaseNotesSource"/> (release notes bundled with the app). A host whose API address
     /// isn't known at startup registers its own <see cref="EssenceApiClient"/> and leaves
-    /// <see cref="EssenceUIOptions.ApiBaseUrl"/> out.
+    /// <see cref="EssenceUIOptions.ApiBaseUrl"/> out. OpenStreetMap's sign-in, where its account is kept and the client it's
+    /// called with default to the browser's (<see cref="BrowserOsmSignIn"/>, localStorage, fetch); the Android app registers
+    /// its own <see cref="IOsmSignIn"/>, <see cref="IOsmTokenStore"/> and <see cref="OsmHttp"/> first.
     /// </summary>
     public static IServiceCollection AddEssenceUI(this IServiceCollection services, EssenceUIOptions options)
     {
@@ -41,11 +43,17 @@ public static class ServiceCollectionExtensions
         services.AddScoped<PlaceSearch>();
         services.AddScoped<PlaceAddresses>();
         services.AddScoped<ServicesStatus>();
+        services.AddScoped<StationHoursOverrides>();
         services.AddScoped<StationHoursView>();
         services.TryAddScoped<BrowserDevice>();
         services.TryAddScoped<IDeviceLocation>(sp => sp.GetRequiredService<BrowserDevice>());
         services.TryAddScoped<IPreferenceStore>(sp => sp.GetRequiredService<BrowserDevice>());
         services.TryAddScoped<ISessionStore>(sp => sp.GetRequiredService<BrowserDevice>().Session);
+        services.TryAddScoped<IOsmSignIn, BrowserOsmSignIn>();
+        services.TryAddScoped<IOsmTokenStore, PreferenceOsmTokenStore>();
+        services.TryAddSingleton(_ => new OsmHttp(new HttpClient { Timeout = TimeSpan.FromSeconds(30) }));
+        services.AddScoped(sp => new OsmEditor(sp.GetRequiredService<OsmHttp>().Client));
+        services.AddScoped<OsmAccount>();
         if (options.ReleaseNotesUrl is { } notesUrl)
         {
             var notesBaseUrl = WithTrailingSlash(notesUrl);

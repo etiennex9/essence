@@ -3,6 +3,7 @@ using Essence.Data.Entities;
 namespace Essence.Ingest.Hours;
 
 /// <summary>What a station's row of one source says, compared to tell whether it changed.</summary>
+/// <param name="SourceBrand">The brand the source writes for the place (<see cref="SourceRecord.Brand"/>).</param>
 public sealed record HoursRow(
     string? OpeningHours,
     string SourceRef,
@@ -11,7 +12,8 @@ public sealed record HoursRow(
     int? MatchDistanceM,
     bool Confirmed,
     bool TemporarilyClosed,
-    DateTimeOffset? SourceCheckedAt)
+    DateTimeOffset? SourceCheckedAt,
+    string? SourceBrand)
 {
     public static HoursRow Of(HoursMatch match) => new(
         match.Record.Rule,
@@ -22,7 +24,8 @@ public sealed record HoursRow(
         match.Confirmed,
         match.Record.TemporarilyClosed,
         // PostgreSQL's timestamptz takes UTC only.
-        match.Record.CheckedAt?.ToUniversalTime());
+        match.Record.CheckedAt?.ToUniversalTime(),
+        match.Record.Brand);
 
     public static HoursRow Of(StationHoursEntry entry) => new(
         entry.OpeningHours,
@@ -32,7 +35,8 @@ public sealed record HoursRow(
         entry.MatchDistanceM,
         entry.Confirmed,
         entry.TemporarilyClosed,
-        entry.SourceCheckedAt);
+        entry.SourceCheckedAt,
+        entry.SourceBrand);
 
     public void CopyTo(StationHoursEntry entry)
     {
@@ -44,6 +48,7 @@ public sealed record HoursRow(
         entry.Confirmed = Confirmed;
         entry.TemporarilyClosed = TemporarilyClosed;
         entry.SourceCheckedAt = SourceCheckedAt;
+        entry.SourceBrand = SourceBrand;
     }
 }
 

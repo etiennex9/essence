@@ -41,6 +41,11 @@ public static class MauiProgram
         services.AddSingleton<MobileAppHost>();
         services.AddSingleton<IAppHost>(sp => sp.GetRequiredService<MobileAppHost>());
         services.AddSingleton<DeepLinks>();
+        // OpenStreetMap's sign-in in a browser tab, its token in the secure storage, and its calls through the app's handler.
+        services.AddSingleton<IOsmSignIn, MauiOsmSignIn>();
+        services.AddSingleton<IOsmTokenStore, SecureOsmTokenStore>();
+        services.AddSingleton(sp => new OsmHttp(
+            new HttpClient(sp.GetRequiredService<AppHttpHandler>(), disposeHandler: false) { Timeout = TimeSpan.FromSeconds(30) }));
         services.AddEssenceUI(new EssenceUIOptions());
 
         return builder.Build();

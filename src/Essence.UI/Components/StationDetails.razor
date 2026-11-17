@@ -5,6 +5,7 @@
 @inject FavoriteStations Favorites
 @inject ComparedStations Comparison
 @inject StationHoursView HoursViews
+@inject StationHoursOverrides Overrides
 @inject TimeProvider Time
 @inject IStringLocalizer<Strings> L
 
@@ -107,7 +108,7 @@
 
             <section aria-labelledby="ess-hours">
                 <h3 id="ess-hours">@L["Hours"]</h3>
-                <StationHours View="_hours" />
+                <StationHours View="_hours" Station="_station" Name="@Title" />
             </section>
 
             <section aria-labelledby="ess-price-history">
@@ -152,7 +153,7 @@
             <div class="actions">
                 @if (_station is { Latitude: { } lat, Longitude: { } lon })
                 {
-                    <GoLink class="directions" Href="@GoogleMaps.Directions(lat, lon)" Hours="_station.Hours" Latitude="lat" Longitude="lon"
+                    <GoLink class="directions" Href="@GoogleMaps.Directions(lat, lon)" Hours="HoursViews.HoursOf(_station.Id, _station.Hours)" Latitude="lat" Longitude="lon"
                             EtaMinutes="Eta" Name="@Title">
                         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
                              stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Directions" /></svg>
@@ -252,8 +253,10 @@
         _now = Time.GetUtcNow();
         Favorites.Changed += OnListsChanged;
         Comparison.Changed += OnListsChanged;
+        Overrides.Changed += OnHoursCorrected;
         await Favorites.LoadAsync();
         await Comparison.LoadAsync();
+        await Overrides.LoadAsync();
     }
 
     protected override void OnParametersSet()
@@ -408,7 +411,9 @@
         _hoursTimer?.Dispose();
         _hoursTimer = null;
         var now = Time.GetUtcNow();
-        _hours = _station is { } station ? HoursViews.Describe(station.Hours, station.Latitude, station.Longitude, now) : HoursView.Unknown;
+        _hours = _station is { } station
+            ? HoursViews.Describe(HoursViews.HoursOf(station.Id, station.Hours), station.Latitude, station.Longitude, now)
+            : HoursView.Unknown;
         if (_disposed || _hours.RefreshAt is not { } at)
         {
             return;
@@ -430,6 +435,9 @@
         ShowHours();
         StateHasChanged();
     }
+
+    /// <summary>The user saved or undid a correction of the hours: shown at once, with "Your hours" as their source.</summary>
+    private void OnHoursCorrected() => _ = InvokeAsync(OnHoursChanged);
 
     private async Task ToggleFuelAsync(string fuel)
     {
@@ -483,6 +491,7 @@
         _disposed = true;
         Favorites.Changed -= OnListsChanged;
         Comparison.Changed -= OnListsChanged;
+        Overrides.Changed -= OnHoursCorrected;
         _stationCts?.Cancel();
         _historyCts?.Cancel();
         _hoursTimer?.Dispose();

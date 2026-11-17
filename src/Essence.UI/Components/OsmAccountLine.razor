@@ -1,0 +1,77 @@
+@implements IDisposable
+@inject OsmAccount Osm
+@inject IStringLocalizer<Strings> L
+
+@* The OpenStreetMap account linked on this device, in the hours editor and About: "Linked as <name> · Unlink", the sign-in
+   while it's open ("Finish signing in… · Cancel"), or "Link an OpenStreetMap account", with why and what went wrong last
+   time. Nothing when the server has no OpenStreetMap application (OsmAccount.IsAvailable), not even its heading. *@
+@if (Osm.IsAvailable)
+{
+    @if (Heading)
+    {
+        <h3 class="heading">OpenStreetMap</h3>
+    }
+    @if (Osm.IsLinked)
+    {
+        <p class="account">
+            @(Osm.DisplayName is { } name ? L["OsmLinkedAs", name] : L["OsmLinked"])
+            · <button type="button" class="link" @onclick="UnlinkAsync">@L["OsmUnlink"]</button>
+        </p>
+    }
+    else if (Osm.Linking)
+    {
+        <p class="account" role="status">
+            @L["OsmLinking"]
+            · <button type="button" class="link" @onclick="Osm.CancelLink">@L["Cancel"]</button>
+        </p>
+    }
+    else
+    {
+        <p class="account">
+            <button type="button" class="link" @onclick="LinkAsync">@L["OsmLink"]</button>
+        </p>
+        @if (_outcome is OsmLinkOutcome.Blocked or OsmLinkOutcome.Failed)
+        {
+            <p class="problem" role="alert">@(_outcome == OsmLinkOutcome.Blocked ? L["OsmLinkBlocked"] : L["OsmLinkFailed"])</p>
+        }
+        else if (Why)
+        {
+            <p class="why">@L["OsmLinkWhy"]</p>
+        }
+    }
+}
+
+@code {
+    private OsmLinkOutcome? _outcome;
+
+    /// <summary>Says what linking is for, under the link while no account is linked.</summary>
+    [Parameter]
+    public bool Why { get; set; }
+
+    /// <summary>Puts an "OpenStreetMap" heading above (About's, whose other headings look the same).</summary>
+    [Parameter]
+    public bool Heading { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        Osm.Changed += OnChanged;
+        await Osm.LoadAsync();
+    }
+
+    /// <summary>Opened from this click, so the browser lets the sign-in's window open.</summary>
+    private async Task LinkAsync()
+    {
+        _outcome = null;
+        _outcome = await Osm.LinkAsync();
+    }
+
+    private async Task UnlinkAsync()
+    {
+        _outcome = null;
+        await Osm.UnlinkAsync();
+    }
+
+    private void OnChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Osm.Changed -= OnChanged;
+}

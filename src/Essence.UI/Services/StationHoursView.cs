@@ -176,9 +176,11 @@ public sealed record ArrivalView(
 /// A station's hours from the API (<see cref="StationHours"/>), against the clock: open, closing soon or closed now, or when
 /// the driver gets there (<see cref="Arrive"/>), its week, and where the hours come from, in the UI's language. Always in the
 /// station's time zone (<see cref="QuebecTime.ZoneFor"/>): a phone set to another zone still sees Laval's 9:30 p.m. Pure: the
-/// moment is given.
+/// moment is given. The hours the user corrected on the device win over the server's: callers pass a station's hours
+/// through <see cref="HoursOf"/> first, which gives the correction ("Your hours") in their place.
 /// </summary>
-public sealed class StationHoursView(IStringLocalizer<Strings> l)
+/// <param name="overrides">The device's corrections; none when null (the tests').</param>
+public sealed class StationHoursView(IStringLocalizer<Strings> l, StationHoursOverrides? overrides = null)
 {
     /// <summary>Closing within this is closing soon.</summary>
     public static readonly TimeSpan ClosesSoonWithin = TimeSpan.FromMinutes(30);
@@ -196,6 +198,13 @@ public sealed class StationHoursView(IStringLocalizer<Strings> l)
     };
 
     private static readonly ConcurrentDictionary<string, OpeningHours?> Rules = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// The hours the app goes by for a station: the user's correction when there's one (<see cref="StationHoursOverrides.Apply"/>),
+    /// else the server's <paramref name="hours"/>. Every station's hours go through it before being described, checked on
+    /// arrival or drawn.
+    /// </summary>
+    public StationHours? HoursOf(long stationId, StationHours? hours) => overrides is null ? hours : overrides.Apply(stationId, hours);
 
     /// <summary>
     /// Whether the station is open at <paramref name="now"/>, and when that changes, without the texts: for many stations at
@@ -366,11 +375,12 @@ public sealed class StationHoursView(IStringLocalizer<Strings> l)
     /// <summary>
     /// Why Best near you or Best on the way left a station out (<see cref="LeftOutStation"/>), at <paramref name="now"/>:
     /// "Costco left out: closed by the time you’d get there (closes 9:30 p.m.)." Null when its hours no longer say it's
-    /// closed then (it opened since the answer): the app doesn't contradict itself.
+    /// closed then (it opened since the answer, or the user corrected them since to say it's open): the app doesn't
+    /// contradict itself.
     /// </summary>
     public string? LeftOut(LeftOutStation station, string name, DateTimeOffset now)
     {
-        var arrival = Arrive(station.Hours, station.Latitude, station.Longitude, now, station.EtaMin, name);
+        var arrival = Arrive(HoursOf(station.Id, station.Hours), station.Latitude, station.Longitude, now, station.EtaMin, name);
         var zone = QuebecTime.ZoneFor(station.Latitude, station.Longitude);
         var culture = CultureInfo.CurrentCulture;
         return arrival switch
@@ -466,12 +476,13 @@ public sealed class StationHoursView(IStringLocalizer<Strings> l)
     }
 
     /// <summary>
-    /// "Costco", "Checked by Essence, November 11", "OpenStreetMap, checked 2025": a brand's name, the day Essence checked
-    /// its rule (its month and year when it's not this year), or the year a mapper last checked OpenStreetMap's hours
-    /// (<c>check_date:opening_hours</c>, else <c>check_date</c>).
+    /// "Costco", "Checked by Essence, November 11", "OpenStreetMap, checked 2025", "Your hours": a brand's name, the day
+    /// Essence checked its rule (its month and year when it's not this year), the year a mapper last checked OpenStreetMap's
+    /// hours (<c>check_date:opening_hours</c>, else <c>check_date</c>), or the user's own correction.
     /// </summary>
     private string SourceOf(StationHours hours, TimeZoneInfo zone, DateTimeOffset now, CultureInfo culture) => hours.Source switch
     {
+        StationHoursOverrides.Source => l["HoursFromDevice"],
         "curated" when hours.CheckedAt is { } at => l["HoursFromCurated", Year(at, zone) == Year(now, zone)
             ? Formatting.MonthDay(at, zone, culture)
             : Formatting.MonthYear(at, zone, culture)],

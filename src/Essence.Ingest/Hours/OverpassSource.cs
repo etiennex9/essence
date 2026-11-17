@@ -132,9 +132,11 @@ public sealed class OverpassSource(OverpassClient client, IHoursStations station
                 }
             }
 
+            // Only a feed station's brand was kept (Keep): any of these tags still there is one.
+            var brand = BrandTags.Select(t => HoursJson.Text(tags, t)).FirstOrDefault(b => b is not null);
             records.Add(new SourceRecord(
                 reference,
-                BrandFamily.Of(BrandTags.Select(t => HoursJson.Text(tags, t)).FirstOrDefault(b => b is not null)),
+                BrandFamily.Of(brand),
                 latitude,
                 longitude,
                 HoursMatcher.HouseNumber(HoursJson.Text(tags, "addr:housenumber")),
@@ -142,7 +144,10 @@ public sealed class OverpassSource(OverpassClient client, IHoursStations station
                 rule,
                 ElementLink + reference,
                 CheckedAt(tags),
-                TemporarilyClosed: false));
+                TemporarilyClosed: false)
+            {
+                Brand = brand,
+            });
         }
 
         return new HoursParse(records, warnings);

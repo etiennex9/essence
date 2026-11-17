@@ -281,6 +281,40 @@ public sealed class WidgetFeedsTests : IDisposable
     }
 
     [Fact]
+    public async Task A_favorite_s_hours_corrected_on_the_device_are_the_ones_said()
+    {
+        // 9:45 p.m.: Costco's hours say it's closed, the user's say it's open until 11.
+        _time.SetUtcNow(new DateTimeOffset(2026, 11, 11, 21, 45, 0, TimeSpan.FromHours(-5)));
+        await new FavoriteStations(_preferences).AddAsync(TestStations.Station(1, "Costco"));
+        await new StationHoursOverrides(_preferences, _time).SaveAsync(1, Essence.Hours.OpeningHours.Parse("Mo-Su 06:00-23:00"), "Costco", null);
+        Answer("/stations/1", Station(1, "155.9", CostcoHours));
+
+        var view = await _feeds.FavoritesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("Closes 11:00 p.m. · 1 rue Principale", Plain(Assert.Single(view.Lines).Detail));
+    }
+
+    [Fact]
+    public async Task Best_near_a_place_and_a_frequent_route_send_the_corrected_stations_and_say_their_hours()
+    {
+        // The user says the pick closes at 9:30; the server, without hours for it, never left it out.
+        _time.SetUtcNow(new DateTimeOffset(2026, 11, 11, 21, 15, 0, TimeSpan.FromHours(-5)));
+        var places = new SavedPlaces(_preferences);
+        await places.SaveAsync(PlaceKind.Home, HomePoint);
+        await places.SaveAsync(PlaceKind.Work, FarPoint);
+        await new StationHoursOverrides(_preferences, _time).SaveAsync(2, Essence.Hours.OpeningHours.Parse("Mo-Su 06:00-21:30"), "Shell", null);
+        await new StationHoursOverrides(_preferences, _time).SaveAsync(3, Essence.Hours.OpeningHours.Parse("Mo-Su 06:00-21:30"), "Shell", null);
+        Answer(BestPath(HomePoint) + "&ignoreHours=2,3", Best(pick: 2, reference: 1, "3.10", ""","etaMin":8"""));
+        Answer(TripPath(HomePoint, FarPoint) + "&ignoreHours=2,3", TripJson(pick: 3, reference: 1, "0", "0", "1.26", ""","toMin":5"""));
+
+        var best = await _feeds.BestNearAsync(new WidgetPlaceRef(PlaceKind.Home), TestContext.Current.CancellationToken);
+        var trip = await _feeds.TripAsync(new WidgetPlaceRef(PlaceKind.Home), new WidgetPlaceRef(PlaceKind.Work), TestContext.Current.CancellationToken);
+
+        Assert.Equal("2.0 km · Saves $3.10 · Closes 9:30 p.m.", Plain(Assert.Single(best.Lines).Detail));
+        Assert.Equal("No detour · Saves $1.26 · Closes 9:30 p.m.", Plain(Assert.Single(trip.Lines).Detail));
+    }
+
+    [Fact]
     public async Task A_favorite_closed_for_now_says_so_in_french()
     {
         CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");

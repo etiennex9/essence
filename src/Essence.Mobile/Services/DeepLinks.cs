@@ -1,39 +1,25 @@
+using Essence.UI.App;
 using Microsoft.AspNetCore.Components;
 
 namespace Essence.Mobile.Services;
 
 /// <summary>
 /// Paths into the page from outside it: a home-screen widget's tap (<c>essence://open/?station=12</c>), or the page the app
-/// was on when Android restores it. Only the map page with its own query parameters is accepted.
+/// was on when Android restores it. Only the map page with its own query parameters is accepted (<see cref="AppLinks"/>):
+/// OpenStreetMap's <c>essence://osm-auth</c> goes to its own activity (OsmAuthCallbackActivity), never here.
 /// </summary>
 public sealed class DeepLinks
 {
-    public const string Scheme = "essence";
-    public const string Host = "open";
-
-    /// <summary>The query parameters the map page reads (MapPage.razor).</summary>
-    private static readonly HashSet<string> Parameters = new(StringComparer.Ordinal) { "view", "station", "to", "from", "pick" };
+    public const string Scheme = AppLinks.Scheme;
+    public const string Host = AppLinks.OpenHost;
 
     private string? _pending;
 
-    /// <summary>The page's URL relative to the app's, from a widget's <c>essence://open/…</c>; null for anything else.</summary>
-    public static string? PathOf(Uri? link)
-    {
-        if (link is null || link.Scheme != Scheme || link.Host != Host || link.AbsolutePath is not ("/" or ""))
-        {
-            return null;
-        }
+    /// <inheritdoc cref="AppLinks.PathOf"/>
+    public static string? PathOf(Uri? link) => AppLinks.PathOf(link);
 
-        return IsMapPath(link.Query) ? "/" + link.Query : null;
-    }
-
-    /// <summary>Whether a saved relative URL (<c>?view=trip</c>) is the map page with only its own parameters.</summary>
-    public static bool IsMapPath(string query)
-    {
-        var parts = query.TrimStart('?');
-        return parts.Length == 0
-               || parts.Split('&').All(p => p.Split('=', 2) is [var name, _] && Parameters.Contains(Uri.UnescapeDataString(name)));
-    }
+    /// <inheritdoc cref="AppLinks.IsMapPath"/>
+    public static bool IsMapPath(string query) => AppLinks.IsMapPath(query);
 
     /// <summary>
     /// Opens <paramref name="path"/> in the running page, or keeps it for the page that's starting. Back from there returns to

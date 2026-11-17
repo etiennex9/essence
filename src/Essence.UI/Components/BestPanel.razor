@@ -5,6 +5,7 @@
 @inject SavedPlaces Places
 @inject ServicesStatus Services
 @inject StationHoursView HoursViews
+@inject StationHoursOverrides Overrides
 @inject TimeProvider Time
 @inject IJSRuntime JS
 @inject IStringLocalizer<Strings> L
@@ -248,7 +249,7 @@
                                 }
                                 <div class="actions">
                                     <GoLink class="go" Href="@GoogleMaps.DirectionsVia(destination.Latitude, destination.Longitude, shown.Latitude, shown.Longitude, navigate: true)"
-                                            Hours="shown.Hours" Latitude="shown.Latitude" Longitude="shown.Longitude" EtaMinutes="shown.ToMin" Name="@NameOf(shown.Brand)">
+                                            Hours="HoursViews.HoursOf(shown.Id, shown.Hours)" Latitude="shown.Latitude" Longitude="shown.Longitude" EtaMinutes="shown.ToMin" Name="@NameOf(shown.Brand)">
                                         <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"
                                              stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Directions" /></svg>
                                         @L["GoViaGoogleMaps"]
@@ -457,7 +458,7 @@
                             }
                             <div class="actions">
                                 <GoLink class="go" Href="@GoogleMaps.Directions(shown.Latitude, shown.Longitude, navigate: true)"
-                                        Hours="shown.Hours" Latitude="shown.Latitude" Longitude="shown.Longitude" EtaMinutes="shown.EtaMin" Name="@NameOf(shown.Brand)">
+                                        Hours="HoursViews.HoursOf(shown.Id, shown.Hours)" Latitude="shown.Latitude" Longitude="shown.Longitude" EtaMinutes="shown.EtaMin" Name="@NameOf(shown.Brand)">
                                     <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.2"
                                          stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Directions" /></svg>
                                     @L["GoGoogleMaps"]
@@ -691,8 +692,11 @@
         Trips.Changed += OnChanged;
         Places.Changed += OnChanged;
         Services.Changed += OnChanged;
+        // Corrected hours change what's said of the stations' arrivals at once, before Best and the trip ask again.
+        Overrides.Changed += OnChanged;
         await Cars.LoadAsync();
         await Places.LoadAsync();
+        await Overrides.LoadAsync();
 
         // A tab restored or reloaded on a trip opens here before MapPage reads the trip: its station chosen is in by
         // OnParametersSetAsync.
@@ -944,11 +948,11 @@
 
     /// <summary>The station's hours when the driver gets there, now plus its time there (ETA), at this render.</summary>
     private ArrivalView Arrival(RankedStation station) =>
-        Shown(HoursViews.Arrive(station.Hours, station.Latitude, station.Longitude, Time.GetUtcNow(), station.EtaMin, NameOf(station.Brand)));
+        Shown(HoursViews.Arrive(HoursViews.HoursOf(station.Id, station.Hours), station.Latitude, station.Longitude, Time.GetUtcNow(), station.EtaMin, NameOf(station.Brand)));
 
     /// <summary>The station's hours when the car gets there, now plus its time from the trip's start, at this render.</summary>
     private ArrivalView Arrival(TripStation station) =>
-        Shown(HoursViews.Arrive(station.Hours, station.Latitude, station.Longitude, Time.GetUtcNow(), station.ToMin, NameOf(station.Brand)));
+        Shown(HoursViews.Arrive(HoursViews.HoursOf(station.Id, station.Hours), station.Latitude, station.Longitude, Time.GetUtcNow(), station.ToMin, NameOf(station.Brand)));
 
     /// <summary>
     /// An arrival this render shows: the pane renders again when the earliest of them changes (<see cref="_arrivalTimer"/>),
@@ -1257,6 +1261,7 @@
         Trips.Changed -= OnChanged;
         Places.Changed -= OnChanged;
         Services.Changed -= OnChanged;
+        Overrides.Changed -= OnChanged;
         try
         {
             if (_popups is not null)

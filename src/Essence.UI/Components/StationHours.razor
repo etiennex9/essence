@@ -1,7 +1,8 @@
 @inject IStringLocalizer<Strings> L
 
 @* A station's week in its details (StationHoursView): the days in a row with the same hours, today's in bold, and where
-   the hours come from; or that they're unknown. The parent gives the section its heading. *@
+   the hours come from; or that they're unknown. Then "These hours are wrong", or "Add the hours", which opens the editor
+   (HoursEditor). The parent gives the section its heading. *@
 @if (View.Kind == HoursKind.Unknown)
 {
     <p class="unknown">@L["HoursUnknown"]</p>
@@ -31,8 +32,25 @@ else
         </p>
     }
 }
+@if (Station is { } station)
+{
+    <button type="button" class="correct" @onclick="() => _editor?.ShowAsync() ?? Task.CompletedTask">
+        @(View.Kind == HoursKind.Unknown ? L["AddHours"] : L["HoursWrong"])
+    </button>
+    <HoursEditor @ref="_editor" Station="station" Name="@Name" />
+}
 
 @code {
+    private HoursEditor? _editor;
+
     [Parameter, EditorRequired]
     public HoursView View { get; set; } = HoursView.Unknown;
+
+    /// <summary>The station whose hours these are, to correct them; without it, they're only shown.</summary>
+    [Parameter]
+    public StationDetail? Station { get; set; }
+
+    /// <summary>The station's name as its details title it: its brand, or "Independent".</summary>
+    [Parameter]
+    public string Name { get; set; } = "";
 }

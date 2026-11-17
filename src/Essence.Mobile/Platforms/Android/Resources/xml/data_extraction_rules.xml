@@ -5,9 +5,11 @@
     <cloud-backup>
         <exclude domain="sharedpref" path="essence.location.xml" />
         <exclude domain="sharedpref" path="essence.session.xml" />
+        <exclude domain="sharedpref" path="io.github.etiennex9.essence.microsoft.maui.essentials.preferences.xml" />
     </cloud-backup>
     <device-transfer>
         <exclude domain="sharedpref" path="essence.location.xml" />
         <exclude domain="sharedpref" path="essence.session.xml" />
+        <exclude domain="sharedpref" path="io.github.etiennex9.essence.microsoft.maui.essentials.preferences.xml" />
     </device-transfer>
 </data-extraction-rules>

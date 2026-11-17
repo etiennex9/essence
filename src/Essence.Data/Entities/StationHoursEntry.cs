@@ -51,6 +51,15 @@ public sealed class StationHoursEntry
     public string? SourceUrl { get; set; }
 
     /// <summary>
+    /// The brand the source writes for the place, as it writes it, when some station of the feed has that brand: for
+    /// OpenStreetMap, the element's <c>brand</c>, else its <c>operator</c>, else its <c>name</c> ("Sonic", "Petroles RL").
+    /// Null when it writes none, or one no station has (a name of its own, which can be a person's, is never kept), and
+    /// for the brands' own locators and the curated rules. For an element matched by <see cref="ByLocation"/>, it tells
+    /// a name that's the old brand's from one of its own, for the app setting the station's brand on it.
+    /// </summary>
+    public string? SourceBrand { get; set; }
+
+    /// <summary>
     /// <see cref="ByNaturalKey"/>, <see cref="ByStoreNumber"/>, <see cref="ByDistance"/>, <see cref="ByAddress"/>,
     /// <see cref="ByBrand"/> or <see cref="ByLocation"/>.
     /// </summary>
