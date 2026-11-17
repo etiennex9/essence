@@ -367,3 +367,93 @@ public sealed record IngestSourceHealth(
 /// <param name="OsmAuthUrl">Where that application signs in and gets its token: <c>https://www.openstreetmap.org</c>, or OpenStreetMap's development server.</param>
 /// <param name="OsmApiUrl">Where edits go: <c>https://api.openstreetmap.org</c>, or the development server's.</param>
 public sealed record ClientConfig(string? OsmClientId, string OsmAuthUrl, string OsmApiUrl);
+
+/// <summary>
+/// Where the Régie's feed puts stations in the wrong place (<c>/stations/positions</c>): the reviewed corrections and what
+/// became of each, and the stations to review that the ingest found. The corrections, with their evidence, are also what
+/// to send to the Régie.
+/// </summary>
+/// <param name="Corrections">Each correction of <c>curated-positions.json</c>, in the file's order.</param>
+/// <param name="Candidates">The stations to review, the farthest off first; those whose correction applies are left out.</param>
+/// <param name="Warnings">The file's entries left out, and why; empty when every one was read.</param>
+public sealed record StationPositions(
+    IReadOnlyList<PositionCorrectionDto> Corrections,
+    IReadOnlyList<PositionCandidateDto> Candidates,
+    IReadOnlyList<string> Warnings);
+
+/// <summary>A point, in degrees.</summary>
+public sealed record PositionPoint(double Latitude, double Longitude);
+
+/// <summary>A reviewed correction of a station's position, and what became of it (<see cref="StationPositions.Corrections"/>).</summary>
+/// <param name="StationId">The station with the correction's natural key; null when none has it any more.</param>
+/// <param name="Name">The station's name, as the feed has it; null without a station.</param>
+/// <param name="Address">The station's address, as the feed has it; null without a station.</param>
+/// <param name="Feed">Where the Régie puts the station now; for a station gone, where it put it when the correction was reviewed.</param>
+/// <param name="Corrected">Where the correction puts it.</param>
+/// <param name="DistanceM">From <paramref name="Feed"/> to <paramref name="Corrected"/>.</param>
+/// <param name="State">
+/// <c>applied</c> (every answer gives <paramref name="Corrected"/>), <c>expired</c> (the Régie's point moved since the
+/// review: it fixed or changed it, and its point is used again) or <c>station gone</c> (no active station has the natural
+/// key: it left the feed, or its address changed). Those not applied can be taken out of the file.
+/// </param>
+/// <param name="Reviewed">The day it was reviewed, <c>2026-11-14</c>.</param>
+/// <param name="Note">The evidence, as the file says it.</param>
+public sealed record PositionCorrectionDto(
+    long? StationId,
+    string NaturalKey,
+    string? Name,
+    string? Address,
+    PositionPoint Feed,
+    PositionPoint Corrected,
+    int DistanceM,
+    string State,
+    string Reviewed,
+    string Note);
+
+/// <summary>
+/// A station whose feed point may be wrong (<see cref="StationPositions.Candidates"/>): two independent kinds of position
+/// agree with each other far from it, and nothing of the station's brand is at it. Nothing moves until a person approves
+/// it, by putting <paramref name="Entry"/> in <c>curated-positions.json</c>.
+/// </summary>
+/// <param name="Feed">Where the Régie put the station when it was found.</param>
+/// <param name="Proposed">The mean of <paramref name="Evidence"/>.</param>
+/// <param name="DistanceM">From <paramref name="Feed"/> to <paramref name="Proposed"/>.</param>
+/// <param name="Evidence">The positions that agree.</param>
+/// <param name="Entry">The correction to paste into <c>curated-positions.json</c> once checked, reviewed today.</param>
+/// <param name="FoundAt">When the ingest found it: it looks again once a day.</param>
+public sealed record PositionCandidateDto(
+    long StationId,
+    string NaturalKey,
+    string? Name,
+    string Address,
+    string? Brand,
+    PositionPoint Feed,
+    PositionPoint Proposed,
+    int DistanceM,
+    IReadOnlyList<PositionEvidenceDto> Evidence,
+    PositionEntry Entry,
+    DateTimeOffset FoundAt);
+
+/// <summary>One position of a candidate's that agrees with another kind's.</summary>
+/// <param name="Kind">
+/// <c>osm</c> (an OpenStreetMap fuel element at the station's address, of its brand or none), <c>locator</c> (a brand's
+/// locator: the store with the number in the station's name, or one of its brand at its address) or <c>photon</c> (an
+/// OpenStreetMap address for the station's, from the address search).
+/// </param>
+/// <param name="Ref">The element (<c>node/5312347403</c>), the locator and its store (<c>ultramar/56182</c>), or the address (<c>node/1266988689</c>).</param>
+/// <param name="DistanceM">From the feed's point.</param>
+public sealed record PositionEvidenceDto(string Kind, string Ref, double Latitude, double Longitude, int DistanceM);
+
+/// <summary>An entry of <c>curated-positions.json</c>, as the file writes it.</summary>
+/// <param name="Latitude">Where the station is.</param>
+/// <param name="FeedLatitude">Where the Régie puts it: the correction expires once that moves.</param>
+/// <param name="Reviewed">The day it was reviewed, <c>2026-11-14</c>.</param>
+/// <param name="Note">The evidence, short: what agrees, and how far from the Régie's point.</param>
+public sealed record PositionEntry(
+    string NaturalKey,
+    double Latitude,
+    double Longitude,
+    double FeedLatitude,
+    double FeedLongitude,
+    string Reviewed,
+    string Note);

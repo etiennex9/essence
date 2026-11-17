@@ -8,10 +8,10 @@ namespace Essence.Api;
 /// Stamps a response with the version of the data behind it: when the latest successful import was fetched, as
 /// <c>Last-Modified</c>. The map times its next refresh from it (the next import lands about 5 minutes later), and a
 /// repeated request whose <c>If-Modified-Since</c> is still current gets a 304 without running the handler. The stations'
-/// opening hours change apart from the feed, once a week: <c>Last-Modified</c> stays the feed's, so the map's "prices as
-/// of" and its refreshes don't move, but no 304 is given for a version older than when the hours last changed
-/// (<see cref="Snapshot.HoursChangedAt"/>). An answer that checks the hours against the clock gets no 304 once its version
-/// is more than <see cref="ClockDependentFor"/> old.
+/// opening hours change apart from the feed, once a week, and their position corrections with a new image:
+/// <c>Last-Modified</c> stays the feed's, so the map's "prices as of" and its refreshes don't move, but no 304 is given for
+/// a version older than when either last changed (<see cref="Snapshot.ChangedAt"/>). An answer that checks the hours
+/// against the clock gets no 304 once its version is more than <see cref="ClockDependentFor"/> old.
 /// </summary>
 public static class DataVersion
 {
@@ -40,18 +40,18 @@ public static class DataVersion
 
     /// <summary>
     /// Whether a client that has the data as of <paramref name="ifModifiedSince"/> has it still: the latest import is no
-    /// newer, and the hours didn't change after it either. When they changed is rounded up to the second: a client whose
-    /// <c>If-Modified-Since</c> names the second they changed in may not have the change.
+    /// newer, and the hours and the positions didn't change after it either. When they changed is rounded up to the
+    /// second: a client whose <c>If-Modified-Since</c> names the second they changed in may not have the change.
     /// </summary>
-    /// <param name="hoursChangedAt">When the hours last changed (<see cref="Snapshot.HoursChangedAt"/>); null if never.</param>
+    /// <param name="changedAt">When the hours or the positions last changed (<see cref="Snapshot.ChangedAt"/>); null if never.</param>
     /// <param name="clockDependentAt">
     /// For an answer that depends on the clock, the time now: no 304 once the version is more than
     /// <see cref="ClockDependentFor"/> older. Null for one that doesn't.
     /// </param>
     public static bool IsNotModified(
-        DateTimeOffset? ifModifiedSince, DateTimeOffset version, DateTimeOffset? hoursChangedAt, DateTimeOffset? clockDependentAt = null) =>
+        DateTimeOffset? ifModifiedSince, DateTimeOffset version, DateTimeOffset? changedAt, DateTimeOffset? clockDependentAt = null) =>
         ifModifiedSince >= version
-        && !(UpToTheSecond(hoursChangedAt) > ifModifiedSince)
+        && !(UpToTheSecond(changedAt) > ifModifiedSince)
         && !(clockDependentAt - version > ClockDependentFor);
 
     private static async ValueTask<object?> FilterAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next, bool clockDependent)
@@ -60,7 +60,7 @@ public static class DataVersion
 
         // Read before the handler: an import committing in between makes the data newer than its version, which costs the
         // client one extra refresh, never a missed one. The snapshot's, which the handlers read too: it knows when the hours
-        // last changed, a source gone stale with no run included.
+        // last changed, a source gone stale with no run included, and when the position corrections did.
         var db = http.RequestServices.GetRequiredService<EssenceDbContext>();
         var snapshot = await http.RequestServices.GetRequiredService<StationSnapshot>().GetAsync(db, http.RequestAborted);
         if (snapshot.Version is not { } version)
@@ -69,7 +69,7 @@ public static class DataVersion
         }
 
         var clockAt = clockDependent ? http.RequestServices.GetRequiredService<TimeProvider>().GetUtcNow() : (DateTimeOffset?)null;
-        if (IsNotModified(http.Request.GetTypedHeaders().IfModifiedSince, version, snapshot.HoursChangedAt, clockAt))
+        if (IsNotModified(http.Request.GetTypedHeaders().IfModifiedSince, version, snapshot.ChangedAt, clockAt))
         {
             SetHeaders(http.Response, version);
             return TypedResults.StatusCode(StatusCodes.Status304NotModified);

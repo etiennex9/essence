@@ -15,12 +15,13 @@ public static class PriceEndpoints
         var group = app.MapGroup("/prices").WithTags("Prices").RequireRateLimiting(RateLimiting.PolicyName);
         group.MapGet("/current", CurrentPrices)
             .WithSummary("Current prices at active stations, cheapest first")
-            .WithDescription("Unavailable fuels (no price) are left out unless `includeUnavailable=true`.");
+            .WithDescription("Unavailable fuels (no price) are left out unless `includeUnavailable=true`. " + StationEndpoints.PositionDescription);
         return app;
     }
 
     private static async Task<Results<Ok<List<PriceListing>>, ValidationProblem>> CurrentPrices(
         EssenceDbContext db,
+        StationSnapshot snapshot,
         CancellationToken cancellationToken,
         [Description("Régulier, Super or Diesel (accents optional).")] string? fuel = null,
         [Description("Exact region name, case-insensitive.")] string? region = null,
@@ -72,6 +73,14 @@ public static class PriceEndpoints
                 p.StationId, p.Station.Name, p.Station.Brand, p.Station.Address, p.Station.Region,
                 p.Station.Latitude, p.Station.Longitude, p.FuelType.Code, p.PriceCents, p.IsAvailable, p.Since))
             .ToListAsync(cancellationToken);
-        return TypedResults.Ok(rows);
+        var current = await snapshot.GetAsync(db, cancellationToken);
+        return TypedResults.Ok(rows.Select(p => Located(p, current)).ToList());
+    }
+
+    /// <summary>A price's station where it is: a correction's point when one applies.</summary>
+    private static PriceListing Located(PriceListing price, Snapshot current)
+    {
+        var (latitude, longitude) = current.PointOf(price.StationId, price.Latitude, price.Longitude);
+        return price with { Latitude = latitude, Longitude = longitude };
     }
 }

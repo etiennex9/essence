@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using System.ComponentModel.DataAnnotations.Schema;
 using System.Linq.Expressions;
 using Essence.Contracts;
 using Essence.Data;
@@ -41,6 +40,11 @@ public static class StationEndpoints
     internal const string IgnoreHoursDescription =
         "Ids of stations whose hours the device corrected, separated by commas (at most 50): never left out for their hours.";
 
+    /// <summary>Where every answer puts a station (README → Position corrections).</summary>
+    internal const string PositionDescription =
+        "A station's `latitude` and `longitude` are where it is: the Régie's point, or a reviewed correction's when the Régie's "
+        + "is known to be off (`/stations/positions`); distances are from there.";
+
     private static readonly Expression<Func<Station, StationSummary>> ToSummary = s => new StationSummary(
         s.Id, s.Name, s.Brand, s.Status, s.Address, s.PostalCode, s.Region, s.Latitude, s.Longitude, s.IsActive);
 
@@ -49,10 +53,12 @@ public static class StationEndpoints
         var group = app.MapGroup("/stations").WithTags("Stations").RequireRateLimiting(RateLimiting.PolicyName);
         group.MapGet("/", ListStations)
             .WithSummary("List stations")
-            .WithDescription("Filters combine with AND. `q` searches the name, and the address and postal code ignoring case and accents.");
+            .WithDescription(
+                "Filters combine with AND. `q` searches the name, and the address and postal code ignoring case and accents. "
+                + PositionDescription);
         group.MapGet("/nearby", Nearby)
             .WithSummary("Active stations near a point, closest first")
-            .WithDescription(HoursDescription)
+            .WithDescription(PositionDescription + " " + HoursDescription)
             .WithDataVersion();
         group.MapGet("/best", Best)
             .WithSummary("Where to fill up near a point")
@@ -64,12 +70,12 @@ public static class StationEndpoints
                 + "them, at most 200). When the routing server is down, or the point is more than 1 km from a road, they're "
                 + "estimated instead (`byRoad` false): straight line × 1.3, driven at 40 km/h, and a farther station must also "
                 + "save with roads twice the straight line. Looks within `radiusKm`, widened to 25 km with fewer than 5 stations, "
-                + "else returns the closest at any distance. " + LeftOutDescription + " " + HoursDescription)
+                + "else returns the closest at any distance. " + LeftOutDescription + " " + PositionDescription + " " + HoursDescription)
             .WithDataVersion(clockDependent: true);
         group.MapGet("/{id:long}", GetStation)
             .WithSummary("A station with its current prices and opening hours")
             .WithDescription(
-                HoursDescription + " `osmElement` is the OpenStreetMap element the station was matched to, its hours or not "
+                PositionDescription + " " + HoursDescription + " `osmElement` is the OpenStreetMap element the station was matched to, its hours or not "
                 + "(`node/123`, `way/456`, `relation/789`): where the app sends a correction of them. Null when none was. "
                 + "`osmBrandDiffers` is true when that element was matched by place only, being of another brand or none on "
                 + "OpenStreetMap, so the app offers to set the station's brand on it too; false otherwise, null without an "
@@ -85,6 +91,7 @@ public static class StationEndpoints
 
     private static async Task<Results<Ok<PagedList<StationSummary>>, ValidationProblem>> ListStations(
         EssenceDbContext db,
+        StationSnapshot snapshot,
         CancellationToken cancellationToken,
         [Description("Exact region name, case-insensitive, e.g. Montréal.")] string? region = null,
         [Description("Exact brand, case-insensitive, e.g. Shell.")] string? brand = null,
@@ -138,7 +145,8 @@ public static class StationEndpoints
             .Take(pageSize)
             .Select(ToSummary)
             .ToListAsync(cancellationToken);
-        return TypedResults.Ok(new PagedList<StationSummary>(items, page, pageSize, total));
+        var current = await snapshot.GetAsync(db, cancellationToken);
+        return TypedResults.Ok(new PagedList<StationSummary>([.. items.Select(s => Located(s, current))], page, pageSize, total));
     }
 
     private static async Task<Results<Ok<StationDetail>, NotFound>> GetStation(
@@ -164,14 +172,33 @@ public static class StationEndpoints
         }
 
         var current = await snapshot.GetAsync(db, cancellationToken);
-        var element = current.OsmElementOf(id);
-        return TypedResults.Ok(station with
+        return TypedResults.Ok(WithSnapshot(station, current));
+    }
+
+    /// <summary>A station of the list where it is: a correction's point when one applies.</summary>
+    private static StationSummary Located(StationSummary station, Snapshot current)
+    {
+        var (latitude, longitude) = current.PointOf(station.Id, station.Latitude, station.Longitude);
+        return station with { Latitude = latitude, Longitude = longitude };
+    }
+
+    /// <summary>
+    /// A station's details with what the snapshot knows of it: where it is (a correction's point when one applies), its
+    /// hours, and its OpenStreetMap element.
+    /// </summary>
+    public static StationDetail WithSnapshot(StationDetail station, Snapshot current)
+    {
+        var element = current.OsmElementOf(station.Id);
+        var (latitude, longitude) = current.PointOf(station.Id, station.Latitude, station.Longitude);
+        return station with
         {
-            Hours = current.Hours.GetValueOrDefault(id)?.Dto,
+            Latitude = latitude,
+            Longitude = longitude,
+            Hours = current.Hours.GetValueOrDefault(station.Id)?.Dto,
             OsmElement = element?.Ref,
             OsmBrandDiffers = element?.BrandDiffers,
             OsmBrand = element?.Brand,
-        });
+        };
     }
 
     private static async Task<Results<Ok<List<NearbyStation>>, ValidationProblem>> Nearby(
@@ -195,24 +222,13 @@ public static class StationEndpoints
             return errors.ToProblem();
         }
 
-        // earth_box is the index-assisted prefilter (GiST on ll_to_earth); earth_distance makes it an exact circle.
-        // Fuel type ids start at 1, so 0 means "any fuel".
-        var radiusMeters = radiusKm * 1000;
+        // The closest in the snapshot, where each station is (a correction's point when one applies): the database keeps
+        // the feed's points. Fuel type ids start at 1, so 0 means "any fuel".
         short fuelId = fuelType?.Id ?? 0;
-        var hits = await db.Database.SqlQuery<NearbyHit>($"""
-            SELECT s.id, earth_distance(ll_to_earth({lat}, {lon}), ll_to_earth(s.latitude, s.longitude)) AS distance_m
-            FROM stations s
-            WHERE s.is_active
-              AND s.latitude IS NOT NULL AND s.longitude IS NOT NULL
-              AND earth_box(ll_to_earth({lat}, {lon}), {radiusMeters}) @> ll_to_earth(s.latitude, s.longitude)
-              AND earth_distance(ll_to_earth({lat}, {lon}), ll_to_earth(s.latitude, s.longitude)) <= {radiusMeters}
-              AND ({fuelId} = 0 OR EXISTS (
-                    SELECT 1 FROM current_prices cp WHERE cp.station_id = s.id AND cp.fuel_type_id = {fuelId}))
-            ORDER BY distance_m
-            LIMIT {limit}
-            """).ToListAsync(cancellationToken);
+        var current = await snapshot.GetAsync(db, cancellationToken);
+        var hits = Closest(current.Stations, lat, lon, radiusKm, fuelId == 0 ? null : fuelId, limit);
 
-        var ids = hits.Select(h => h.Id).ToList();
+        var ids = hits.Select(h => h.Station.Id).ToList();
         var stations = await db.Stations
             .Where(s => ids.Contains(s.Id))
             .Select(s => new
@@ -223,8 +239,6 @@ public static class StationEndpoints
                 s.Address,
                 s.PostalCode,
                 s.Region,
-                s.Latitude,
-                s.Longitude,
                 Prices = s.CurrentPrices
                     .Where(p => fuelId == 0 || p.FuelTypeId == fuelId)
                     .OrderBy(p => p.FuelTypeId)
@@ -232,20 +246,33 @@ public static class StationEndpoints
                     .ToList(),
             })
             .ToDictionaryAsync(s => s.Id, cancellationToken);
-        var hours = (await snapshot.GetAsync(db, cancellationToken)).Hours;
 
         var result = hits
-            .Where(h => stations.ContainsKey(h.Id))
+            .Where(h => stations.ContainsKey(h.Station.Id))
             .Select(h =>
             {
-                var s = stations[h.Id];
+                var s = stations[h.Station.Id];
                 return new NearbyStation(
-                    s.Id, s.Name, s.Brand, s.Address, s.PostalCode, s.Region, s.Latitude!.Value, s.Longitude!.Value,
-                    Math.Round(h.DistanceMeters / 1000, 3), s.Prices, hours.GetValueOrDefault(s.Id)?.Dto);
+                    s.Id, s.Name, s.Brand, s.Address, s.PostalCode, s.Region, h.Station.Latitude, h.Station.Longitude,
+                    Math.Round(h.DistanceKm, 3), s.Prices, current.Hours.GetValueOrDefault(s.Id)?.Dto);
             })
             .ToList();
         return TypedResults.Ok(result);
     }
+
+    /// <summary>
+    /// The snapshot's stations within <paramref name="radiusKm"/> of a point, the closest <paramref name="limit"/>, closest
+    /// first, with how far each is; only those with a price row for the fuel, when one is given, available or not.
+    /// </summary>
+    public static List<(SnapshotStation Station, double DistanceKm)> Closest(
+        IReadOnlyList<SnapshotStation> stations, double latitude, double longitude, double radiusKm, short? fuelId, int limit) =>
+        [.. stations
+            .Where(s => fuelId is not { } fuel || s.Prices.Any(p => p.FuelTypeId == fuel))
+            .Select(s => (Station: s, DistanceKm: Geo.DistanceKm(latitude, longitude, s.Latitude, s.Longitude)))
+            .Where(s => s.DistanceKm <= radiusKm)
+            .OrderBy(s => s.DistanceKm)
+            .ThenBy(s => s.Station.Id)
+            .Take(limit)];
 
     private static async Task<Results<Ok<BestNearby>, ValidationProblem>> Best(
         EssenceDbContext db,
@@ -283,17 +310,8 @@ public static class StationEndpoints
             return errors.ToProblem();
         }
 
-        var fuelId = fuelType.Id;
         var current = await snapshot.GetAsync(db, cancellationToken);
-        var stations = current.Stations
-            .Select(s => (Station: s, Price: s.Prices.FirstOrDefault(p => p.FuelTypeId == fuelId)))
-            .Where(x => x.Price is { } price
-                && Eligibility.IsEligible(x.Station.Status, price.IsAvailable, price.PriceCents, x.Station.MembersOnly, costco))
-            .Select(x => (
-                x.Station,
-                PriceCents: x.Price!.PriceCents!.Value,
-                Km: Geo.DistanceKm(lat, lon, x.Station.Latitude, x.Station.Longitude)))
-            .ToList();
+        var stations = Eligible(current.Stations, fuelType.Id, costco, lat, lon);
         var (area, areaRadiusKm) = SearchArea.Select(stations, s => s.Km, radiusKm);
 
         // By road when the routing server answers; road and estimated figures are never mixed in one ranking.
@@ -342,6 +360,21 @@ public static class StationEndpoints
                 current.Hours,
                 pick.PriceCents)));
     }
+
+    /// <summary>
+    /// The snapshot's stations Best near you may rank for the fuel, each with its price and how far it is from the driver
+    /// in a straight line: from where the station is, a correction's point when one applies.
+    /// </summary>
+    public static List<(SnapshotStation Station, decimal PriceCents, double Km)> Eligible(
+        IReadOnlyList<SnapshotStation> stations, short fuelId, bool costco, double latitude, double longitude) =>
+        [.. stations
+            .Select(s => (Station: s, Price: s.Prices.FirstOrDefault(p => p.FuelTypeId == fuelId)))
+            .Where(x => x.Price is { } price
+                && Eligibility.IsEligible(x.Station.Status, price.IsAvailable, price.PriceCents, x.Station.MembersOnly, costco))
+            .Select(x => (
+                x.Station,
+                PriceCents: x.Price!.PriceCents!.Value,
+                Km: Geo.DistanceKm(latitude, longitude, x.Station.Latitude, x.Station.Longitude)))];
 
     /// <summary>How long getting to the station takes, one way: by road, or the estimate's (half its round trip).</summary>
     private static double EtaMinutes(Candidate candidate) => candidate.DurationMinutes ?? candidate.ExtraMinutes / 2;
@@ -469,14 +502,4 @@ public static class StationEndpoints
 
     private static string EscapeLike(string text) =>
         text.Replace(@"\", @"\\").Replace("%", @"\%").Replace("_", @"\_");
-}
-
-/// <summary>Row of the nearby query. Column names are explicit because it's raw SQL.</summary>
-internal sealed class NearbyHit
-{
-    [Column("id")]
-    public long Id { get; set; }
-
-    [Column("distance_m")]
-    public double DistanceMeters { get; set; }
 }

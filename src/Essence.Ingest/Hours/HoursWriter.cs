@@ -4,7 +4,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Essence.Ingest.Hours;
 
-/// <summary>The feed's active stations as matching reads them, and how recent the latest change to any station is.</summary>
+/// <summary>
+/// The feed's active stations as matching reads them, where they are (a reviewed correction's point when one applies,
+/// <see cref="PositionCorrections"/>, else the feed's), and how recent the latest change to any station is.
+/// </summary>
 /// <param name="UpdatedAt">The latest <c>stations.updated_at</c>: when it moves, the sources are matched again.</param>
 public sealed record StationSet(IReadOnlyList<MatchStation> Stations, DateTimeOffset? UpdatedAt);
 
@@ -34,6 +37,11 @@ public sealed class HoursWriter(EssenceDbContext db, TimeProvider timeProvider) 
 
     private const int MaxErrorLength = 4000;
 
+    /// <summary>
+    /// The active stations, each where it is: a station whose reviewed correction applies is matched at the corrected
+    /// point (<see cref="PositionCorrections.Embedded"/>), as the API draws it, the others at the feed's. A new image's
+    /// corrections are matched with at the first re-match after the start, which matches every source.
+    /// </summary>
     public async Task<StationSet> LoadStationsAsync(CancellationToken cancellationToken)
     {
         // Read first: a station changed meanwhile is in the list, and only makes the next check match again for nothing.
@@ -43,13 +51,18 @@ public sealed class HoursWriter(EssenceDbContext db, TimeProvider timeProvider) 
             .Where(s => s.IsActive)
             .Select(s => new { s.Id, s.NaturalKey, s.Name, s.Brand, s.Latitude, s.Longitude, s.Address, s.PostalCode })
             .ToListAsync(cancellationToken);
+        var corrections = PositionCorrections.Embedded;
         return new StationSet(
             stations
-                .Select(s => new MatchStation(
-                    s.Id, s.NaturalKey, BrandFamily.Of(s.Brand), s.Latitude, s.Longitude, HoursMatcher.HouseNumber(s.Address),
-                    StationKey.NormalizePostalCode(s.PostalCode))
+                .Select(s =>
                 {
-                    StoreNumber = HoursMatcher.StoreNumber(s.Name),
+                    var (latitude, longitude) = corrections.PointOf(s.NaturalKey, s.Latitude, s.Longitude);
+                    return new MatchStation(
+                        s.Id, s.NaturalKey, BrandFamily.Of(s.Brand), latitude, longitude, HoursMatcher.HouseNumber(s.Address),
+                        StationKey.NormalizePostalCode(s.PostalCode))
+                    {
+                        StoreNumber = HoursMatcher.StoreNumber(s.Name),
+                    };
                 })
                 .ToList(),
             updatedAt);
