@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Stations' opening hours: OpenStreetMap's opening_hours read and written, Québec's time zones and holidays, and
+       whether a station is open when the driver gets there. No dependencies and no reflection, so the ranking, the
+       ingest and the trimmed Blazor WebAssembly app can all use it. -->
+
+  <PropertyGroup>
+    <!-- Turns on the trim analyzers, so anything the web app's trimming would break fails the build. -->
+    <IsTrimmable>true</IsTrimmable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- QuebecTime.Canadian, the zones' fallback, is compared with the system's zones. -->
+    <InternalsVisibleTo Include="Essence.Hours.Tests" />
+  </ItemGroup>
+
+</Project>
