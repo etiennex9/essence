@@ -9,9 +9,9 @@ namespace Essence.Ingest.Hours;
 public sealed record WeekLine(string Title, string? Code, string Time);
 
 /// <summary>
-/// Puts the hours brands' locators write in English (days as "Mon-Fri.", "Sat.", times as "6:00am - 9:30pm" or "closed")
-/// into a canonical opening_hours rule. Only what can be told for sure is read: anything else is refused with the reason,
-/// and the record is left out.
+/// Puts the hours brands' locators write in English (days as "Mon-Fri.", "Sat." or "monday", times as "6:00am - 9:30pm",
+/// "closed", or 24-hour clock times "05:30" to "00:30") into a canonical opening_hours rule. Only what can be told for
+/// sure is read: anything else is refused with the reason, and the record is left out.
 /// </summary>
 public static partial class RuleNormalizer
 {
@@ -58,6 +58,16 @@ public static partial class RuleNormalizer
             }
         }
 
+        return Week(week, out error);
+    }
+
+    /// <summary>
+    /// The week's rule from each day's hours (none for a day it's closed), every day given: "Mo-Su 06:00-22:00". A day
+    /// missing isn't taken as closed, since the source may just not say.
+    /// </summary>
+    /// <param name="error">Why the week was refused.</param>
+    public static string? Week(IReadOnlyDictionary<DayOfWeek, IReadOnlyList<TimeRange>> week, out string? error)
+    {
         if (week.Count < 7)
         {
             error = $"{Enum.GetValues<DayOfWeek>().First(d => !week.ContainsKey(d))}'s hours aren't given";
@@ -81,13 +91,25 @@ public static partial class RuleNormalizer
     {
         days = [];
         var parts = title.Replace(".", "", StringComparison.Ordinal).Replace('–', '-').Split('-', StringSplitOptions.TrimEntries);
-        if (parts.Length is < 1 or > 2 || parts.Any(p => !DayNames.ContainsKey(p.ToLowerInvariant())))
+        if (parts.Length is < 1 or > 2 || !TryDay(parts[0], out var first) || !TryDay(parts[^1], out var last))
         {
             return false;
         }
 
-        var first = DayNames[parts[0].ToLowerInvariant()];
-        var last = DayNames[parts[^1].ToLowerInvariant()];
+        days = Range(first, last);
+        return true;
+    }
+
+    /// <summary>A day's English name or its abbreviation, in any case: "Mon", "monday", "Thurs".</summary>
+    public static bool TryDay(string? name, out DayOfWeek day)
+    {
+        day = default;
+        return name is not null && DayNames.TryGetValue(name.Trim().ToLowerInvariant(), out day);
+    }
+
+    /// <summary>The days from <paramref name="first"/> to <paramref name="last"/>, across the weekend when it comes before: Sat to Mon is Sa Su Mo.</summary>
+    public static IReadOnlyList<DayOfWeek> Range(DayOfWeek first, DayOfWeek last)
+    {
         var list = new List<DayOfWeek> { first };
         for (var day = first; day != last;)
         {
@@ -95,8 +117,24 @@ public static partial class RuleNormalizer
             list.Add(day);
         }
 
-        days = list;
-        return true;
+        return list;
+    }
+
+    /// <summary>
+    /// A range in 24-hour clock times: "06:00" to "23:00". An end at or before the start is past midnight ("05:30" to
+    /// "00:30"); "00:00" and "24:00" as an end are midnight, so "00:00" to "24:00" is the whole day, and "23:59" is read as
+    /// midnight later, as Essence.Hours reads it. The same start and end ("06:00" to "06:00") isn't a range.
+    /// </summary>
+    public static bool TryRange(string? open, string? close, out TimeRange range)
+    {
+        range = default;
+        if (!TryClock24(open, end: false, out var start) || !TryClock24(close, end: true, out var end))
+        {
+            return false;
+        }
+
+        range = new TimeRange(start, end <= start ? end + TimeRange.MinutesPerDay : end);
+        return range.IsValid;
     }
 
     /// <summary>
@@ -175,8 +213,36 @@ public static partial class RuleNormalizer
         return true;
     }
 
+    /// <summary>"05:30", "24:00": minutes from midnight; "00:00" as an end is 1440 (24:00), and "24:00" only an end.</summary>
+    private static bool TryClock24(string? text, bool end, out int minute)
+    {
+        minute = 0;
+        if (text is null || Clock24Pattern().Match(text.Trim()) is not { Success: true } match)
+        {
+            return false;
+        }
+
+        var hour = int.Parse(match.Groups["hour"].Value, CultureInfo.InvariantCulture);
+        var minutes = int.Parse(match.Groups["minute"].Value, CultureInfo.InvariantCulture);
+        if (hour > 24 || minutes > 59 || hour == 24 && (minutes > 0 || !end))
+        {
+            return false;
+        }
+
+        minute = hour * 60 + minutes;
+        if (end && minute == 0)
+        {
+            minute = TimeRange.MinutesPerDay;
+        }
+
+        return true;
+    }
+
     [GeneratedRegex(@"^(?<start>[^-–]+?)\s*[-–]\s*(?<end>[^-–]+)$")]
     private static partial Regex RangePattern();
+
+    [GeneratedRegex(@"^(?<hour>[0-9]{1,2}):(?<minute>[0-9]{2})$")]
+    private static partial Regex Clock24Pattern();
 
     [GeneratedRegex(@"^(?<hour>\d{1,2})(?::(?<minute>\d{2}))?\s*(?<half>[ap])\.?\s*m\.?$", RegexOptions.IgnoreCase)]
     private static partial Regex ClockPattern();

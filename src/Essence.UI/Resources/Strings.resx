@@ -1093,7 +1093,7 @@
     <value>Checked by Essence</value>
   </data>
   <data name="HoursFromOsm" xml:space="preserve">
-    <value>OpenStreetMap, edited {0}</value>
+    <value>OpenStreetMap, checked {0}</value>
   </data>
   <data name="ClosesSoonAfterArrival" xml:space="preserve">
     <value>Closes at {0}, about {1} min after you get there.</value>

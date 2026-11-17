@@ -20,9 +20,13 @@ public sealed class HoursWorker(
     private static readonly TimeSpan StartupRetryDelay = TimeSpan.FromSeconds(30);
     private const int MaxLoggedWarnings = 20;
 
+    /// <summary>
+    /// A run's counts. The stations matched are those the gate counts (<see cref="MatchResult.Counted"/>), those by address
+    /// among them; those matched by location only, which get no hours, come apart.
+    /// </summary>
     private const string RunStats =
-        "{Records} records, {Matched} stations matched ({Unmatched} records unmatched, {Ambiguous} ambiguous), " +
-        "{Added} added, {Updated} updated, {Removed} removed, {Warnings} warnings";
+        "{Records} records, {Matched} stations matched ({ByAddress} of them by address) and {ByLocation} by location only, without hours " +
+        "({Unmatched} records unmatched, {Ambiguous} ambiguous), {Added} added, {Updated} updated, {Removed} removed, {Warnings} warnings";
 
     private readonly List<SourceState> _sources = [];
     private DateTimeOffset _startedAt;
@@ -150,8 +154,8 @@ public sealed class HoursWorker(
             LogWarnings(state.Name, parsed.Warnings);
 
             var stations = await writer.LoadStationsAsync(cancellationToken);
-            var match = HoursMatcher.Match(parsed.Records, stations.Stations, source.MatchRadiusM);
-            matched = match.Matches.Count;
+            var match = HoursMatcher.Match(parsed.Records, stations.Stations, source.MatchRadiusM, source.OtherBrandReachM);
+            matched = match.Counted;
             var history = await writer.LoadHistoryAsync(state.Name, cancellationToken);
             if (HoursGate.Check(source, parsed, matched, history.LastGood?.Matched, options.Value.MinShareOfLastGood) is { } reason)
             {
@@ -174,8 +178,9 @@ public sealed class HoursWorker(
             logger.LogInformation(
                 "Hours from {Source} {Status} (hours import {HoursImportId}, version {Version}): " + RunStats + ". Next run at {NextRunAt:O}.",
                 [
-                    state.Name, Name(outcome.Import!.Status), outcome.Import.Id, version, records, matched, match.Unmatched, match.Ambiguous,
-                    outcome.Changes.Added.Count, outcome.Changes.Updated.Count, outcome.Changes.Removed.Count, warnings, state.NextRunAt,
+                    state.Name, Name(outcome.Import!.Status), outcome.Import.Id, version, records, matched, match.ByAddress, match.ByLocation,
+                    match.Unmatched, match.Ambiguous, outcome.Changes.Added.Count, outcome.Changes.Updated.Count, outcome.Changes.Removed.Count,
+                    warnings, state.NextRunAt,
                 ]);
         }
         catch (Exception ex) when (!cancellationToken.IsCancellationRequested)
@@ -236,8 +241,8 @@ public sealed class HoursWorker(
 
                 var parsed = source.Parse(cached.Raw);
                 var stations = await writer.LoadStationsAsync(cancellationToken);
-                var match = HoursMatcher.Match(parsed.Records, stations.Stations, source.MatchRadiusM);
-                if (HoursGate.Check(source, parsed, match.Matches.Count, history.LastGood?.Matched, options.Value.MinShareOfLastGood) is { } reason)
+                var match = HoursMatcher.Match(parsed.Records, stations.Stations, source.MatchRadiusM, source.OtherBrandReachM);
+                if (HoursGate.Check(source, parsed, match.Counted, history.LastGood?.Matched, options.Value.MinShareOfLastGood) is { } reason)
                 {
                     state.MatchedUpTo = stations.UpdatedAt;
                     logger.LogWarning("Hours from {Source} not matched again: {Reason} The last good hours keep serving.", state.Name, reason);
@@ -255,8 +260,9 @@ public sealed class HoursWorker(
                     logger.LogInformation(
                         "Hours from {Source} matched again, the stations having changed (hours import {HoursImportId}): " + RunStats + ".",
                         [
-                            state.Name, import.Id, parsed.Records.Count, match.Matches.Count, match.Unmatched, match.Ambiguous,
-                            outcome.Changes.Added.Count, outcome.Changes.Updated.Count, outcome.Changes.Removed.Count, parsed.Warnings.Count,
+                            state.Name, import.Id, parsed.Records.Count, match.Counted, match.ByAddress, match.ByLocation, match.Unmatched,
+                            match.Ambiguous, outcome.Changes.Added.Count, outcome.Changes.Updated.Count, outcome.Changes.Removed.Count,
+                            parsed.Warnings.Count,
                         ]);
                 }
                 else

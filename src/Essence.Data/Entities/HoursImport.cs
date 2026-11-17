@@ -49,7 +49,10 @@ public sealed class HoursImport
     /// <summary>The records the source gave that could be read.</summary>
     public int Records { get; set; }
 
-    /// <summary>The stations those records matched.</summary>
+    /// <summary>
+    /// The stations those records matched, but for those matched by location only
+    /// (<see cref="StationHoursEntry.ByLocation"/>), which get no hours: what the next runs are checked against.
+    /// </summary>
     public int Matched { get; set; }
 
     /// <summary>Rows of <c>station_hours</c> added, updated or removed.</summary>

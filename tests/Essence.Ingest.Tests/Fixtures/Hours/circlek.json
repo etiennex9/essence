@@ -1,0 +1,239 @@
+[
+  {
+    "id": "6000140",
+    "latitude": 45.60074,
+    "longitude": -73.73205,
+    "address": {
+      "street": "45 BOUL. ST-ELZEAR OUEST",
+      "city": "LAVAL",
+      "state": "QC",
+      "postalCode": "H7M 1E3",
+      "country": "CA"
+    },
+    "openingHours": {
+      "alwaysOpen": false,
+      "saturday": {
+        "open": "06:00",
+        "close": "23:00"
+      },
+      "sunday": {
+        "open": "06:00",
+        "close": "23:00"
+      },
+      "monday": {
+        "open": "05:00",
+        "close": "23:00"
+      },
+      "tuesday": {
+        "open": "05:00",
+        "close": "23:00"
+      },
+      "wednesday": {
+        "open": "05:00",
+        "close": "23:00"
+      },
+      "thursday": {
+        "open": "05:00",
+        "close": "23:00"
+      },
+      "friday": {
+        "open": "05:00",
+        "close": "23:00"
+      }
+    },
+    "openingHoursStore": {},
+    "openingHoursFuel": {},
+    "brand": "COUCHE_TARD",
+    "publicBrand": "COUCHE_TARD"
+  },
+  {
+    "id": "6001174",
+    "latitude": 45.548634,
+    "longitude": -73.53512,
+    "address": {
+      "street": "4110 RUE SAINTE CATHERINE E",
+      "city": "MONTREAL",
+      "state": "QC",
+      "postalCode": "H1V 1X2",
+      "country": "CA"
+    },
+    "openingHours": {
+      "alwaysOpen": true
+    },
+    "openingHoursStore": {},
+    "openingHoursFuel": {},
+    "brand": "COUCHE_TARD",
+    "publicBrand": "COUCHE_TARD"
+  },
+  {
+    "id": "6000864",
+    "latitude": 46.307915,
+    "longitude": -72.586189,
+    "address": {
+      "street": "7710 RUE NOTRE-DAME",
+      "city": "TROIS-RIVIERES-OUEST",
+      "state": "QC",
+      "postalCode": "G9B 1L9",
+      "country": "CA"
+    },
+    "openingHours": {
+      "alwaysOpen": false,
+      "saturday": {
+        "open": "06:30",
+        "close": "00:30"
+      },
+      "sunday": {
+        "open": "06:30",
+        "close": "00:30"
+      },
+      "monday": {
+        "open": "05:30",
+        "close": "00:30"
+      },
+      "tuesday": {
+        "open": "05:30",
+        "close": "00:30"
+      },
+      "wednesday": {
+        "open": "05:30",
+        "close": "00:30"
+      },
+      "thursday": {
+        "open": "05:30",
+        "close": "00:30"
+      },
+      "friday": {
+        "open": "05:30",
+        "close": "00:30"
+      }
+    },
+    "openingHoursStore": {},
+    "openingHoursFuel": {},
+    "brand": "COUCHE_TARD",
+    "publicBrand": "COUCHE_TARD"
+  },
+  {
+    "id": "6000507",
+    "latitude": 47.76044,
+    "longitude": -69.432569,
+    "address": {
+      "street": "960 ROUTE DES ROCHES",
+      "city": "ST-ANTONIN",
+      "state": "QC",
+      "postalCode": "G0L 2J0",
+      "country": "CA"
+    },
+    "openingHours": {
+      "alwaysOpen": false,
+      "saturday": {
+        "open": "05:00",
+        "close": "24:00"
+      },
+      "sunday": {
+        "open": "05:00",
+        "close": "24:00"
+      },
+      "monday": {
+        "open": "05:00",
+        "close": "24:00"
+      },
+      "tuesday": {
+        "open": "05:00",
+        "close": "24:00"
+      },
+      "wednesday": {
+        "open": "05:00",
+        "close": "24:00"
+      },
+      "thursday": {
+        "open": "05:00",
+        "close": "24:00"
+      },
+      "friday": {
+        "open": "05:00",
+        "close": "24:00"
+      }
+    },
+    "openingHoursStore": {},
+    "openingHoursFuel": {},
+    "brand": "COUCHE_TARD",
+    "publicBrand": "COUCHE_TARD"
+  },
+  {
+    "id": "6000206",
+    "latitude": 45.500481,
+    "longitude": -73.561979,
+    "address": {
+      "street": "800 PLACE VICTORIA",
+      "city": "Montréal",
+      "state": "QC",
+      "postalCode": "H4Z 1A1",
+      "country": "CA"
+    },
+    "openingHours": {
+      "alwaysOpen": false,
+      "monday": {
+        "open": "06:00",
+        "close": "18:00"
+      },
+      "tuesday": {
+        "open": "06:00",
+        "close": "18:00"
+      },
+      "wednesday": {
+        "open": "06:00",
+        "close": "18:00"
+      },
+      "thursday": {
+        "open": "06:00",
+        "close": "18:00"
+      },
+      "friday": {
+        "open": "06:00",
+        "close": "18:00"
+      }
+    },
+    "openingHoursStore": {},
+    "openingHoursFuel": {},
+    "brand": "COUCHE_TARD",
+    "publicBrand": "COUCHE_TARD"
+  },
+  {
+    "id": "6000276",
+    "latitude": 45.41777,
+    "longitude": -73.644405,
+    "address": {
+      "street": "9301 BOUL. LASALLE",
+      "city": "LASALLE",
+      "state": "QC",
+      "postalCode": "H8R 2M7",
+      "country": "CA"
+    },
+    "openingHours": {
+      "alwaysOpen": false
+    },
+    "openingHoursStore": {},
+    "openingHoursFuel": {},
+    "brand": "COUCHE_TARD",
+    "publicBrand": "COUCHE_TARD"
+  },
+  {
+    "id": "801757",
+    "latitude": 49.413197,
+    "longitude": -82.420298,
+    "address": {
+      "street": "1 RIVERSIDE DRIVE",
+      "city": "KAPUSKASING",
+      "state": "ON",
+      "postalCode": "P5N 1A1",
+      "country": "CA"
+    },
+    "openingHours": {
+      "alwaysOpen": false
+    },
+    "openingHoursStore": {},
+    "openingHoursFuel": {},
+    "brand": "CIRCLEK",
+    "publicBrand": "CIRCLEK"
+  }
+]

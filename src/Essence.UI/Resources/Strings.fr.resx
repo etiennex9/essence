@@ -1093,7 +1093,7 @@
     <value>Vérifiées par Essence</value>
   </data>
   <data name="HoursFromOsm" xml:space="preserve">
-    <value>OpenStreetMap, modifiées en {0}</value>
+    <value>OpenStreetMap, vérifiées en {0}</value>
   </data>
   <data name="ClosesSoonAfterArrival" xml:space="preserve">
     <value>Ferme à {0}, environ {1} min après votre arrivée.</value>

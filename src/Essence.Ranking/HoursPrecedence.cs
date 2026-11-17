@@ -28,7 +28,8 @@ public sealed record ChosenHours(HoursRow Row, OpeningHours Hours, bool Trusted)
 /// <summary>
 /// Which source's hours a station shows, when several have them: a brand's own locator (Costco's first, its gas bars
 /// being the ones the owner checked), then the hours written down by hand in Essence (<c>curated-hours.json</c>), then
-/// Couche-Tard's, Ultramar's and Shell's, then OpenStreetMap's, confirmed before not. A source with no success within
+/// Ultramar's and Shell's forecourts', then Couche-Tard's, which are its store's (a Couche-Tard that sells Shell's gas
+/// shows the pumps' hours), then OpenStreetMap's, confirmed before not. A source with no success within
 /// <see cref="DefaultStaleAfter"/> is stale: its hours come after every fresh source's, so a stale Costco falls behind the
 /// curated rule, and they're never trusted. The curated rules ship with the ingest's image, so they're never stale. A row
 /// without a rule, or with one that can't be read for sure, doesn't count. The ingest stores canonical rules, but they're
@@ -47,7 +48,7 @@ public static class HoursPrecedence
     public static readonly TimeSpan DefaultStaleAfter = TimeSpan.FromDays(21);
 
     /// <summary>The sources by rank, best first; OpenStreetMap's place is ranked by whether it's confirmed (<see cref="Rank"/>).</summary>
-    private static readonly string[] Ranked = [Costco, Curated, CircleK, Ultramar, Shell];
+    private static readonly string[] Ranked = [Costco, Curated, Ultramar, Shell, CircleK];
 
     /// <summary>Ranks past every fresh source's: OpenStreetMap confirmed and not, then a source this doesn't know.</summary>
     private static readonly int StaleRank = Ranked.Length + 3;

@@ -247,8 +247,8 @@ public sealed class StationHoursViewTests : IDisposable
     [InlineData("curated", "2026-11-11T00:00:00-05:00", "fr-CA", "Vérifiées par Essence, 11 novembre")]
     [InlineData("curated", "2025-06-02T00:00:00-04:00", "en-CA", "Checked by Essence, June 2025")]
     [InlineData("curated", null, "en-CA", "Checked by Essence")]
-    [InlineData("osm", "2025-03-04T12:00:00Z", "en-CA", "OpenStreetMap, edited 2025")]
-    [InlineData("osm", "2025-03-04T12:00:00Z", "fr-CA", "OpenStreetMap, modifiées en 2025")]
+    [InlineData("osm", "2025-03-04T12:00:00Z", "en-CA", "OpenStreetMap, checked 2025")]
+    [InlineData("osm", "2025-03-04T12:00:00Z", "fr-CA", "OpenStreetMap, vérifiées en 2025")]
     [InlineData("osm", null, "en-CA", "OpenStreetMap")]
     [InlineData("acme", null, "en-CA", "acme")]
     public void The_source_is_named_with_when_it_was_checked(string source, string? checkedAt, string culture, string expected)

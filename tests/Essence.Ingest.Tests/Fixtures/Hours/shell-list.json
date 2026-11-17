@@ -1,0 +1,103 @@
+{
+  "locations": [
+    {
+      "id": "12200873",
+      "name": "4055 BOUL INDUSTRIEL - LAVAL",
+      "lat": 45.59807,
+      "lng": -73.750277,
+      "brand": "Shell",
+      "inactive": false,
+      "country_code": "CA",
+      "address": "4055 BOUL. INDUSTRIEL",
+      "city": "LAVAL",
+      "state": "Quebec",
+      "postcode": "H7L 4S3",
+      "website_url": "https://find.shell.com/ca/fuel/12200873-4055-boul-industriel-laval"
+    },
+    {
+      "id": "12280964",
+      "name": "BOULEVARD DES LAURENTIDES-VIMONT",
+      "lat": 45.608843,
+      "lng": -73.734213,
+      "brand": "Shell",
+      "inactive": false,
+      "country_code": "CA",
+      "address": "2131 BOULEVARD DES LAURENTIDES",
+      "city": "VIMONT",
+      "state": "Quebec",
+      "postcode": "H7M 4M2",
+      "website_url": "https://find.shell.com/ca/fuel/12280964-boulevard-des-laurentides-vimont"
+    },
+    {
+      "id": "10052881",
+      "name": "ST MARTIN O - TESSIER",
+      "lat": 45.568473,
+      "lng": -73.72729,
+      "brand": "Shell",
+      "inactive": false,
+      "country_code": "CA",
+      "address": "1625 BOUL ST MARTIN O",
+      "city": "CHOMEDEY LAVAL",
+      "state": "Quebec",
+      "postcode": "H7S 1N1",
+      "website_url": "https://find.shell.com/ca/fuel/10052881-st-martin-o-tessier"
+    },
+    {
+      "id": "10052586",
+      "name": "CH STE FOY - AVE MYRAND",
+      "lat": 46.789106,
+      "lng": -71.270307,
+      "brand": "Shell",
+      "inactive": false,
+      "country_code": "CA",
+      "address": "2125 CH STE-FOY",
+      "city": "STE FOY",
+      "state": "Quebec",
+      "postcode": "G1V 1R9",
+      "website_url": "https://find.shell.com/ca/fuel/10052586-ch-ste-foy-ave-myrand"
+    },
+    {
+      "id": "13231467",
+      "name": "MONTEE DE LA RIVIERE - MONTMAGNY",
+      "lat": 46.97136,
+      "lng": -70.55618,
+      "brand": "Shell",
+      "inactive": false,
+      "country_code": "CA",
+      "address": "55 MONTEE DE LA RIVIERE-DU-SUD",
+      "city": "MONTMAGNY",
+      "state": "Quebec",
+      "postcode": "G5V 2P5",
+      "website_url": "https://find.shell.com/ca/fuel/13231467-montee-de-la-riviere-montmagny"
+    },
+    {
+      "id": "10053079",
+      "name": "CHEMIN CHAMBLY - HWY 30",
+      "lat": 45.487599,
+      "lng": -73.382653,
+      "brand": "Shell",
+      "inactive": true,
+      "country_code": "CA",
+      "address": "7900 CH DE CHAMBLY",
+      "city": "SAINT-HUBERT",
+      "state": "Quebec",
+      "postcode": "J3Y 5K2",
+      "website_url": "https://find.shell.com/ca/fuel/10053079-chemin-chambly-hwy-30"
+    },
+    {
+      "id": "10060914",
+      "name": "RUE COMMERCIALE - RUE FRONTIERE.",
+      "lat": 47.243453,
+      "lng": -68.705383,
+      "brand": "Shell",
+      "inactive": false,
+      "country_code": "CA",
+      "address": "2057 COMMERCIALE",
+      "city": "ST FRANCOIS",
+      "state": "New Brunswick",
+      "postcode": "E7A 1B3",
+      "website_url": "https://find.shell.com/ca/fuel/10060914-rue-commerciale-rue-frontiere"
+    }
+  ],
+  "clusters": []
+}

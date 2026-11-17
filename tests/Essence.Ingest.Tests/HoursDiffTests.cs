@@ -47,6 +47,24 @@ public sealed class HoursDiffTests
     }
 
     [Fact]
+    public void An_element_matched_by_location_is_stored_without_its_hours_but_with_where_to_edit_it()
+    {
+        var station = new MatchStation(1, "key", "nutrinor-energies", 48.4, -71.1, "100", "G7J3C5");
+        var sonic = new SourceRecord("way/1", "sonic", 48.40018, -71.1, null, null, "Mo-Su 06:00-23:00",
+            OverpassSource.ElementLink + "way/1", new DateTimeOffset(2025, 6, 1, 4, 0, 0, TimeSpan.Zero), false);
+        var match = Assert.Single(HoursMatcher.Match([sonic], [station], 150, 50).Matches);
+        var entry = new StationHoursEntry { Source = OverpassSource.SourceName, SourceRef = "", MatchedBy = "" };
+
+        HoursRow.Of(match).CopyTo(entry);
+
+        Assert.Null(entry.OpeningHours);
+        Assert.Null(entry.SourceCheckedAt);
+        Assert.Equal(
+            ("way/1", "https://www.openstreetmap.org/way/1", StationHoursEntry.ByLocation, 20, false, false),
+            (entry.SourceRef, entry.SourceUrl, entry.MatchedBy, entry.MatchDistanceM!.Value, entry.Confirmed, entry.TemporarilyClosed));
+    }
+
+    [Fact]
     public void A_row_copied_to_an_entry_reads_back_the_same()
     {
         var entry = new StationHoursEntry { Source = "costco", SourceRef = "", MatchedBy = "" };

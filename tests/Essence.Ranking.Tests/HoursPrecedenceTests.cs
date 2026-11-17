@@ -36,9 +36,9 @@ public class HoursPrecedenceTests
     [Theory]
     [InlineData(HoursPrecedence.Costco)]
     [InlineData(HoursPrecedence.Curated)]
-    [InlineData(HoursPrecedence.CircleK)]
     [InlineData(HoursPrecedence.Ultramar)]
     [InlineData(HoursPrecedence.Shell)]
+    [InlineData(HoursPrecedence.CircleK)]
     [InlineData("osm confirmed")]
     [InlineData("osm")]
     [InlineData("acme")]
@@ -46,8 +46,8 @@ public class HoursPrecedenceTests
     {
         HoursRow[] ranked =
         [
-            Row(HoursPrecedence.Costco), Row(HoursPrecedence.Curated), Row(HoursPrecedence.CircleK), Row(HoursPrecedence.Ultramar),
-            Row(HoursPrecedence.Shell), Row(HoursPrecedence.Osm, confirmed: true), Row(HoursPrecedence.Osm, confirmed: false), Row("acme"),
+            Row(HoursPrecedence.Costco), Row(HoursPrecedence.Curated), Row(HoursPrecedence.Ultramar), Row(HoursPrecedence.Shell),
+            Row(HoursPrecedence.CircleK), Row(HoursPrecedence.Osm, confirmed: true), Row(HoursPrecedence.Osm, confirmed: false), Row("acme"),
         ];
         var index = Array.FindIndex(ranked, r => winner == "osm confirmed" ? r is { Source: HoursPrecedence.Osm, Confirmed: true }
             : winner == HoursPrecedence.Osm ? r is { Source: HoursPrecedence.Osm, Confirmed: false }
@@ -57,6 +57,16 @@ public class HoursPrecedenceTests
         var chosen = HoursPrecedence.Choose(ranked[index..].Reverse(), Fresh, Now)[Laval];
 
         Assert.Same(ranked[index], chosen.Row);
+    }
+
+    [Fact]
+    public void A_forecourt_s_hours_beat_the_Couche_Tard_store_s_at_the_same_station()
+    {
+        // A Couche-Tard that sells Shell's gas: the store opens at 5, the pumps at 6.
+        var chosen = HoursPrecedence.Choose(
+            [Row(HoursPrecedence.CircleK, "Mo-Su 05:00-23:00"), Row(HoursPrecedence.Shell, "Mo-Su 06:00-22:00")], Fresh, Now)[Laval];
+
+        Assert.Equal((HoursPrecedence.Shell, true), (chosen.Row.Source, chosen.Trusted));
     }
 
     [Theory]
@@ -133,6 +143,19 @@ public class HoursPrecedenceTests
 
         Assert.Equal(HoursPrecedence.Osm, chosen[Laval].Row.Source);
         Assert.False(chosen.ContainsKey(7));
+    }
+
+    [Fact]
+    public void An_OpenStreetMap_element_matched_by_location_only_gives_no_hours_another_source_s_showing_or_none()
+    {
+        // The ingest stores such a match unconfirmed and without the element's hours.
+        var byLocation = Row(HoursPrecedence.Osm, rule: null, confirmed: false);
+
+        var alone = HoursPrecedence.Choose([byLocation], Fresh, Now);
+        var withShell = HoursPrecedence.Choose([byLocation, Row(HoursPrecedence.Shell, rule: "24/7")], Fresh, Now);
+
+        Assert.Empty(alone);
+        Assert.Equal((HoursPrecedence.Shell, true), (withShell[Laval].Row.Source, withShell[Laval].Trusted));
     }
 
     [Fact]

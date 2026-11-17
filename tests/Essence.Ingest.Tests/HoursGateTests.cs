@@ -37,6 +37,27 @@ public sealed class HoursGateTests
     }
 
     [Fact]
+    public void Matches_by_location_don_t_count_so_elements_that_lost_their_brands_can_t_pass_for_a_good_run()
+    {
+        // Ten Esso stations, each with its element 10 m away; then the same elements without their brand tags.
+        var stations = Enumerable.Range(1, 10)
+            .Select(i => new MatchStation(i, $"{i}", "esso", 45 + i * 0.01, -73.5, $"{i}", "H1A1A1"))
+            .ToList();
+        var elements = stations
+            .Select(s => new SourceRecord($"node/{s.Id}", "esso", s.Latitude!.Value + 0.00009, -73.5, null, null, null, null, null, false))
+            .ToList();
+
+        var good = HoursMatcher.Match(elements, stations, 150, 50);
+        var brandless = HoursMatcher.Match([.. elements.Select(e => e with { BrandFamily = null })], stations, 150, 50);
+
+        Assert.Equal((10, 10), (good.Matches.Count, good.Counted));
+        Assert.Equal((10, 10, 0), (brandless.Matches.Count, brandless.ByLocation, brandless.Counted));
+        Assert.Equal(
+            "0 stations matched, fewer than 80 % of the last good run's 10.",
+            HoursGate.Check(elements.Count, brandless.Counted, good.Counted, MinShare));
+    }
+
+    [Fact]
     public void The_first_run_is_accepted_whatever_it_matches()
     {
         Assert.Null(HoursGate.Check(18, 0, null, MinShare));

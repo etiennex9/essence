@@ -466,8 +466,9 @@ public sealed class StationHoursView(IStringLocalizer<Strings> l)
     }
 
     /// <summary>
-    /// "Costco", "Checked by Essence, November 11", "OpenStreetMap, edited 2025": a brand's name, the day Essence checked
-    /// its rule (its month and year when it's not this year), or the year OpenStreetMap's hours were edited.
+    /// "Costco", "Checked by Essence, November 11", "OpenStreetMap, checked 2025": a brand's name, the day Essence checked
+    /// its rule (its month and year when it's not this year), or the year a mapper last checked OpenStreetMap's hours
+    /// (<c>check_date:opening_hours</c>, else <c>check_date</c>).
     /// </summary>
     private string SourceOf(StationHours hours, TimeZoneInfo zone, DateTimeOffset now, CultureInfo culture) => hours.Source switch
     {
