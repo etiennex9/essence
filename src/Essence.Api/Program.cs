@@ -74,6 +74,9 @@ app.MapGet("/", (HttpRequest request) => TypedResults.Redirect($"{request.PathBa
 app.MapHealthChecks("/health", IngestHealthCheck.EndpointOptions);
 // Liveness only, whatever the last import's age: the web container's healthcheck asks for it through its /api/ proxy.
 app.MapHealthChecks("/alive", new HealthCheckOptions { Predicate = _ => false });
+// The ingest's sources, for a monitor to alert on (README → Alerts): apart from /health, so that routing or geocoding
+// building their data never alerts, and from /alive, so that a failing source restarts nothing.
+app.MapSourceHealthEndpoints();
 
 app.MapStationEndpoints();
 app.MapTripEndpoints();

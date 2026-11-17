@@ -32,17 +32,21 @@ public static class HoursSources
             history.LastSuccess?.FinishedAt,
             attempt?.FinishedAt,
             attempt is null ? null : Name(attempt.Status),
-            attempt is { Status: HoursImportStatus.Failed or HoursImportStatus.Rejected } ? FirstLine(attempt.Error) : null,
+            LastError(history),
             history.FailuresSinceSuccess,
             stations,
             history.LastGood?.SourceVersion);
     }
 
-    /// <summary>"succeeded", as stored.</summary>
-    private static string Name(HoursImportStatus status) => status.ToString().ToLowerInvariant();
+    /// <summary>Why the latest fetch failed or was rejected, in one line; null when it didn't.</summary>
+    public static string? LastError(HoursSourceHistory history) =>
+        history.LastAttempt is { Status: HoursImportStatus.Failed or HoursImportStatus.Rejected } attempt ? FirstLine(attempt.Error) : null;
 
     /// <summary>A failure's stored error includes a stack trace; the public API only shows the exception type and message.</summary>
-    private static string? FirstLine(string? error) => error?.Split('\n', 2)[0].TrimEnd('\r');
+    internal static string? FirstLine(string? error) => error?.Split('\n', 2)[0].TrimEnd('\r');
+
+    /// <summary>"succeeded", as stored.</summary>
+    private static string Name(HoursImportStatus status) => status.ToString().ToLowerInvariant();
 }
 
 /// <summary>
@@ -55,7 +59,7 @@ public sealed class HoursHealthCheck(EssenceDbContext db, TimeProvider timeProvi
 {
     public async Task<HealthCheckResult> CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken = default)
     {
-        var staleAfter = TimeSpan.FromDays(configuration.GetValue("Health:HoursStaleAfterDays", 21));
+        var staleAfter = StaleAfter(configuration);
         IReadOnlyList<HoursSourceStatus> sources;
         try
         {
@@ -68,6 +72,13 @@ public sealed class HoursHealthCheck(EssenceDbContext db, TimeProvider timeProvi
 
         return Evaluate(sources, timeProvider.GetUtcNow(), staleAfter, context.Registration.FailureStatus);
     }
+
+    /// <summary><c>Health:HoursStaleAfterDays</c> (21): past this without a success, a source's hours are stale.</summary>
+    public static TimeSpan StaleAfter(IConfiguration configuration) =>
+        TimeSpan.FromDays(configuration.GetValue("Health:HoursStaleAfterDays", 21));
+
+    /// <summary>Whether a source whose last success finished at <paramref name="lastSuccessAt"/> is stale by <paramref name="now"/>.</summary>
+    public static bool IsStale(DateTimeOffset lastSuccessAt, DateTimeOffset now, TimeSpan staleAfter) => now - lastSuccessAt > staleAfter;
 
     /// <summary>The check's result for these sources: its data gives each one's last success (or <c>never</c>).</summary>
     public static HealthCheckResult Evaluate(
@@ -86,7 +97,7 @@ public sealed class HoursHealthCheck(EssenceDbContext db, TimeProvider timeProvi
 
         // A source that ran but never succeeded has no hours to be stale: it's named apart, so the description says which.
         var never = sources.Where(s => s.LastSuccessAt is null).Select(s => s.Source).ToList();
-        var stale = sources.Where(s => s.LastSuccessAt is { } at && now - at > staleAfter).Select(s => s.Source).ToList();
+        var stale = sources.Where(s => s.LastSuccessAt is { } at && IsStale(at, now, staleAfter)).Select(s => s.Source).ToList();
         if (never.Count == 0 && stale.Count == 0)
         {
             return HealthCheckResult.Healthy($"Every hours source succeeded within {staleAfter.TotalDays:0} days.", data);
