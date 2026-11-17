@@ -2,9 +2,10 @@
 # Prints whether android.yml should build the Android app: true or false.
 #
 # The app is built when one of its inputs changed in the given commit range: its project, the projects it references
-# (Essence.UI, and through it Essence.Contracts) and the shared build files. Markdown files don't count. It's built when
-# there's no range, when the range can't be compared (rewritten history), or when the Android workflow or this script
-# changed. A new project reference in src/Essence.Mobile needs adding here.
+# (Essence.UI, and through it Essence.Contracts and Essence.Hours) and the shared build files. Markdown files don't
+# count. It's built when there's no range, when the range can't be compared (rewritten history), or when the Android
+# workflow or this script changed. A new project reference in src/Essence.Mobile or Essence.UI needs adding here, and
+# in android.yml's paths.
 #
 # With --labels, a change that came through a pull request labelled "web only" doesn't count: Essence.UI is the web app's
 # too, and only a person can tell that a change to it matters only there (README → Android app releases). Each commit on
@@ -25,7 +26,7 @@ if [ "${1-}" = --labels ]; then
 fi
 range=${1-}
 label="web only"
-inputs='^(src/Essence\.(Mobile|UI|Contracts)/|Directory\.(Build|Packages)\.props$|global\.json$|\.editorconfig$)'
+inputs='^(src/Essence\.(Mobile|UI|Contracts|Hours)/|Directory\.(Build|Packages)\.props$|global\.json$|\.editorconfig$)'
 # In a GitHub run, these lines show in its summary too.
 notice=${GITHUB_ACTIONS:+::notice::}
 warning=${GITHUB_ACTIONS:+::warning::}

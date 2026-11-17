@@ -28,6 +28,14 @@ public sealed class WidgetFeeds(
     /// <summary>The favorites asked about at once.</summary>
     private const int Parallel = 4;
 
+    /// <summary>
+    /// A favorite closing within this of the refresh says when: the widget refreshes every 30 minutes, and its text stays
+    /// until the next refresh, or longer when Android holds it back.
+    /// </summary>
+    private static readonly TimeSpan ClosesSoonOnWidget = TimeSpan.FromMinutes(90);
+
+    private readonly StationHoursView _hours = new(l);
+
     /// <summary>The station Best near you would pick from <paramref name="origin"/>, with what it saves.</summary>
     public async Task<WidgetView> BestNearAsync(WidgetPlaceRef origin, CancellationToken cancellationToken)
     {
@@ -95,6 +103,7 @@ public sealed class WidgetFeeds(
             return Problem(title, fuel, WidgetProblem.Failed, tap);
         }
 
+        var now = time.GetUtcNow();
         var lines = asked
             .Select((station, order) => (Station: station, Order: order, Result: details[order]))
             // A station the feed dropped is gone from the widget, as from the page's list.
@@ -103,14 +112,34 @@ public sealed class WidgetFeeds(
             {
                 var price = r.Result.Value?.Prices.FirstOrDefault(p => string.Equals(p.Fuel, fuel, StringComparison.OrdinalIgnoreCase));
                 var cents = price is { IsAvailable: true, PriceCents: { } c } ? c : (decimal?)null;
-                return (r.Station, r.Order, Cents: cents);
+                return (r.Station, r.Order, Cents: cents, Hours: HoursNote(r.Result.Value, now));
             })
             .OrderBy(r => r.Cents ?? decimal.MaxValue)
             .ThenBy(r => r.Order)
             .Take(MaxFavorites)
-            .Select(r => Line(r.Station.Id, r.Station.Brand, r.Station.Address, r.Cents, $"/?station={r.Station.Id}"))
+            .Select(r => Line(
+                r.Station.Id, r.Station.Brand, r.Hours is { } hours ? $"{hours} · {r.Station.Address}" : r.Station.Address, r.Cents,
+                $"/?station={r.Station.Id}"))
             .ToList();
         return lines.Count == 0 ? Problem(title, fuel, WidgetProblem.NoFavorites, tap) : View(title, fuel, lines, tap);
+    }
+
+    /// <summary>
+    /// What a favorite's line says of its hours at the refresh: "Closes 9:30 p.m." when it closes within
+    /// <see cref="ClosesSoonOnWidget"/>, "Closed · opens 6:00 a.m." while it's closed; nothing otherwise. It goes before the
+    /// address, which the line cuts short first.
+    /// </summary>
+    private string? HoursNote(StationDetail? station, DateTimeOffset now)
+    {
+        if (station is null)
+        {
+            return null;
+        }
+
+        var view = _hours.Describe(station.Hours, station.Latitude, station.Longitude, now);
+        return view.IsClosed ? view.Status
+            : view.ClosesAt - now <= ClosesSoonOnWidget ? view.Closes
+            : null;
     }
 
     /// <summary>

@@ -192,6 +192,19 @@ body {
     color: #888780;
 }
 
+/* Closed now (its hours): a grey pill whatever its price's tone, and a muted logo. Unlike a faded station, it stays opaque:
+   it's on the map, only not open. */
+.ess-marker.is-closed,
+.ess-marker.is-closed[data-tone] {
+    --pill-bg: #e6e5e0;
+    --pill-text: #6b6a65;
+}
+
+.ess-marker.is-closed .ess-logo {
+    filter: grayscale(1);
+    opacity: 0.55;
+}
+
 .ess-marker:hover .ess-pill {
     transform: scale(1.06);
 }

@@ -11,6 +11,7 @@ on:
       - src/Essence.Mobile/**
       - src/Essence.UI/**
       - src/Essence.Contracts/**
+      - src/Essence.Hours/**
       - Directory.Build.props
       - Directory.Packages.props
       - global.json

@@ -140,6 +140,31 @@ public class PillPlacementTests
     }
 
     [Fact]
+    public void Closed_stations_make_room_for_the_open_ones()
+    {
+        var places = PillPlacement.Place([At(1, price: 150m) with { Closed = true }, At(2, east: 200, price: 160m)]);
+
+        Assert.Equal(0, places[2].PillFrom);
+        Assert.True(places[1].PillFrom > 0);
+        Assert.True(places[2].Z > places[1].Z);
+    }
+
+    [Fact]
+    public void Closed_stations_come_after_the_faded_open_ones_and_before_those_without_a_price()
+    {
+        var places = PillPlacement.Place(
+        [
+            At(1, price: 150m) with { Closed = true, Dimmed = true },
+            At(2, price: 151m) with { Closed = true },
+            At(3, price: 152m) with { Dimmed = true },
+            At(4, price: null),
+            At(5, price: 153m),
+        ]);
+
+        Assert.Equal([5L, 3L, 2L, 1L, 4L], places.OrderByDescending(p => p.Value.Z).Select(p => p.Key));
+    }
+
+    [Fact]
     public void Stations_without_a_price_make_room_for_the_others()
     {
         var places = PillPlacement.Place([At(1, price: null), At(2, east: 200, price: 170m) with { Dimmed = true }]);

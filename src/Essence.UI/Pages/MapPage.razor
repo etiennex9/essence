@@ -16,6 +16,7 @@
 @inject EssenceUIOptions Options
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject TimeProvider Time
 @inject IStringLocalizer<Strings> L
 @inject IServiceProvider ServiceProvider
 
@@ -227,6 +228,17 @@
 
     private DateTimeOffset? _refreshDueAt;
     private CancellationTokenSource? _refreshCts;
+
+    /// <summary>Draws the markers again when a station in view opens or closes (<see cref="ScheduleHoursRender"/>).</summary>
+    private ITimer? _hoursTimer;
+
+    /// <summary>When <see cref="_hoursTimer"/> fires: the earliest change among the stations drawn.</summary>
+    private DateTimeOffset? _hoursChangeAt;
+
+    /// <summary>The earliest change among the markers drawn so far in this render.</summary>
+    private DateTimeOffset? _nextHoursChange;
+
+    private bool _disposed;
 
     /// <summary>The page is out of sight: the refresh waits until it's back.</summary>
     private bool _hidden;
@@ -793,6 +805,8 @@
     /// <summary>Plans the next background refresh: by default timed to the next import, later while it's late.</summary>
     private void ScheduleRefresh(TimeSpan? delay = null)
     {
+        // The real clock rather than the app's TimeProvider: it's timed against the server's Last-Modified, which the
+        // simulated time of Development (?now=) would put hours or days away.
         var now = DateTimeOffset.UtcNow;
         _refreshDueAt = now + (delay ?? RefreshSchedule.Next(_dataAsOf, now, _lateRefreshes));
         StartRefreshTimer();
@@ -876,27 +890,60 @@
         var visible = _stations.Visible(_viewport);
         _visibleCount = visible.Count;
         var emphasis = MapEmphasisNow();
+        var now = Time.GetUtcNow();
+        _nextHoursChange = null;
         List<(MarkerModel Marker, decimal? PriceCents)> markers =
-            [.. visible.Select(v => (ToMarker(v, emphasis), v.HasPrice ? v.Price!.PriceCents : null))];
+            [.. visible.Select(v => (ToMarker(v, emphasis, now), v.HasPrice ? v.Price!.PriceCents : null))];
 
         // A ranked station 9 km away, or one along a trip zoomed out, is usually not among the stations fetched around the
-        // view, which setMarkers would drop.
+        // view, which setMarkers would drop. Its hours are the cached station's, when it was fetched before.
         var shown = markers.Select(m => m.Marker.Id).ToHashSet();
         var prices = visible.Where(v => v.HasPrice).Select(v => v.Price!.PriceCents!.Value).Order().ToList();
         if (MapBest is { } best)
         {
             markers.AddRange(best.Stations.Where(s => shown.Add(s.Id)).Select(s =>
-                (ToMarker(s.Id, s.Brand, s.Address, s.Latitude, s.Longitude, s.PriceCents, emphasis, prices), (decimal?)s.PriceCents)));
+                (ToMarker(s.Id, s.Brand, s.Address, s.Latitude, s.Longitude, s.PriceCents, emphasis, prices, now), (decimal?)s.PriceCents)));
         }
 
         if (MapTrip is { } trip)
         {
             markers.AddRange(trip.Stations.Where(s => shown.Add(s.Id)).Select(s =>
-                (ToMarker(s.Id, s.Brand, s.Address, s.Latitude, s.Longitude, s.PriceCents, emphasis, prices), (decimal?)s.PriceCents)));
+                (ToMarker(s.Id, s.Brand, s.Address, s.Latitude, s.Longitude, s.PriceCents, emphasis, prices, now), (decimal?)s.PriceCents)));
         }
 
         await SetEmphasisAsync(emphasis);
         await _map!.SetMarkersAsync(Placed(markers, emphasis));
+        ScheduleHoursRender(_nextHoursChange, now);
+    }
+
+    /// <summary>
+    /// One render of the markers when the first station drawn opens or closes, so its pill turns grey, or back, on time;
+    /// each render plans it again. A planned one for the same moment is kept.
+    /// </summary>
+    private void ScheduleHoursRender(DateTimeOffset? changeAt, DateTimeOffset now)
+    {
+        if (changeAt == _hoursChangeAt || _disposed)
+        {
+            return;
+        }
+
+        _hoursTimer?.Dispose();
+        _hoursTimer = null;
+        _hoursChangeAt = changeAt;
+        if (changeAt is not { } at)
+        {
+            return;
+        }
+
+        // A second past the change, so it's surely past it then.
+        var due = at - now + TimeSpan.FromSeconds(1);
+        _hoursTimer = Time.CreateTimer(
+            _ => InvokeAsync(() =>
+            {
+                _hoursChangeAt = null;
+                return _disposed ? Task.CompletedTask : RenderMarkersAsync();
+            }),
+            null, due > TimeSpan.Zero ? due : TimeSpan.Zero, Timeout.InfiniteTimeSpan);
     }
 
     /// <summary>
@@ -916,7 +963,8 @@
                 Selected: m.Marker.Id == selected,
                 Pick: m.Marker.Id == emphasis?.PickId,
                 Second: m.Marker.Id == emphasis?.SecondId,
-                Flag: FlagOf(m.Marker.Id)))],
+                Flag: FlagOf(m.Marker.Id),
+                Closed: m.Marker.Closed))],
             MapLabels());
         return [.. markers.Select(m => m.Marker with { Z = places[m.Marker.Id].Z, PillFrom = places[m.Marker.Id].PillFrom })];
     }
@@ -1041,7 +1089,7 @@
         await _map!.SetEmphasisAsync(emphasis?.PickId, emphasis?.SecondId, emphasis?.Listed, L["BestValue"], emphasis?.SecondFlag ?? L["Closest"]);
     }
 
-    private MarkerModel ToMarker(VisibleStation visible, MapEmphasis? emphasis)
+    private MarkerModel ToMarker(VisibleStation visible, MapEmphasis? emphasis, DateTimeOffset now)
     {
         var station = visible.Station;
         var brand = BrandCatalog.For(station.Brand);
@@ -1049,29 +1097,54 @@
         var price = Formatting.Price(visible.HasPrice ? visible.Price!.PriceCents : null, CultureInfo.CurrentCulture);
         string label = visible.HasPrice ? L["MarkerPrice", name, price] : L["MarkerUnavailable", name, _fuel];
         var favorite = Favorites.IsFavorite(station.Id);
+        var closed = IsClosed(station.Hours, station.Latitude, station.Longitude, now);
         return new MarkerModel(
-            station.Id, station.Latitude, station.Longitude, Label(label, station.Id, favorite, emphasis), price, !visible.HasPrice,
-            ToneName(visible.Tone), 0, favorite, brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
+            station.Id, station.Latitude, station.Longitude, Label(label, station.Id, favorite, emphasis, closed), price, !visible.HasPrice,
+            ToneName(visible.Tone), 0, favorite, brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl, Closed: closed);
     }
 
     /// <summary>A station Best near you ranked, or one along the trip, drawn even though it's not among the stations fetched around the view.</summary>
     private MarkerModel ToMarker(
         long id, string? brandName, string address, double latitude, double longitude, decimal priceCents, MapEmphasis? emphasis,
-        IReadOnlyList<decimal> visiblePrices)
+        IReadOnlyList<decimal> visiblePrices, DateTimeOffset now)
     {
         var brand = BrandCatalog.For(brandName);
         var price = Formatting.Price(priceCents, CultureInfo.CurrentCulture);
         string label = L["MarkerPrice", $"{brand.Name ?? L["Independent"]}, {address}", price];
         var favorite = Favorites.IsFavorite(id);
         var tone = StationViewport.ToneOf(priceCents, visiblePrices);
+        var closed = IsClosed(_stations.Find(id)?.Hours, latitude, longitude, now);
         return new MarkerModel(
-            id, latitude, longitude, Label(label, id, favorite, emphasis), price, false, ToneName(tone), 0, favorite,
-            brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl);
+            id, latitude, longitude, Label(label, id, favorite, emphasis, closed), price, false, ToneName(tone), 0, favorite,
+            brand.Monogram, brand.Background, brand.Foreground, brand.LogoUrl, Closed: closed);
     }
 
-    /// <summary>A marker's label, with what makes its station stand out: a favorite, the pick, or the closest (the trip's reference).</summary>
-    private string Label(string label, long id, bool favorite, MapEmphasis? emphasis)
+    /// <summary>
+    /// Its hours say it's closed now, or its source that it's closed for now: its marker is grey. When that changes counts
+    /// toward the next render of the markers (<see cref="_nextHoursChange"/>).
+    /// </summary>
+    private bool IsClosed(Essence.Contracts.StationHours? hours, double latitude, double longitude, DateTimeOffset now)
     {
+        var (closed, changesAt) = StationHoursView.MarkerAt(hours, latitude, longitude, now);
+        if (changesAt is { } at && !(_nextHoursChange <= at))
+        {
+            _nextHoursChange = at;
+        }
+
+        return closed;
+    }
+
+    /// <summary>
+    /// A marker's label, with what makes its station stand out: closed, a favorite, the pick, or the closest (the trip's
+    /// reference).
+    /// </summary>
+    private string Label(string label, long id, bool favorite, MapEmphasis? emphasis, bool closed)
+    {
+        if (closed)
+        {
+            label = L["MarkerClosed", label];
+        }
+
         if (favorite)
         {
             label = L["MarkerFavorite", label];
@@ -1800,6 +1873,8 @@
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
+        _hoursTimer?.Dispose();
         Favorites.Changed -= OnFavoritesChanged;
         Comparison.Changed -= OnComparisonChanged;
         Updates.Changed -= OnUpdateChanged;

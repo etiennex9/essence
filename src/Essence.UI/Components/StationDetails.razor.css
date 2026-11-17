@@ -41,6 +41,12 @@
     color: var(--ess-text-muted);
 }
 
+/* Its hours, on the meta line: amber while it closes soon. */
+.meta .hours.is-soon {
+    color: var(--ess-warning-text);
+    font-weight: 500;
+}
+
 .notice {
     margin: 8px 0 0;
     padding: 6px 10px;

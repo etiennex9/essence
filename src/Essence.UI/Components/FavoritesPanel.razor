@@ -2,6 +2,7 @@
 @inject FavoriteStations Favorites
 @inject ComparedStations Comparison
 @inject HistoryCache History
+@inject TimeProvider Time
 @inject IStringLocalizer<Strings> L
 
 @* The favorites at a glance, cheapest first for the map's fuel. Each can be added to the comparison, or all at once. *@
@@ -76,7 +77,7 @@
     private readonly HashSet<long> _inFlight = [];
     private readonly CancellationTokenSource _cts = new();
     private bool _ready;
-    private DateTimeOffset _now = DateTimeOffset.UtcNow;
+    private DateTimeOffset _now;
 
     /// <summary>The fuel selected on the map: the price shown.</summary>
     [Parameter, EditorRequired]
@@ -99,6 +100,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _now = Time.GetUtcNow();
         Favorites.Changed += OnFavoritesChanged;
         Comparison.Changed += OnComparisonChanged;
         await Favorites.LoadAsync();
@@ -183,7 +185,7 @@
             }
         }
 
-        _now = DateTimeOffset.UtcNow;
+        _now = Time.GetUtcNow();
     }
 
     /// <summary>Adds the favorites not shown yet and takes in updated snapshots; un-starred ones stay.</summary>

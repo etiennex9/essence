@@ -19,6 +19,12 @@ public sealed class WidgetFeedsTests : IDisposable
     /// <summary>About 6 km from Home and Work.</summary>
     private static readonly GeoPoint FarPoint = new(45.5500, -73.6100);
 
+    /// <summary>Costco Laval's gas bar's hours, as the API sends them.</summary>
+    private const string CostcoHours = """
+        {"rule":"Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30","source":"costco","trusted":true,"confirmed":true,"checkedAt":null,
+         "link":null,"temporarilyClosed":false}
+        """;
+
     private readonly CultureInfo _culture = CultureInfo.CurrentCulture;
     private readonly CultureInfo _uiCulture = CultureInfo.CurrentUICulture;
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 11, 8, 13, 10, 0, TimeSpan.Zero));
@@ -212,6 +218,35 @@ public sealed class WidgetFeedsTests : IDisposable
         Assert.Equal(["159.9", "170.9", "—"], view.Lines.Select(l => l.Price));
         Assert.Equal(("Esso", "3 rue Principale", "/?station=3"), (view.Lines[0].Name, view.Lines[0].Detail, view.Lines[0].Tap));
         Assert.Equal("/?view=favorites", view.Tap);
+    }
+
+    [Theory]
+    [InlineData(20, 30, "Closes 9:30 p.m. · 1 rue Principale")]
+    [InlineData(21, 45, "Closed · opens 6:00 a.m. · 1 rue Principale")]
+    [InlineData(15, 0, "1 rue Principale")]
+    public async Task A_favorite_says_when_it_closes_within_90_minutes_or_that_it_s_closed(int hour, int minute, string detail)
+    {
+        // Wednesday, Laval's time; the device's zone is another one, so the station's own is used.
+        _time.SetUtcNow(new DateTimeOffset(2026, 11, 11, hour, minute, 0, TimeSpan.FromHours(-5)));
+        _time.SetLocalTimeZone(TimeZoneInfo.Utc);
+        await new FavoriteStations(_preferences).AddAsync(TestStations.Station(1, "Costco"));
+        Answer("/stations/1", Station(1, "155.9", CostcoHours));
+
+        var view = await _feeds.FavoritesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(detail, Plain(Assert.Single(view.Lines).Detail));
+    }
+
+    [Fact]
+    public async Task A_favorite_closed_for_now_says_so_in_french()
+    {
+        CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");
+        await new FavoriteStations(_preferences).AddAsync(TestStations.Station(1, "Costco"));
+        Answer("/stations/1", Station(1, "155.9", CostcoHours.Replace("\"temporarilyClosed\":false", "\"temporarilyClosed\":true")));
+
+        var view = await _feeds.FavoritesAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal("Fermé temporairement · 1 rue Principale", Assert.Single(view.Lines).Detail);
     }
 
     [Fact]
@@ -484,6 +519,10 @@ public sealed class WidgetFeedsTests : IDisposable
         access,
         locationOn);
 
+    /// <summary>Plain spaces: before "a.m.", ICU writes a narrow no-break space or a plain one, depending on its version.</summary>
+    private static string Plain(string text) =>
+        string.Concat(text.Select(c => char.GetUnicodeCategory(c) == UnicodeCategory.SpaceSeparator ? ' ' : c));
+
     private string TimeOfDay(DateTimeOffset at) => Formatting.TimeOfDay(at, _time.LocalTimeZone, CultureInfo.CurrentCulture);
 
     private string Updated() => $"Updated {TimeOfDay(_time.GetUtcNow())}";
@@ -503,12 +542,13 @@ public sealed class WidgetFeedsTests : IDisposable
          "referenceId":{{reference}},"closestId":1,"cheapestId":{{pick}},"stations":[],"radiusKm":10,"byRoad":true}
         """);
 
-    private static HttpResponseMessage Station(long id, string? cents) => TestHttp.Json($$"""
+    /// <param name="hours">The station's <c>hours</c> as JSON; left out (an older API) when null.</param>
+    private static HttpResponseMessage Station(long id, string? cents, string? hours = null) => TestHttp.Json($$"""
         {"id":{{id}},"name":null,"brand":"Shell","status":"En opération","address":"{{id}} rue Principale","postalCode":"H2X3J4",
          "region":"Montréal","latitude":45.5,"longitude":-73.56,"isActive":true,"firstSeenAt":"2026-10-01T00:00:00Z",
          "lastSeenAt":"2026-11-08T00:00:00Z","updatedAt":"2026-11-08T00:00:00Z",
          "prices":[{"fuel":"Régulier","priceCents":{{cents ?? "null"}},"isAvailable":{{(cents is null ? "false" : "true")}},"since":"2026-11-08T10:00:00Z"},
-                   {"fuel":"Diesel","priceCents":150.0,"isAvailable":true,"since":"2026-11-08T10:00:00Z"}]}
+                   {"fuel":"Diesel","priceCents":150.0,"isAvailable":true,"since":"2026-11-08T10:00:00Z"}]{{(hours is null ? "" : $",\"hours\":{hours}")}}}
         """);
 
     private static HttpResponseMessage Trip(long pick, long reference, double detourKm, double detourMin, string saves) =>

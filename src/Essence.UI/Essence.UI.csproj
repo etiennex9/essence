@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Essence.Contracts\Essence.Contracts.csproj" />
+    <!-- Stations' opening hours against the clock, in their time zone (Services/StationHoursView.cs). -->
+    <ProjectReference Include="..\Essence.Hours\Essence.Hours.csproj" />
   </ItemGroup>
 
 </Project>

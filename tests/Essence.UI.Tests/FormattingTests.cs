@@ -30,8 +30,32 @@ public class FormattingTests
         var at = new DateTimeOffset(2026, 10, 24, 12, 10, 0, TimeSpan.Zero);
         var montreal = TimeZoneInfo.FindSystemTimeZoneById("America/Toronto");
 
-        Assert.Equal("08 h 10", Formatting.TimeOfDay(at, montreal, CultureInfo.GetCultureInfo("fr-CA")));
+        // As a station's clock times are, beside it in the widget: not .NET's "08 h 10".
+        Assert.Equal("8 h 10", Formatting.TimeOfDay(at, montreal, CultureInfo.GetCultureInfo("fr-CA")));
+        Assert.Equal("8 h", Formatting.TimeOfDay(at.AddMinutes(-10), montreal, CultureInfo.GetCultureInfo("fr-CA")));
         Assert.Matches("^8:10", Formatting.TimeOfDay(at, montreal, CultureInfo.GetCultureInfo("en-CA")));
+    }
+
+    [Theory]
+    [InlineData("en-CA", 21, 30, "9:30 p.m.")]
+    [InlineData("en-CA", 6, 0, "6:00 a.m.")]
+    [InlineData("en-CA", 0, 0, "midnight")]
+    [InlineData("fr-CA", 21, 30, "21 h 30")]
+    [InlineData("fr-CA", 6, 0, "6 h")]
+    [InlineData("fr-CA", 6, 5, "6 h 05")]
+    public void A_station_s_clock_time_is_written_as_the_language_does(string culture, int hour, int minute, string expected) =>
+        Assert.Equal(expected, string.Concat(Formatting.Clock(new TimeOnly(hour, minute), CultureInfo.GetCultureInfo(culture), "midnight")
+            .Select(c => char.GetUnicodeCategory(c) == UnicodeCategory.SpaceSeparator ? ' ' : c)));
+
+    [Fact]
+    public void A_station_s_clock_time_is_in_the_zone_given_not_the_device_s()
+    {
+        // 02:30 UTC is 9:30 p.m. in Laval the day before.
+        var at = new DateTimeOffset(2026, 11, 12, 2, 30, 0, TimeSpan.Zero);
+        var montreal = TimeZoneInfo.FindSystemTimeZoneById("America/Toronto");
+
+        Assert.Equal("21 h 30", Formatting.Clock(at, montreal, CultureInfo.GetCultureInfo("fr-CA"), "minuit"));
+        Assert.Equal("2 h 30", Formatting.Clock(at, TimeZoneInfo.Utc, CultureInfo.GetCultureInfo("fr-CA"), "minuit"));
     }
 
     [Fact]

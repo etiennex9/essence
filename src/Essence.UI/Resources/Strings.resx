@@ -1038,4 +1038,61 @@
   <data name="TripFromPlace" xml:space="preserve">
     <value>Planned from {0}.</value>
   </data>
+  <data name="Hours" xml:space="preserve">
+    <value>Hours</value>
+  </data>
+  <data name="OpenUntil" xml:space="preserve">
+    <value>Open until {0}</value>
+  </data>
+  <data name="OpenUntilDay" xml:space="preserve">
+    <value>Open until {0} {1}</value>
+  </data>
+  <data name="OpenNow" xml:space="preserve">
+    <value>Open</value>
+  </data>
+  <data name="Open24h" xml:space="preserve">
+    <value>Open 24 hours</value>
+  </data>
+  <data name="ClosedOpensAt" xml:space="preserve">
+    <value>Closed · opens {0}</value>
+  </data>
+  <data name="ClosedOpensDayAt" xml:space="preserve">
+    <value>Closed · opens {0} {1}</value>
+  </data>
+  <data name="ClosesAt" xml:space="preserve">
+    <value>Closes {0}</value>
+  </data>
+  <data name="HoursUnknown" xml:space="preserve">
+    <value>Hours unknown</value>
+  </data>
+  <data name="HolidayHoursMayDiffer" xml:space="preserve">
+    <value>Holiday: hours may differ</value>
+  </data>
+  <data name="TemporarilyClosed" xml:space="preserve">
+    <value>Temporarily closed</value>
+  </data>
+  <data name="MarkerClosed" xml:space="preserve">
+    <value>{0}, closed</value>
+  </data>
+  <data name="HoursClosedDay" xml:space="preserve">
+    <value>Closed</value>
+  </data>
+  <data name="HoursHolidays" xml:space="preserve">
+    <value>Holidays</value>
+  </data>
+  <data name="Midnight" xml:space="preserve">
+    <value>midnight</value>
+  </data>
+  <data name="HoursFromBrand" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="HoursFromCurated" xml:space="preserve">
+    <value>Checked by Essence, {0}</value>
+  </data>
+  <data name="HoursFromEssence" xml:space="preserve">
+    <value>Checked by Essence</value>
+  </data>
+  <data name="HoursFromOsm" xml:space="preserve">
+    <value>OpenStreetMap, edited {0}</value>
+  </data>
 </root>

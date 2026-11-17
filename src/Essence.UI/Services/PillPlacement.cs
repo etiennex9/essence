@@ -7,6 +7,7 @@ namespace Essence.UI.Services;
 /// <param name="Pick">Best near you's or the trip's pick: always a pill, larger, under its flag.</param>
 /// <param name="Second">The closest, or the trip's reference: a pill under its flag when there's room.</param>
 /// <param name="Flag">The text of the flag above it, for the pick and the second.</param>
+/// <param name="Closed">It's closed now: it ranks after the open stations, whose prices are the ones worth seeing.</param>
 public sealed record PillCandidate(
     long Id,
     double Latitude,
@@ -17,7 +18,8 @@ public sealed record PillCandidate(
     bool Selected = false,
     bool Pick = false,
     bool Second = false,
-    string? Flag = null);
+    string? Flag = null,
+    bool Closed = false);
 
 /// <summary>
 /// Something the map draws over the stations, which a price shouldn't hide under: it stands on its point, <paramref name="Top"/>
@@ -41,10 +43,11 @@ public readonly record struct PillPlace(int Z, double PillFrom);
 /// From which zoom each station has room for its price. The map neither rotates nor tilts, so two points are always
 /// Δworld × 512 × 2^zoom pixels apart, and every overlap clears at a zoom worked out once, rather than on each frame of a
 /// pinch. Stations get room in order: the selected one, the pick, the second, then the ones listed cheapest first, the
-/// faded ones, and those without a price. Each shows its pill from the lowest zoom at which it overlaps no pill or dot of
-/// the stations before it, nor what the map draws over them, by more than <see cref="PillOverlapPx"/>. Zooming in only
-/// ever turns dots into prices, and from <see cref="AllPillsFromZoom"/> up every station has its pill. A price may cover
-/// the dot of a pricier station beside it, which shows zoomed in: more prices, the owner's choice over every dot in sight.
+/// faded ones, the closed ones (listed, then faded), and those without a price. Each shows its pill from the lowest zoom
+/// at which it overlaps no pill or dot of the stations before it, nor what the map draws over them, by more than
+/// <see cref="PillOverlapPx"/>. Zooming in only ever turns dots into prices, and from <see cref="AllPillsFromZoom"/> up
+/// every station has its pill. A price may cover the dot of a pricier station beside it, which shows zoomed in: more
+/// prices, the owner's choice over every dot in sight.
 /// </summary>
 public static class PillPlacement
 {
@@ -159,7 +162,7 @@ public static class PillPlacement
     }
 
     private static int Rank(PillCandidate c) =>
-        c.Selected ? 0 : c.Pick ? 1 : c.Second ? 2 : c.PriceCents is null ? 5 : c.Dimmed ? 4 : 3;
+        c.Selected ? 0 : c.Pick ? 1 : c.Second ? 2 : c.PriceCents is null ? 7 : (c.Closed ? 5 : 3) + (c.Dimmed ? 1 : 0);
 
     /// <summary>Web Mercator, the whole world from 0 to 1, y down.</summary>
     private static (double X, double Y) World(double latitude, double longitude) =>

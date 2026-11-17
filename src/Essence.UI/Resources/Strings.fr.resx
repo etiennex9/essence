@@ -1038,4 +1038,61 @@
   <data name="TripFromPlace" xml:space="preserve">
     <value>Planifié à partir de {0}.</value>
   </data>
+  <data name="Hours" xml:space="preserve">
+    <value>Heures d’ouverture</value>
+  </data>
+  <data name="OpenUntil" xml:space="preserve">
+    <value>Ouvert jusqu’à {0}</value>
+  </data>
+  <data name="OpenUntilDay" xml:space="preserve">
+    <value>Ouvert jusqu’au {0} à {1}</value>
+  </data>
+  <data name="OpenNow" xml:space="preserve">
+    <value>Ouvert</value>
+  </data>
+  <data name="Open24h" xml:space="preserve">
+    <value>Ouvert 24 h sur 24</value>
+  </data>
+  <data name="ClosedOpensAt" xml:space="preserve">
+    <value>Fermé · ouvre à {0}</value>
+  </data>
+  <data name="ClosedOpensDayAt" xml:space="preserve">
+    <value>Fermé · ouvre {0} à {1}</value>
+  </data>
+  <data name="ClosesAt" xml:space="preserve">
+    <value>Ferme à {0}</value>
+  </data>
+  <data name="HoursUnknown" xml:space="preserve">
+    <value>Heures inconnues</value>
+  </data>
+  <data name="HolidayHoursMayDiffer" xml:space="preserve">
+    <value>Jour férié : les heures peuvent différer</value>
+  </data>
+  <data name="TemporarilyClosed" xml:space="preserve">
+    <value>Fermé temporairement</value>
+  </data>
+  <data name="MarkerClosed" xml:space="preserve">
+    <value>{0}, fermé</value>
+  </data>
+  <data name="HoursClosedDay" xml:space="preserve">
+    <value>Fermé</value>
+  </data>
+  <data name="HoursHolidays" xml:space="preserve">
+    <value>Jours fériés</value>
+  </data>
+  <data name="Midnight" xml:space="preserve">
+    <value>minuit</value>
+  </data>
+  <data name="HoursFromBrand" xml:space="preserve">
+    <value>{0}</value>
+  </data>
+  <data name="HoursFromCurated" xml:space="preserve">
+    <value>Vérifiées par Essence, {0}</value>
+  </data>
+  <data name="HoursFromEssence" xml:space="preserve">
+    <value>Vérifiées par Essence</value>
+  </data>
+  <data name="HoursFromOsm" xml:space="preserve">
+    <value>OpenStreetMap, modifiées en {0}</value>
+  </data>
 </root>

@@ -12,20 +12,20 @@ and shows them on a map of nearby stations.
 | `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. |
 | `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
 | `src/Essence.Contracts` | The API's response records and the release notes', shared by the API, the UI and the release tool. |
-| `src/Essence.Ranking` | Which station to fill up at: costs, savings, the pick and its rules, the search area; for trips, the route's corridor, km along it, detours and the range; the OSRM and Photon clients, the address search's labels, and Québec's boundary. No dependencies; used by the API. |
+| `src/Essence.Ranking` | Which station to fill up at: costs, savings, the pick and its rules, the search area; for trips, the route's corridor, km along it, detours and the range; the OSRM and Photon clients, the address search's labels, and Québec's boundary; which source's opening hours a station shows (`HoursPrecedence`). Only `Essence.Hours` as a dependency; used by the API. |
 | `src/Essence.Hours` | Stations' opening hours: OpenStreetMap's `opening_hours`, which every source's hours are put in, read (refusing what can't be told for sure) and written one way; Québec's time zones and holidays; whether a station is open, closes soon or is closed when the driver gets there. No dependencies, and trimmable for the web app. |
 | `src/Essence.Routing` | The routing image: OSRM with Essence's car profile, which builds and refreshes Québec's road data itself (see [Routing and address search](#routing-and-address-search)). |
 | `src/Essence.Geocoding` | The address search image: Photon, which builds and refreshes its index of Québec's places itself. |
 | `src/Essence.Supervisor` | The supervisor both of those images run: it builds their data, serves it, refreshes it, retries, and reports its progress at `:9090/status`. |
-| `src/Essence.UI` | Razor class library: the map page, the station details pane and everything behind them. Shared by the web app and the Android app. |
+| `src/Essence.UI` | Razor class library: the map page, the station details pane and everything behind them, stations' hours included (with `Essence.Hours`). Shared by the web app and the Android app. |
 | `src/Essence.Web` | Blazor WebAssembly host for `Essence.UI`, served as static files by nginx. See [its README](src/Essence.Web/README.md). |
 | `src/Essence.Mobile` | The Android app: a .NET MAUI Blazor Hybrid host for `Essence.UI`, with home-screen widgets. Not in `Essence.slnx`: see [its README](src/Essence.Mobile/README.md). |
 | `tools/Essence.Release` | Run by the publish and Android workflows: dates each release by the day it landed on `main` and writes the apps' changelog (see [Versions](#versions)). |
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. The hours: Costco's locator against a trimmed real answer, the curated rules, days and times as the locators write them, matching, the gate, the weekly night schedule across daylight time and the retries, the rows' diff, the cache, the runs' history, the settings. |
-| `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM and Photon clients against stub servers; the address search's labels and filtering; Québec's boundary at its borders. |
+| `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM and Photon clients against stub servers; the address search's labels and filtering; Québec's boundary at its borders; which source's hours a station shows, stale sources and what's trusted. |
 | `tests/Essence.Hours.Tests` | xUnit unit tests: the sources' hours, strict and lenient, what's refused and why, the canonical rule and its round trip, the week's groups; open, closing soon and closed, past midnight and across daylight time; the holidays, Easter and the cautions; the time zones at their borders, and Canada's rule against the system's zones. |
-| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked). |
-| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the station shown in Best near you and on the way, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations. |
+| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked); the stations' hours as served, when the snapshot loads them again, and the 304 rule with the hours. |
+| `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the station shown in Best near you and on the way, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations; stations' hours as shown (open, closing soon, closed, the week, the source) in the station's time zone, closed markers, the hours on the Favorites widget and rows. |
 | `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
 The full design and its rationale are in [docs/PLAN.md](docs/PLAN.md).
@@ -102,6 +102,11 @@ docker compose up -d postgres migrate ingest api
 dotnet watch --project src/Essence.Web
 ```
 
+To check stations' hours at another time of day, add `?now=` and a moment with its offset to the page's address, e.g.
+<http://localhost:5173/?now=2026-11-11T21:15:00-05:00>: the app's clock starts there and moves on with the real one. Only
+a Debug build in the Development environment reads it (`src/Essence.Web/SimulatedTime.cs`); the prices' refreshes keep the
+real clock.
+
 To run an app outside Docker, give it a connection string, e.g.
 `ConnectionStrings__Essence="Host=localhost;Database=essence;Username=essence_writer;Password=…"`.
 In the Development environment, logs are plain text and the ingest archive goes to `./data/archive`.
@@ -148,7 +153,8 @@ The feed says every station is "En opération", so whether one is open has to co
 ingest (`src/Essence.Ingest/Hours`) fetches them from the brands, matches them to the feed's stations, and keeps one row per
 station and source. Every source's hours are put in OpenStreetMap's `opening_hours`, made canonical by `Essence.Hours`
 (`Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30`); hours a source writes in a way that can't be read for sure leave that station
-out, with a warning in the log, rather than being guessed. The API and the map don't use them yet.
+out, with a warning in the log, rather than being guessed. The API serves one source's hours per station (see **Which hours
+show**), and the app shows them.
 
 | Source | What it fetches | Matched to |
 |---|---|---|
@@ -197,14 +203,29 @@ out, with a warning in the log, rather than being guessed. The API and the map d
 - **Health.** `/hours/sources` says how each source is going, and `/health`'s `hours` check is `Degraded` when a source
   that has run has had no success in `Health:HoursStaleAfterDays` (21) days, or none ever. Its hours still show then,
   but are stale.
+- **Which hours show.** The API keeps each station's chosen hours with its snapshot of the stations
+  (`HoursPrecedence` in `src/Essence.Ranking`): Costco's own, then `curated`, then (once they're fetched) Couche-Tard's
+  (`circlek`), Ultramar's and Shell's, then OpenStreetMap's (`osm`, confirmed matches first). A stale source comes after
+  every fresh one, so a stale Costco gives way to the curated rule; `curated` never goes stale. A row without a rule, or
+  with one that can't be read, doesn't count. The hours are `trusted` when they're a brand's or Essence's from a fresh
+  source: only those will ever leave a closed station out of Best near you. OpenStreetMap's, and a stale source's, are
+  only shown. The snapshot is loaded again when an hours run changed rows (`succeeded`, `rematched`, `disabled` with rows
+  removed), when a success makes a stale source count again (`unchanged`), and when a source goes stale.
+- **In the app.** The hours are read in the station's own time zone (Eastern, or Atlantic on the Îles-de-la-Madeleine),
+  never the device's. A station's details say "Open until 9:30 p.m." (amber in its last 30 minutes), "Closed · opens
+  6:00 a.m.", "Open 24 hours" or "Temporarily closed" on the line under its address, warn when a holiday's hours may
+  differ, and list the week with where the hours come from, or "Hours unknown". The map's pill of a station closed now is
+  grey, and gets room for its price after the open ones; Favorites and the comparison say "Closed", or "Closes 9:30 p.m."
+  in its last 30 minutes, and the Favorites widget says when a favorite closes within 90 minutes of its refresh, or that
+  it's closed.
 
 ## API
 
 | Endpoint | |
 |---|---|
 | `GET /stations?region&brand&active&q&page&pageSize` | Stations, paged. `q` searches the name, address and postal code. |
-| `GET /stations/{id}` | One station with its current prices. |
-| `GET /stations/nearby?lat&lon&radiusKm=5&fuel&limit=20` | Active stations within a radius, closest first. |
+| `GET /stations/{id}` | One station with its current prices and opening hours (`hours`, null when unknown). |
+| `GET /stations/nearby?lat&lon&radiusKm=5&fuel&limit=20` | Active stations within a radius, closest first, with their opening hours. |
 | `GET /stations/best?lat&lon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&radiusKm=10` | Where to fill up near a point: the pick, the closest, the cheapest and a few others that save (see below). |
 | `GET /trips/best?fromLat&fromLon&toLat&toLon&fuel&fillL=40&per100Km=8.5&costco=false&maxDetourMin=10&rangeKm&spareKm=30` | Where to fill up on the way to a destination: the route, where to stop, and the stations along it ranked by detour (see below). |
 | `GET /places/search?q&lat&lon&lang=fr` | Places in Québec matching what was typed, at most 5, those near `lat`,`lon` first (see below). |
@@ -257,7 +278,15 @@ estimates, and `/trips/best` and `/places/*` answer 503 with `service`, `state`,
 
 `/stations/{id}`, `/stations/nearby`, `/stations/best` and `/trips/best` send `Last-Modified`: when the latest import was fetched. The map refreshes its prices
 about 5 min 20 s after that time, which is when the next import should be in, and more often while that import is late. A request
-whose `If-Modified-Since` is still current gets a 304.
+whose `If-Modified-Since` is still current gets a 304, unless the hours changed after it: they change apart from the
+feed, so `Last-Modified` stays the feed's, but the latest hours run (one that changed rows, or any success, which can end
+a stale spell) and the latest moment a source went stale, rounded up to the second, must be no newer either.
+
+`hours`, on `/stations/{id}` and `/stations/nearby`, is the station's opening hours: `rule`, in OpenStreetMap's
+`opening_hours` as `Essence.Hours` writes it (`Mo-Fr 06:00-21:30; Sa-Su 06:00-20:30`, `24/7`) and in the station's time
+zone; `source` (`costco`, `curated`, `circlek`, `ultramar`, `shell` or `osm`; a client shows one it doesn't know as it
+is); `trusted` and `confirmed` (see [Opening hours](#opening-hours)); `checkedAt`, when the source says they were last
+checked; `link`, where to check them; and `temporarilyClosed`.
 
 Fuel names accept or omit accents (`Regulier` = `Régulier`). Errors are ProblemDetails. Requests are rate limited per client IP
 (`RateLimiting:PermitLimit` per `RateLimiting:WindowSeconds`, 120/60 s by default); `/places/` has a window of its own

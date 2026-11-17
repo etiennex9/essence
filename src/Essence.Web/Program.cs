@@ -19,6 +19,20 @@ if (apiUri is null)
     throw new InvalidOperationException($"Api:BaseUrl must be a URL or a path (got \"{apiBaseUrl}\").");
 }
 
+#if DEBUG
+// Development only, in a Debug build (dotnet watch): ?now=2026-11-11T21:15:00-05:00 on the page's address starts the app's
+// clock at that moment, moving on with the real one, to check stations' hours by hand at another time of day. Registered
+// before AddEssenceUI, whose TimeProvider.System then stands aside. A published app has none of it.
+if (builder.HostEnvironment.IsDevelopment())
+{
+    builder.Services.AddSingleton<TimeProvider>(services =>
+    {
+        var address = services.GetRequiredService<Microsoft.AspNetCore.Components.NavigationManager>().Uri;
+        return SimulatedTime.Parse(address) is { } start ? new SimulatedTime(start) : TimeProvider.System;
+    });
+}
+#endif
+
 var defaults = new EssenceUIOptions { ApiBaseUrl = apiUri };
 builder.Services.AddEssenceUI(new EssenceUIOptions
 {
@@ -29,4 +43,9 @@ builder.Services.AddEssenceUI(new EssenceUIOptions
     ReleaseNotesUrl = new Uri(new Uri(builder.HostEnvironment.BaseAddress), "release/"),
 });
 
-await builder.Build().RunAsync();
+var host = builder.Build();
+#if DEBUG
+// The clock reads the address it opened at now, before the page changes it.
+_ = host.Services.GetRequiredService<TimeProvider>();
+#endif
+await host.RunAsync();

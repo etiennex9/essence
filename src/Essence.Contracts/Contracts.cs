@@ -17,6 +17,37 @@ public sealed record StationSummary(
 /// <param name="PriceCents">Cents per litre; null when unavailable.</param>
 public sealed record CurrentPriceDto(string Fuel, decimal? PriceCents, bool IsAvailable, DateTimeOffset Since);
 
+/// <summary>
+/// A station's opening hours, as the API chose them among its sources: Costco's own over hours written down by Essence,
+/// those over Couche-Tard's, Ultramar's and Shell's, then OpenStreetMap's (confirmed first), and a source that's gone stale
+/// after the fresh ones.
+/// </summary>
+/// <param name="Rule">
+/// The canonical opening_hours that Essence.Hours reads (<c>OpeningHours.Parse</c>): <c>Mo-Fr 06:00-21:30; Sa-Su
+/// 06:00-20:30</c>, <c>24/7</c>. In the station's time zone.
+/// </param>
+/// <param name="Source">
+/// Where they come from: <c>costco</c>, <c>curated</c> (written down by hand and checked by Essence), <c>circlek</c>,
+/// <c>ultramar</c>, <c>shell</c> or <c>osm</c> (OpenStreetMap). Clients show a source they don't know as it is.
+/// </param>
+/// <param name="Trusted">
+/// Sure enough to leave a station that's closed out of a recommendation: a brand's hours, or Essence's, from a source that
+/// isn't stale (a success within 21 days). OpenStreetMap's, and a stale source's, are only shown.
+/// </param>
+/// <param name="Confirmed">The source's place is surely this station: its address, its brand's rule, or a matching postal code or house number.</param>
+/// <param name="CheckedAt">When the source says the hours were last checked (or edited), if it says.</param>
+/// <param name="Link">Where a person can check the hours.</param>
+/// <param name="TemporarilyClosed">The source says the station is closed for now, whatever its hours.</param>
+public sealed record StationHours(
+    string Rule,
+    string Source,
+    bool Trusted,
+    bool Confirmed,
+    DateTimeOffset? CheckedAt,
+    string? Link,
+    bool TemporarilyClosed = false);
+
+/// <param name="Hours">Its opening hours; null when no source has them (hours unknown).</param>
 public sealed record StationDetail(
     long Id,
     string? Name,
@@ -31,8 +62,10 @@ public sealed record StationDetail(
     DateTimeOffset FirstSeenAt,
     DateTimeOffset LastSeenAt,
     DateTimeOffset UpdatedAt,
-    IReadOnlyList<CurrentPriceDto> Prices);
+    IReadOnlyList<CurrentPriceDto> Prices,
+    StationHours? Hours = null);
 
+/// <param name="Hours">Its opening hours; null when no source has them (hours unknown).</param>
 public sealed record NearbyStation(
     long Id,
     string? Name,
@@ -43,7 +76,8 @@ public sealed record NearbyStation(
     double Latitude,
     double Longitude,
     double DistanceKm,
-    IReadOnlyList<CurrentPriceDto> Prices);
+    IReadOnlyList<CurrentPriceDto> Prices,
+    StationHours? Hours = null);
 
 public sealed record PriceListing(
     long StationId,

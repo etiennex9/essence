@@ -1,0 +1,38 @@
+@inject IStringLocalizer<Strings> L
+
+@* A station's week in its details (StationHoursView): the days in a row with the same hours, today's in bold, and where
+   the hours come from; or that they're unknown. The parent gives the section its heading. *@
+@if (View.Kind == HoursKind.Unknown)
+{
+    <p class="unknown">@L["HoursUnknown"]</p>
+}
+else
+{
+    <dl class="week">
+        @foreach (var line in View.Week)
+        {
+            <div class="@(line.Today ? "is-today" : null)" aria-current="@(line.Today ? "date" : null)">
+                <dt>@line.Days</dt>
+                <dd>@line.Hours</dd>
+            </div>
+        }
+    </dl>
+    @if (View.Source is { } source)
+    {
+        <p class="source">
+            @if (View.SourceLink is { } link)
+            {
+                <a href="@link" target="_blank" rel="noopener">@source</a>
+            }
+            else
+            {
+                @source
+            }
+        </p>
+    }
+}
+
+@code {
+    [Parameter, EditorRequired]
+    public HoursView View { get; set; } = HoursView.Unknown;
+}
