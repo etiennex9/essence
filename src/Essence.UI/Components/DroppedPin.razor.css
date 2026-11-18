@@ -88,13 +88,19 @@
     font-variant-numeric: tabular-nums;
 }
 
+/* ✎ (a saved place's) and Close, in the corner. */
+.actions {
+    flex: none;
+    display: flex;
+    margin: -10px -10px 0 0;
+}
+
 .icon-btn {
     flex: none;
     display: grid;
     place-items: center;
     width: 44px;
     height: 44px;
-    margin: -10px -10px 0 0;
     border: 0;
     border-radius: 50%;
     background: transparent;
@@ -105,6 +111,11 @@
 .icon-btn:hover {
     background: var(--ess-hover);
     color: var(--ess-text);
+}
+
+.icon-btn.is-on {
+    background: var(--ess-selected);
+    color: var(--ess-accent);
 }
 
 .group {
@@ -193,6 +204,13 @@
     background: var(--ess-hover);
 }
 
+/* What the place being edited is saved as. */
+.saves button.is-on {
+    border-color: var(--ess-accent);
+    background: var(--ess-selected);
+    color: var(--ess-accent);
+}
+
 .naming {
     display: flex;
     flex-wrap: wrap;
@@ -249,6 +267,55 @@
     margin: 10px 0 0;
     font-size: 13px;
     color: var(--ess-text-muted);
+}
+
+/* How the pin moves: fingers drag it or press and hold, mice drag it or right-click. */
+.hint {
+    margin: 10px 0 0;
+    font-size: 12.5px;
+    color: var(--ess-text-muted);
+}
+
+.hint .mouse {
+    display: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .hint .touch {
+        display: none;
+    }
+
+    .hint .mouse {
+        display: inline;
+    }
+}
+
+/* Save and Cancel, then Forget at the far end. */
+.edit-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.forget {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 44px;
+    margin: 0 -6px 0 auto;
+    padding: 0 8px;
+    border: 0;
+    border-radius: 10px;
+    background: none;
+    color: var(--ess-text-muted);
+    font: 500 14px var(--ess-font);
+    cursor: pointer;
+}
+
+.forget:hover {
+    background: var(--ess-hover);
+    color: var(--ess-text);
 }
 
 .pin-card button:focus-visible,

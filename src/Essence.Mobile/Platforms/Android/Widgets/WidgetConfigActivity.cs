@@ -74,7 +74,7 @@ public sealed class WidgetConfigActivity : AppCompatActivity
         var saved = places.Places.Select(p => new Choice(PlaceName(p), WidgetPlaceRef.For(p))).ToList();
         if (kind == WidgetKind.BestNear)
         {
-            AddGroup(root, _l["WidgetRankFrom"], [you, .. saved], config.Origin ?? WidgetRefresher.DefaultOrigin);
+            AddGroup(root, _l["WidgetRankFrom"], [you, .. saved], (config.Origin ?? WidgetRefresher.DefaultOrigin).Current(places));
         }
         else if (saved.Count == 0)
         {
@@ -86,8 +86,8 @@ public sealed class WidgetConfigActivity : AppCompatActivity
         else
         {
             var (from, to) = WidgetRefresher.DefaultRoute(config, places);
-            AddGroup(root, _l["WidgetFrom"], [you, .. saved], from ?? saved[0].Place);
-            AddGroup(root, _l["WidgetTo"], saved, to ?? saved[^1].Place);
+            AddGroup(root, _l["WidgetFrom"], [you, .. saved], from?.Current(places) ?? saved[0].Place);
+            AddGroup(root, _l["WidgetTo"], saved, to?.Current(places) ?? saved[^1].Place);
         }
 
         root.AddView(YouNote());

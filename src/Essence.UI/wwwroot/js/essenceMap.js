@@ -1,7 +1,8 @@
-// The MapLibre map behind MapInterop.cs. C# decides what to show (markers and a trip's route arrive preformatted, each
-// marker with the zoom from which it has room for its price); this module draws it and reports what the user does: map
-// moves, marker clicks, a press and hold on the map, a click on the map (which shrinks a phone's sheet, or closes what's
-// open), Escape, and when the page is hidden or shown again. It keeps the part of the map a pane covers as the map's
+// The MapLibre map behind MapInterop.cs. C# decides what to show (markers, the saved places' icons and a trip's route
+// arrive preformatted, each marker with the zoom from which it has room for its price); this module draws it and reports
+// what the user does: map moves, clicks on a marker or a saved place, a press and hold on the map, the pin dragged (while
+// a saved place is edited), a click on the map (which shrinks a phone's sheet, or closes what's open), Escape, and when
+// the page is hidden or shown again. It keeps the part of the map a pane covers as the map's
 // padding, so its center, and what the page centers or fits, are in the part left uncovered. It also reloads the page
 // for a new release, keeping the view (UpdateCheck.cs): here
 // rather than in a module of its own, which a tab would import from the new release only when it's time to reload.
@@ -30,6 +31,11 @@ const FIT_LABEL_PX = 35;
 const FIT_TIGHT_PX = 16;
 const FIT_ROOM_PX = 240;
 
+// The pin (.ess-pin), from its tip, and how far clear of the pin's card it's kept when its card would cover it.
+const PIN_HALF_PX = 15;
+const PIN_TALL_PX = 30;
+const PIN_CLEAR_PX = 8;
+
 // Press and hold (a long press on Android, a touch timer on iOS, which has none, the left mouse button held, or a
 // right-click) picks a destination. A finger or mouse that moves farther than this, or a second finger, is panning or
 // zooming instead.
@@ -46,8 +52,14 @@ const HOLD_CLICK_MS = 700;
 // far below it: a pinch resting on that zoom doesn't make it blink.
 const PILL_HYSTERESIS_ZOOM = 0.1;
 
-// What a press and hold on doesn't drop a pin: a marker, or the map's own buttons.
-const NOT_HELD = ".ess-marker, .maplibregl-ctrl";
+// What a click on isn't a click on the map: a station's marker, a saved place's icon, or the pin (which takes the pointer
+// only while it can be dragged).
+const OWN_CLICKS = ".ess-marker, .ess-place, .ess-pin";
+
+// What a press and hold on doesn't drop a pin: those, or the map's own buttons.
+const NOT_HELD = `${OWN_CLICKS}, .maplibregl-ctrl`;
+
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 // A trip's route (setRoute): GeoJSON sources and layers drawn over the roads, under the labels.
 const ROUTE_SOURCE = "ess-route";
@@ -142,6 +154,22 @@ function cssColor(name, fallback) {
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback;
 }
 
+// A saved place's icon (a house, a briefcase or a pin): C# gives its path data, in a 24×24 view box.
+function placeIcon(path) {
+    const svg = document.createElementNS(SVG_NS, "svg");
+    for (const [name, value] of Object.entries({
+        viewBox: "0 0 24 24", width: "14", height: "14", "aria-hidden": "true", fill: "none", stroke: "currentColor",
+        "stroke-width": "2.2", "stroke-linecap": "round", "stroke-linejoin": "round",
+    })) {
+        svg.setAttribute(name, value);
+    }
+
+    const shape = document.createElementNS(SVG_NS, "path");
+    shape.setAttribute("d", path);
+    svg.append(shape);
+    return svg;
+}
+
 // A marker with a text label over a stem: the destination, or where the range runs out.
 function labelElement(className, text) {
     const element = document.createElement("div");
@@ -172,6 +200,7 @@ export function createMap(container, options, dotnet) {
     map.addControl(new NavigationControl({ showCompass: false }), "bottom-right");
 
     const markers = new Map(); // id → { marker, element, key, z, pillFrom, pill }
+    const places = new Map(); // a saved place's id → { marker, element, key }
     let selectedId = null;
     let userMarker = null;
 
@@ -246,7 +275,7 @@ export function createMap(container, options, dotnet) {
             return;
         }
 
-        if (!e.originalEvent.target.closest?.(".ess-marker")) {
+        if (!e.originalEvent.target.closest?.(OWN_CLICKS)) {
             call("OnMapClicked");
         }
     }
@@ -834,14 +863,101 @@ export function createMap(container, options, dotnet) {
                 () => new Marker({ element: labelElement("ess-range-end", label), anchor: "bottom" }));
         },
 
-        // The pin a press and hold dropped; a null lat removes it.
-        setPin(lat, lon) {
+        // The pin a press and hold dropped, or a saved place's; a null lat removes it. While it's draggable (the saved
+        // place is edited), C# hears where it's dropped.
+        setPin(lat, lon, draggable) {
             pinMarker = placeMarker(pinMarker, lat, lon, () => {
                 const element = document.createElement("div");
                 element.className = "ess-pin";
                 element.setAttribute("aria-hidden", "true");
-                return new Marker({ element, anchor: "bottom" });
+                const marker = new Marker({ element, anchor: "bottom" });
+                marker.on("dragend", () => {
+                    const { lat, lng } = marker.getLngLat();
+                    call("OnPinMoved", lat, lng);
+                });
+
+                // MapLibre ends a drag at a mouseup on the map only: let go over the card, a pane or the toolbar, the pin
+                // would stay stuck to the mouse. Such a mouseup ends it too, where the pin last was over the map.
+                element.addEventListener("mousedown", () => {
+                    window.addEventListener("mouseup", e => {
+                        if (!map.getCanvasContainer().contains(e.target)) {
+                            map.fire("mouseup");
+                        }
+                    }, { once: true, capture: true });
+                });
+                return marker;
             });
+            pinMarker?.setDraggable(draggable === true);
+            const element = pinMarker?.getElement();
+            element?.classList.toggle("is-draggable", draggable === true);
+            // What a drag left inline (none while dragging, auto after) goes: the stylesheet says whether it takes the pointer.
+            element?.style.removeProperty("pointer-events");
+        },
+
+        // The pin's card covers the pin, maybe (a phone's spans the screen at the bottom, a wide screen's stands at the
+        // left, and editing a saved place makes it taller): the map pans the pin into the middle of the room above the
+        // card, or beside it, so it can be seen and dragged. Nothing moves when it's in view.
+        revealPin() {
+            const card = document.querySelector(".pin-card");
+            if (!pinMarker || !card) {
+                return;
+            }
+
+            const box = container.getBoundingClientRect();
+            const c = card.getBoundingClientRect();
+            const [left, right, top, bottom] = [c.left - box.left, c.right - box.left, c.top - box.top, c.bottom - box.top];
+            const p = map.project(pinMarker.getLngLat());
+            const covered = p.x + PIN_HALF_PX + PIN_CLEAR_PX > left && p.x - PIN_HALF_PX - PIN_CLEAR_PX < right
+                && p.y + PIN_CLEAR_PX > top && p.y - PIN_TALL_PX - PIN_CLEAR_PX < bottom;
+            if (!covered) {
+                return;
+            }
+
+            const target = c.width > box.width / 2
+                ? { x: p.x, y: (FIT_TOP_PX + top + PIN_TALL_PX) / 2 }
+                : { x: (right + box.width - map.getPadding().right) / 2, y: p.y };
+            lastAuto = null;
+            map.panBy([p.x - target.x, p.y - target.y]);
+        },
+
+        // The saved places' icons: the map shows exactly `models`, each a button that opens its place's card.
+        setPlaces(models) {
+            const keep = new Set();
+            for (const model of models) {
+                keep.add(model.id);
+                let entry = places.get(model.id);
+                if (!entry) {
+                    const element = document.createElement("button");
+                    element.type = "button";
+                    element.className = "ess-place";
+                    element.addEventListener("click", e => {
+                        e.stopPropagation();
+                        call("OnPlaceClicked", model.id);
+                    });
+                    const marker = new Marker({ element, anchor: "bottom" }).setLngLat([model.lon, model.lat]).addTo(map);
+                    entry = { marker, element, key: "" };
+                    places.set(model.id, entry);
+                }
+
+                const key = JSON.stringify(model);
+                if (entry.key !== key) {
+                    entry.key = key;
+                    entry.marker.setLngLat([model.lon, model.lat]);
+                    entry.element.setAttribute("aria-label", model.label);
+                    entry.element.title = model.label;
+                    const icon = document.createElement("span");
+                    icon.className = "ess-place-icon";
+                    icon.append(placeIcon(model.icon));
+                    entry.element.replaceChildren(icon);
+                }
+            }
+
+            for (const [id, entry] of places) {
+                if (!keep.has(id)) {
+                    entry.marker.remove();
+                    places.delete(id);
+                }
+            }
         },
 
         showUserLocation(lat, lon) {
@@ -932,6 +1048,7 @@ export function createMap(container, options, dotnet) {
             document.removeEventListener("visibilitychange", onVisibilityChange);
             map.remove();
             markers.clear();
+            places.clear();
         },
     };
 }

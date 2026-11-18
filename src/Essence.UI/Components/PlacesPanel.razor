@@ -489,7 +489,8 @@
             {
                 if ((await Addresses.LookupAsync(place.Point, Language, _cts.Token)).Place is { } found)
                 {
-                    await Places.SetAddressAsync(place.Id, PlaceAddresses.ShortName(found));
+                    // Not if it was moved meanwhile (its pin's card): it's somewhere else now.
+                    await Places.SetAddressAsync(place.Id, PlaceAddresses.ShortName(found), place.Point);
                 }
             }
             catch (OperationCanceledException)

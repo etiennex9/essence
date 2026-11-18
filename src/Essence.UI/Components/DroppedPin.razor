@@ -5,30 +5,79 @@
 @inject ServicesStatus Services
 @inject IStringLocalizer<Strings> L
 
-@* The card for a pin dropped by a press and hold on the map (a long press, the mouse's button held, or a right-click): its
-   address, Best near it or on the way there, or save it as Home, Work, or a place with a name. Past Québec's border it says
-   so, and offers none of them. While the address search is down, the pin has no address: its coordinates show, and the
+@* The card for a pin dropped by a press and hold on the map (a long press, the mouse's button held, or a right-click), or
+   for a saved place whose icon was clicked: its address, Best near it or on the way there, or save it as Home, Work, or a
+   place with a name. A saved place's card has ✎ instead, which edits what it's saved as, its name and where it is (its
+   pin is dragged, or a press and hold moves it), or forgets it. Past Québec's border it says so, and offers none of them,
+   bar forgetting a saved place. While the address search is down, the pin has no address: its coordinates show, and the
    rest works. *@
 <section class="pin-card" role="dialog" aria-labelledby="ess-pin-title" tabindex="-1" @ref="_element">
     <div class="top">
         @* Read out when the address comes, or that the pin is outside Québec. *@
         <span class="tx" aria-live="polite">
             <span class="kicker">@Kicker</span>
-            <b id="ess-pin-title" class="@(_lookup is null ? "is-pending" : null)">@Title</b>
+            <b id="ess-pin-title" class="@(Place is null && _lookup is null ? "is-pending" : null)">@Title</b>
             @if (Sub is { Length: > 0 } sub)
             {
                 <span class="sub">@sub</span>
             }
         </span>
-        <button type="button" class="icon-btn" @onclick="OnClose" aria-label="@L["RemovePin"]" title="@L["RemovePin"]">
-            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round"><path d="@Icons.Close" /></svg>
-        </button>
+        <span class="actions">
+            @if (Place is { } shown)
+            {
+                <button type="button" class="icon-btn @(_editing ? "is-on" : null)" @onclick="ToggleEditingAsync" @ref="_editButton"
+                        aria-pressed="@(_editing ? "true" : "false")" aria-label="@L["EditPlaceLabel", NameOf(shown)]"
+                        title="@L["EditPlaceLabel", NameOf(shown)]">
+                    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Pencil" /></svg>
+                </button>
+            }
+            @* A saved place's card only closes: its icon comes back. *@
+            <button type="button" class="icon-btn" @onclick="OnClose" aria-label="@CloseLabel" title="@CloseLabel">
+                <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                     stroke-linecap="round"><path d="@Icons.Close" /></svg>
+            </button>
+        </span>
     </div>
 
-    @* Past the border, there's nothing to plan or save. *@
-    @if (!Outside)
+    @if (Place is { } place && _editing)
     {
+        <form class="edit" @onsubmit="SaveEditAsync" aria-label="@L["EditPlaceLabel", NameOf(place)]">
+            <div class="group" role="group" aria-labelledby="ess-pin-kind">
+                <span id="ess-pin-kind" class="caption">@L["SaveAsCaption"]</span>
+                <div class="saves">
+                    @KindButton(PlaceKind.Home, L["Home"], Icons.Home)
+                    @KindButton(PlaceKind.Work, L["Work"], Icons.Work)
+                    @KindButton(PlaceKind.Other, L["OtherPlace"], Icons.Place)
+                </div>
+            </div>
+            @if (_editKind == PlaceKind.Other)
+            {
+                <div class="naming">
+                    <label for="ess-pin-name">@L["PlaceName"]</label>
+                    <input id="ess-pin-name" type="text" maxlength="@SavedPlace.MaxNameLength" autocomplete="off"
+                           placeholder="@L["PlaceNamePlaceholder"]" @bind="_name" @bind:event="oninput" @ref="_nameInput" />
+                </div>
+            }
+            <p class="hint">
+                <span class="touch">@L["MovePinTouch"]</span>
+                <span class="mouse">@L["MovePinMouse"]</span>
+            </p>
+            <div class="edit-actions">
+                <button type="submit" class="save" disabled="@(!CanSaveEdit)">@L["SavePlace"]</button>
+                <button type="button" class="link" @onclick="CancelEditAsync">@L["Cancel"]</button>
+                <button type="button" class="forget" @onclick="ForgetAsync" aria-label="@L["ForgetPlaceLabel", NameOf(place)]"
+                        title="@L["ForgetPlaceLabel", NameOf(place)]">
+                    <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                         stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Trash" /></svg>
+                    @L["Forget"]
+                </button>
+            </div>
+        </form>
+    }
+    else if (!Outside)
+    {
+        @* Past the border, there's nothing to plan or save. *@
         <div class="group" role="group" aria-labelledby="ess-pin-best">
             <span id="ess-pin-best" class="caption">@L["BestStation"]</span>
             <div class="pair">
@@ -54,43 +103,56 @@
             }
         </div>
 
-        @if (_saved is { } saved)
+        @* A saved place has ✎ instead. *@
+        @if (Place is null)
         {
-            <p class="note" role="status">@L["SavedAs", NameOf(saved)]</p>
-        }
-        else if (_naming)
-        {
-            <form class="naming" @onsubmit="SaveOtherAsync">
-                <label for="ess-pin-name">@L["PlaceName"]</label>
-                <input id="ess-pin-name" type="text" maxlength="@SavedPlace.MaxNameLength" autocomplete="off" placeholder="@L["PlaceNamePlaceholder"]"
-                       @bind="_name" @bind:event="oninput" @ref="_nameInput" />
-                <button type="submit" class="save" disabled="@string.IsNullOrWhiteSpace(_name)">@L["SavePlace"]</button>
-                <button type="button" class="link" @onclick="() => _naming = false">@L["Cancel"]</button>
-            </form>
-        }
-        else
-        {
-            <div class="group" role="group" aria-labelledby="ess-pin-save">
-                <span id="ess-pin-save" class="caption">@L["SaveAsCaption"]</span>
-                <div class="saves">
-                    <button type="button" @onclick="() => SaveAsync(PlaceKind.Home)" aria-label="@L["SaveAs", L["Home"]]">
-                        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                             stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Home" /></svg>
-                        @L["Home"]
-                    </button>
-                    <button type="button" @onclick="() => SaveAsync(PlaceKind.Work)" aria-label="@L["SaveAs", L["Work"]]">
-                        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                             stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Work" /></svg>
-                        @L["Work"]
-                    </button>
-                    <button type="button" @onclick="StartNaming" aria-label="@L["SavePlaceLabel"]">
-                        <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
-                             stroke-linecap="round"><path d="@Icons.Plus" /></svg>
-                        @L["OtherPlace"]
-                    </button>
+            @if (_naming)
+            {
+                <form class="naming" @onsubmit="SaveOtherAsync">
+                    <label for="ess-pin-name">@L["PlaceName"]</label>
+                    <input id="ess-pin-name" type="text" maxlength="@SavedPlace.MaxNameLength" autocomplete="off" placeholder="@L["PlaceNamePlaceholder"]"
+                           @bind="_name" @bind:event="oninput" @ref="_nameInput" />
+                    <button type="submit" class="save" disabled="@string.IsNullOrWhiteSpace(_name)">@L["SavePlace"]</button>
+                    <button type="button" class="link" @onclick="() => _naming = false">@L["Cancel"]</button>
+                </form>
+            }
+            else
+            {
+                <div class="group" role="group" aria-labelledby="ess-pin-save">
+                    <span id="ess-pin-save" class="caption">@L["SaveAsCaption"]</span>
+                    <div class="saves">
+                        <button type="button" @onclick="() => SaveAsync(PlaceKind.Home)" aria-label="@L["SaveAs", L["Home"]]">
+                            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Home" /></svg>
+                            @L["Home"]
+                        </button>
+                        <button type="button" @onclick="() => SaveAsync(PlaceKind.Work)" aria-label="@L["SaveAs", L["Work"]]">
+                            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round"><path d="@Icons.Work" /></svg>
+                            @L["Work"]
+                        </button>
+                        <button type="button" @onclick="StartNaming" aria-label="@L["SavePlaceLabel"]">
+                            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round"><path d="@Icons.Plus" /></svg>
+                            @L["OtherPlace"]
+                        </button>
+                    </div>
                 </div>
-            </div>
+            }
         }
+    }
+
+    @* What was just done: saved, or forgotten (with Undo). *@
+    @if (_done is { } done && !_editing)
+    {
+        <p class="note" role="status">
+            @done
+            @if (_removed is not null)
+            {
+                @(" ")
+                <button type="button" class="link" @onclick="UndoAsync">@L["Undo"]</button>
+            }
+        </p>
     }
 </section>
 
@@ -98,15 +160,30 @@
     private const string KeyboardModulePath = "./_content/Essence.UI/js/essenceKeyboard.js";
 
     private ElementReference _element;
+    private ElementReference _editButton;
     private IJSObjectReference? _keyboard;
     private bool _disposed;
     private ElementReference _nameInput;
     private GeoPoint? _shown;
-    private SavedPlace? _saved;
     private bool _naming;
     private bool _focusName;
     private bool _focusCard;
+    private bool _focusEditButton;
+
+    /// <summary>The card, just opened on a saved place or grown to edit it, may cover its pin: the map is asked to show it.</summary>
+    private bool _revealPin;
     private string _name = "";
+
+    /// <summary>The saved place the card shows (<see cref="PlaceId"/>, or the one the pin was just saved as); null for a pin.</summary>
+    private string? _placeId;
+
+    /// <summary>The saved place is being edited: what it's saved as, its name (in <see cref="_name"/>), and the pin's point.</summary>
+    private bool _editing;
+    private PlaceKind _editKind;
+
+    /// <summary>What was just done ("Saved as Home.", "Cottage forgotten."), and the place forgotten, for Undo.</summary>
+    private string? _done;
+    private RemovedPlace? _removed;
 
     /// <summary>What the address search says of the pin; null while it's asked.</summary>
     private PlaceLookup? _lookup;
@@ -114,6 +191,10 @@
 
     [Parameter, EditorRequired]
     public GeoPoint Point { get; set; }
+
+    /// <summary>The saved place whose icon was clicked: the card is that place's. Null for a pin dropped.</summary>
+    [Parameter]
+    public string? PlaceId { get; set; }
 
     /// <summary>Where the user is, if known: the card says how far the pin is.</summary>
     [Parameter]
@@ -127,7 +208,7 @@
     [Parameter]
     public EventCallback OnClose { get; set; }
 
-    /// <summary>Best on the way to the pin, or to the place it was just saved as.</summary>
+    /// <summary>Best on the way to the pin, or to the place it is.</summary>
     [Parameter]
     public EventCallback<TripDestination> OnTrip { get; set; }
 
@@ -135,53 +216,137 @@
     [Parameter]
     public EventCallback<BestOrigin> OnBestNear { get; set; }
 
+    /// <summary>The card's saved place changed: the pin was saved as one, or the one shown was forgotten (null) or brought back.</summary>
+    [Parameter]
+    public EventCallback<string?> OnPlaceChanged { get; set; }
+
+    /// <summary>The saved place is being edited, or not any more: meanwhile its pin can be dragged, and a press and hold moves it.</summary>
+    [Parameter]
+    public EventCallback<bool> OnEditingChanged { get; set; }
+
+    /// <summary>The card, opened on a saved place or grown to edit it, may cover the pin: it's to be panned out from under it.</summary>
+    [Parameter]
+    public EventCallback OnRevealPin { get; set; }
+
+    /// <summary>The pin goes back to the saved place's point: the edit was cancelled, or the place forgotten.</summary>
+    [Parameter]
+    public EventCallback<GeoPoint> OnMovePin { get; set; }
+
+    /// <summary>The saved place the card shows, as it's saved now; null once it's forgotten, here or elsewhere.</summary>
+    private SavedPlace? Place => _placeId is null ? null : Places.Places.FirstOrDefault(p => p.Id == _placeId);
+
+    /// <summary>The saved place's pin was moved away from it while it's edited: saving moves the place.</summary>
+    private bool Moved => Place is { } place && place.Point != Point;
+
     private double? DistanceKm => UserLocation is { } user ? Geo.DistanceKm(user, Point) : null;
 
     private string Coordinates => string.Create(CultureInfo.CurrentCulture, $"{Point.Latitude:0.0000}, {Point.Longitude:0.0000}");
 
     private bool Outside => _lookup?.OutsideQuebec == true;
 
-    /// <summary>"Dropped pin · ≈ 11 km from you".</summary>
-    private string Kicker =>
-        DistanceKm is { } km ? $"{L["DroppedPin"]} · {L["FromYou", L["DistanceApprox", Formatting.Km(km, CultureInfo.CurrentCulture)]]}" : L["DroppedPin"];
+    private string CloseLabel => Place is null ? L["RemovePin"] : L["Close"];
 
-    /// <summary>The address, or what's known instead: being found, outside Québec, or the coordinates.</summary>
-    private string Title => _lookup switch
+    /// <summary>"Dropped pin · ≈ 11 km from you", or "Saved place · …".</summary>
+    private string Kicker
     {
-        null => L["FindingAddress"],
-        { OutsideQuebec: true } => L["OutsideQuebec"],
-        { Place: { } place } => place.Label,
-        _ => Coordinates,
-    };
+        get
+        {
+            string kind = Place is null ? L["DroppedPin"] : L["SavedPlace"];
+            return DistanceKm is { } km ? $"{kind} · {L["FromYou", L["DistanceApprox", Formatting.Km(km, CultureInfo.CurrentCulture)]]}" : kind;
+        }
+    }
 
-    private string? Sub => _lookup switch
+    /// <summary>A saved place's name; else the address, or what's known instead: being found, outside Québec, or the coordinates.</summary>
+    private string Title => Place is { } place
+        ? NameOf(place)
+        : _lookup switch
+        {
+            null => L["FindingAddress"],
+            { OutsideQuebec: true } => L["OutsideQuebec"],
+            { Place: { } found } => found.Label,
+            _ => Coordinates,
+        };
+
+    /// <summary>
+    /// Under a saved place's name, its address, or the address of where its pin was moved to; under a pin's address, its
+    /// town, or why there's nothing.
+    /// </summary>
+    private string? Sub
     {
-        null => Coordinates,
-        { OutsideQuebec: true } => L["OutsideQuebecWhy"],
-        { Place: { } place } => place.Detail,
-        _ => null,
-    };
+        get
+        {
+            if (Place is { } place)
+            {
+                return !Moved && place.Address is { } address ? address : _lookup switch
+                {
+                    null => Moved ? L["FindingAddress"] : Coordinates,
+                    { OutsideQuebec: true } => L["OutsideQuebec"],
+                    _ => Address ?? Coordinates,
+                };
+            }
+
+            return _lookup switch
+            {
+                null => Coordinates,
+                { OutsideQuebec: true } => L["OutsideQuebecWhy"],
+                { Place: { } found } => found.Detail,
+                _ => null,
+            };
+        }
+    }
 
     /// <summary>The pin's address, short, to keep with the place saved or the trip; null when it isn't known.</summary>
     private string? Address => _lookup?.Place is { } place ? PlaceAddresses.ShortName(place) : null;
+
+    /// <summary>A named place needs its name; a place moved past Québec's border can't be saved there.</summary>
+    private bool CanSaveEdit => !(Moved && Outside) && (_editKind != PlaceKind.Other || !string.IsNullOrWhiteSpace(_name));
 
     private static string Language => CultureInfo.CurrentUICulture.TwoLetterISOLanguageName == "fr" ? "fr" : "en";
 
     protected override void OnInitialized()
     {
         Services.Changed += OnServicesChanged;
+        Places.Changed += OnPlacesChanged;
     }
 
     private void OnServicesChanged() => InvokeAsync(StateHasChanged);
 
+    /// <summary>The place shown renamed, moved or forgotten elsewhere (Your places): the card follows, and an edit of it ends once it's gone.</summary>
+    private void OnPlacesChanged() => InvokeAsync(async () =>
+    {
+        if (_editing && Place is null)
+        {
+            _editing = false;
+            await OnEditingChanged.InvokeAsync(false);
+        }
+
+        StateHasChanged();
+    });
+
     protected override void OnParametersSet()
     {
-        if (_shown != Point)
+        if (_shown != Point || _placeId != PlaceId)
         {
-            // Another pin: the card starts over, and takes the focus, so the keyboard's path leads here.
-            (_shown, _saved, _naming, _name, _focusCard, _lookup) = (Point, null, false, "", true, null);
+            // Another pin, or another place's: the card starts over, and takes the focus, so the keyboard's path leads here.
+            (_shown, _placeId, _editing, _naming, _name, _done, _removed, _focusCard, _lookup, _revealPin) =
+                (Point, PlaceId, false, false, "", null, null, true, null, PlaceId is not null);
             _ = LookUpAsync(Point);
         }
+    }
+
+    /// <summary>
+    /// The saved place's pin moved while it's edited (dragged, or a press and hold elsewhere), or went back to it: the edit
+    /// goes on, and the new point's address is asked. Called before the new <see cref="Point"/> comes in.
+    /// </summary>
+    public void MovedTo(GeoPoint point)
+    {
+        if (point == _shown)
+        {
+            return;
+        }
+
+        (_shown, _lookup) = (point, null);
+        _ = LookUpAsync(point);
     }
 
     /// <summary>Asks what the pin is called; a newer pin cancels the question for the older one.</summary>
@@ -199,17 +364,17 @@
             return;
         }
 
-        if (cts.IsCancellationRequested || point != Point)
+        if (cts.IsCancellationRequested || point != _shown)
         {
             return;
         }
 
         _lookup = lookup;
 
-        // Saved before the address came: it gets it now.
-        if (_saved is { Address: null } saved && Address is { } address)
+        // Saved there before the address came, or saved without one long ago: it gets it now.
+        if (Place is { Address: null } saved && saved.Point == point && Address is { } address)
         {
-            await Places.SetAddressAsync(saved.Id, address);
+            await Places.SetAddressAsync(saved.Id, address, point);
         }
 
         StateHasChanged();
@@ -227,6 +392,21 @@
         {
             _focusName = false;
             await _nameInput.FocusAsync();
+        }
+
+        if (_focusEditButton)
+        {
+            _focusEditButton = false;
+            if (Place is not null)
+            {
+                await _editButton.FocusAsync();
+            }
+        }
+
+        if (_revealPin)
+        {
+            _revealPin = false;
+            await OnRevealPin.InvokeAsync();
         }
 
         if (firstRender)
@@ -274,13 +454,14 @@
     }
 
     private Task TripAsync() =>
-        OnTrip.InvokeAsync(_saved is { } saved
-            ? TripDestination.To(saved) with { Address = saved.Address ?? Address }
+        OnTrip.InvokeAsync(Place is { } place
+            ? TripDestination.To(place) with { Address = place.Address ?? Address }
             : new TripDestination(Point.Latitude, Point.Longitude, Address: Address));
 
-    private Task BestNearAsync() => OnBestNear.InvokeAsync(new BestOrigin(Point, OriginKind.Pin, Label: Address));
+    private Task BestNearAsync() =>
+        OnBestNear.InvokeAsync(new BestOrigin(Point, OriginKind.Pin, Label: Place is { } place ? NameOf(place) : Address));
 
-    private async Task SaveAsync(PlaceKind kind) => _saved = await Places.SaveAsync(kind, Point, address: Address);
+    private async Task SaveAsync(PlaceKind kind) => await SavedAsync(await Places.SaveAsync(kind, Point, address: Address));
 
     private void StartNaming() => (_naming, _focusName) = (true, true);
 
@@ -292,14 +473,125 @@
         }
 
         _naming = false;
-        _saved = await Places.SaveAsync(PlaceKind.Other, Point, _name, Address);
+        await SavedAsync(await Places.SaveAsync(PlaceKind.Other, Point, _name, Address));
+    }
+
+    /// <summary>The pin saved as a place: the card is that place's now, and says what it was saved as.</summary>
+    private async Task SavedAsync(SavedPlace saved)
+    {
+        // The button chosen goes with the choices: ✎, which takes their place, has the focus.
+        (_placeId, _done, _removed, _name, _focusEditButton) = (saved.Id, L["SavedAs", NameOf(saved)], null, "", true);
+        await OnPlaceChanged.InvokeAsync(saved.Id);
+    }
+
+    private async Task ToggleEditingAsync()
+    {
+        if (_editing)
+        {
+            await CancelEditAsync();
+            return;
+        }
+
+        if (Place is not { } place)
+        {
+            return;
+        }
+
+        (_editing, _editKind, _name, _done, _removed, _revealPin) =
+            (true, place.Kind, place.Kind == PlaceKind.Other ? place.Name : "", null, null, true);
+        await OnEditingChanged.InvokeAsync(true);
+    }
+
+    /// <summary>Home, Work or a named place, as the place being edited is saved: one is chosen at a time.</summary>
+    private RenderFragment KindButton(PlaceKind kind, string label, string icon) =>
+        @<button type="button" class="@(_editKind == kind ? "is-on" : null)" aria-pressed="@(_editKind == kind ? "true" : "false")"
+                 @onclick="() => ChooseKind(kind)">
+            <svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"><path d="@icon" /></svg>
+            @label
+        </button>;
+
+    /// <summary>Another kind for the place being edited; a named place's name is typed next, when it has none yet.</summary>
+    private void ChooseKind(PlaceKind kind)
+    {
+        _focusName = kind == PlaceKind.Other && _editKind != kind && string.IsNullOrWhiteSpace(_name);
+        _editKind = kind;
+    }
+
+    /// <summary>Saves the edit: what the place is saved as, its name, and where its pin is now.</summary>
+    private async Task SaveEditAsync()
+    {
+        if (Place is not { } place || !_editing || !CanSaveEdit)
+        {
+            return;
+        }
+
+        var moved = Moved;
+        var saved = await Places.UpdateAsync(place.Id, _editKind, Point, _name, moved ? Address : null);
+        (_editing, _done, _focusEditButton) = (false, saved is null ? null : L["PlaceSaved"].Value, true);
+        await OnEditingChanged.InvokeAsync(false);
+    }
+
+    /// <summary>The edit ends unsaved (Cancel, ✎ again, or Escape): the pin goes back to the place.</summary>
+    public async Task CancelEditAsync()
+    {
+        if (!_editing)
+        {
+            return;
+        }
+
+        (_editing, _focusEditButton) = (false, true);
+        await OnEditingChanged.InvokeAsync(false);
+        if (Place is { } place && place.Point != Point)
+        {
+            await OnMovePin.InvokeAsync(place.Point);
+        }
+    }
+
+    /// <summary>Forgets the place at once, its pin back on it; Undo, in the status line, brings it back.</summary>
+    private async Task ForgetAsync()
+    {
+        if (Place is not { } place)
+        {
+            return;
+        }
+
+        var name = NameOf(place);
+        var removed = await Places.RemoveAsync(place.Id);
+        if (removed is null)
+        {
+            return;
+        }
+
+        (_placeId, _editing, _done, _removed, _name, _focusCard) = (null, false, L["PlaceForgotten", name], removed, "", true);
+        await OnPlaceChanged.InvokeAsync(null);
+        await OnEditingChanged.InvokeAsync(false);
+        if (place.Point != Point)
+        {
+            await OnMovePin.InvokeAsync(place.Point);
+        }
+    }
+
+    private async Task UndoAsync()
+    {
+        if (_removed is { } removed)
+        {
+            await Places.RestoreAsync(removed);
+            if (Places.Places.Any(p => p.Id == removed.Place.Id))
+            {
+                (_placeId, _focusEditButton) = (removed.Place.Id, true);
+                await OnPlaceChanged.InvokeAsync(_placeId);
+            }
+        }
+
+        (_done, _removed) = (null, null);
     }
 
     private string NameOf(SavedPlace place) => place.Kind switch
     {
         PlaceKind.Home => L["Home"],
         PlaceKind.Work => L["Work"],
-        _ => place.Name,
+        _ => string.IsNullOrEmpty(place.Name) ? place.Address ?? L["SavedPlace"].Value : place.Name,
     };
 
     public async ValueTask DisposeAsync()
@@ -307,6 +599,7 @@
         _disposed = true;
         _lookupCts?.Cancel();
         Services.Changed -= OnServicesChanged;
+        Places.Changed -= OnPlacesChanged;
         await ReleaseKeyboardAsync();
     }
 }

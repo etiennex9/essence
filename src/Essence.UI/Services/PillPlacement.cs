@@ -33,6 +33,10 @@ public sealed record PillObstacle(double Latitude, double Longitude, double Half
 
     /// <summary>The pin a press and hold dropped (<c>.ess-pin</c>).</summary>
     public static PillObstacle Pin(GeoPoint point) => new(point.Latitude, point.Longitude, PillPlacement.PinPx / 2, PillPlacement.PinPx);
+
+    /// <summary>A saved place's icon, on its tail (<c>.ess-place</c>).</summary>
+    public static PillObstacle Place(GeoPoint point) =>
+        new(point.Latitude, point.Longitude, PillPlacement.PlacePx / 2, PillPlacement.PlacePx + PillPlacement.PlaceTailPx);
 }
 
 /// <param name="Z">Higher draws on top: the order stations get room in, so the price shown on top is the one that got it.</param>
@@ -76,6 +80,8 @@ public static class PillPlacement
     internal const double LabelPaddingPx = 19;
     internal const double LabelCharPx = 6.6;
     internal const double PinPx = 30;
+    internal const double PlacePx = 26;
+    internal const double PlaceTailPx = 6;
 
     /// <summary>
     /// How far a pill may reach into what stands before it. A price's digits sit 8 px or more inside its pill, so an edge

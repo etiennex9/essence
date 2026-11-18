@@ -29,6 +29,12 @@ public sealed record WidgetPlaceRef(PlaceKind? Kind = null, string? PlaceId = nu
         _ => null,
     };
 
+    /// <summary>
+    /// The place it refers to as a widget's settings offer it now (<see cref="For"/>): a named place since made Home on the
+    /// map is Home's choice. Itself when it's where you are, or a place no longer saved.
+    /// </summary>
+    public WidgetPlaceRef Current(SavedPlaces places) => Find(places) is { } place ? For(place) : this;
+
     /// <summary>How MapPage's <c>to</c> parameter names it.</summary>
     [JsonIgnore]
     public string? LinkName => Kind switch
