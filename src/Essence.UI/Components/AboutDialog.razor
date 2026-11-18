@@ -76,11 +76,28 @@
                         · <button type="button" class="link" @onclick="() => host.OpenWidgetsFollowAsync()">@L["ChangeServer"]</button>
                     </p>
                 }
-                @if (host.NewerRelease is { } newer)
-                {
-                    @* The app installs it itself where it can (IAppHost.UpdateInstall); else, and when that failed, the
-                       release's page. *@
-                    <p class="app-update" aria-live="polite">
+                @* Opening About looks for a newer build (ShowAsync): the app installs it itself where it can
+                   (IAppHost.UpdateInstall); else, and when that failed, the release's page. *@
+                <p class="app-update@(host.NewerRelease is null ? " quiet" : null)" aria-live="polite"
+                   hidden="@(host.NewerRelease is null && host.UpdateCheck is null)">
+                    @if (host.NewerRelease is not { } newer)
+                    {
+                        @switch (host.UpdateCheck)
+                        {
+                            case AppUpdateCheckState.Checking:
+                                @L["AppUpdateChecking"]
+                                break;
+                            case AppUpdateCheckState.Checked:
+                                @L["AppUpToDate"]
+                                break;
+                            case AppUpdateCheckState.Failed:
+                                @L["AppUpdateCheckFailed"]
+                                <text> · </text><button type="button" class="link" @onclick="() => host.CheckForUpdateAsync()">@L["Retry"]</button>
+                                break;
+                        }
+                    }
+                    else
+                    {
                         @switch (host.UpdateInstall)
                         {
                             case { Stage: AppInstallStage.Ready }:
@@ -105,8 +122,8 @@
                                 <text> · </text><a href="@newer.Url" target="_blank" rel="noopener">@L["AppUpdateDownload"]</a>
                                 break;
                         }
-                    </p>
-                }
+                    }
+                </p>
             }
 
             @* The OpenStreetMap account the hours corrections can go to, when the server has an application for it. *@
@@ -223,6 +240,8 @@
         }
 
         _open = true;
+        // A release may have come out since the app last looked, up to 12 hours ago.
+        _ = _host?.CheckForUpdateAsync();
         await instance.InvokeVoidAsync("open");
         StateHasChanged();
         await Notes.LoadReleaseAsync();

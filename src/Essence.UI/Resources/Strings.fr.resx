@@ -840,6 +840,15 @@
   <data name="AppUpdateFailed" xml:space="preserve">
     <value>Impossible d’installer la version {0}</value>
   </data>
+  <data name="AppUpdateChecking" xml:space="preserve">
+    <value>Recherche d’une version plus récente…</value>
+  </data>
+  <data name="AppUpToDate" xml:space="preserve">
+    <value>L’application est à jour</value>
+  </data>
+  <data name="AppUpdateCheckFailed" xml:space="preserve">
+    <value>Impossible de chercher une version plus récente</value>
+  </data>
   <data name="ServerTitle" xml:space="preserve">
     <value>Choisir un serveur</value>
   </data>

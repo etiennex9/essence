@@ -95,6 +95,11 @@ h2 {
     color: var(--ess-text);
 }
 
+/* Looking, or found nothing: only a newer version stands out. */
+.app-update.quiet {
+    color: var(--ess-text-muted);
+}
+
 .app-update a {
     color: var(--ess-accent);
     font-weight: 500;

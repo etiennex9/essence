@@ -28,6 +28,7 @@ public sealed class MobileAppHost : IAppHost
         _l = l;
         http.TooOld += OnTooOld;
         _updates.Changed += OnChanged;
+        _updates.StateChanged += OnChanged;
         _updater.Changed += OnChanged;
     }
 
@@ -44,6 +45,10 @@ public sealed class MobileAppHost : IAppHost
     public AppInstallState? UpdateInstall => _updater.State;
 
     public Task InstallUpdateAsync() => _updater.InstallAsync();
+
+    public AppUpdateCheckState? UpdateCheck => _updates.Enabled ? _updates.State : null;
+
+    public Task CheckForUpdateAsync() => _updates.CheckAsync(asked: true);
 
     public event Action? Changed;
 
