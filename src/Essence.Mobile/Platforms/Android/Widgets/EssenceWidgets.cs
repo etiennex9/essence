@@ -21,7 +21,7 @@ public enum WidgetKind
 
 /// <summary>
 /// What every widget does when Android asks: an update (added, after its settings, at boot) refreshes them all through
-/// WorkManager, as does the ↻ button; a widget removed forgets its settings. Not exported: only Android's widget service and
+/// a job (<see cref="WidgetUpdates"/>), as does the ↻ button; a widget removed forgets its settings. Not exported: only Android's widget service and
 /// the app itself send them anything. The names are fixed (BroadcastReceiver's Name):
 /// Android keeps placed widgets by their class name, so renaming one would drop them from home screens.
 /// </summary>

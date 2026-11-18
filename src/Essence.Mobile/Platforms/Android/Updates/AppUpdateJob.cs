@@ -5,7 +5,8 @@ using Essence.Mobile.Services;
 using AndroidLog = Android.Util.Log;
 using Manifest = Android.Manifest;
 
-// Keeps the update jobs across restarts of the phone (JobInfo.SetPersisted).
+// Keeps the update jobs, and the widgets' 30-minute refresh (WidgetUpdates), across restarts of the phone
+// (JobInfo.SetPersisted, which throws without it).
 [assembly: UsesPermission(Manifest.Permission.ReceiveBootCompleted)]
 
 namespace Essence.Mobile.Updates;
@@ -18,7 +19,8 @@ namespace Essence.Mobile.Updates;
 /// </summary>
 public static class AppUpdates
 {
-    // Far above the ids WorkManager gives its own jobs, counting up from 0, in the same app.
+    // Far above the ids WorkManager gave its own jobs, counting up from 0, which an older version may have left
+    // (WidgetUpdates cancels them).
     private const int PeriodicId = 1_045_501;
     private const int SoonId = 1_045_502;
 

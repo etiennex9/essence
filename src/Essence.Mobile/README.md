@@ -19,6 +19,19 @@ if any ([ESSENCE_DEFAULT_SERVER](../../README.md#android-app-releases) secret), 
 **About → Server → Change**. Favorites and the comparison are kept per server, since a station's id is its row in that
 server's database; cars, places and the fuel are the driver's and follow along.
 
+## How the widgets refresh
+
+Every 30 minutes while one is placed, and right away when one is added or set up, on its **↻**, when the app leaves the
+screen, after the server changes, and with Follow on, after a move ([below](#widgets-that-follow-where-you-are)). Each
+refresh is one job for all the widgets, run once there's a network (`Platforms/Android/Widgets/WidgetUpdates.cs`). The
+jobs are Android's JobScheduler's, not WorkManager's: WorkManager runs a job that's due in the app's process when that's
+still there, and from Android 15 a process kept after leaving the screen has no network, so the widgets said they
+couldn't be updated. To run the 30-minute refresh now:
+
+```bash
+adb shell cmd jobscheduler run -f io.github.etiennex9.essence 1045601
+```
+
 ## Widgets that follow where you are
 
 Best near you, and Best on the way from **Where I am**, rank from the device's latest location, kept by the app
@@ -66,8 +79,7 @@ adb shell cmd location providers set-test-provider-location network --location 4
 ```
 
 Do the same for `gps` and `fused`, and `remove-test-provider` each one after. `adb shell pm grant|revoke
-io.github.etiennex9.essence android.permission.ACCESS_BACKGROUND_LOCATION` switches *Allow all the time*, and `adb shell am
-broadcast -a androidx.work.diagnostics.REQUEST_DIAGNOSTICS -p io.github.etiennex9.essence` logs WorkManager's jobs.
+io.github.etiennex9.essence android.permission.ACCESS_BACKGROUND_LOCATION` switches *Allow all the time*.
 
 ## Corrected hours and OpenStreetMap
 
@@ -101,8 +113,7 @@ installs it itself (`Platforms/Android/Updates`):
   the job's next run, it hands the APK to Android's `PackageInstaller`, which also checks that it's signed with the
   installed app's key. From Android 12, Android installs it without asking, once the user has allowed installing apps
   from Essence. Never while one of the app's screens shows, since installing closes the app. The job is Android's
-  JobScheduler's, not WorkManager's: WorkManager runs a job that's due in the app's process when that's still there, and
-  from Android 15 a process kept after leaving the screen has no network.
+  JobScheduler's, as the widgets' refreshes are ([above](#how-the-widgets-refresh)).
 - **About → Install** downloads it on any network and installs it now. The first time, Android asks to allow installing
   apps from Essence (*Install unknown apps*); before Android 12, it asks each time. Allowing it restarts the app, while
   Android carries on with the install: the app finds that install among its sessions, and says *Installing* rather than

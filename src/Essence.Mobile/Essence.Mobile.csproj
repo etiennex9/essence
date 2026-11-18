@@ -59,7 +59,6 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.Maui.Controls" />
     <PackageReference Include="Microsoft.AspNetCore.Components.WebView.Maui" />
-    <PackageReference Include="Xamarin.AndroidX.Work.Runtime" />
   </ItemGroup>
 
   <ItemGroup>
