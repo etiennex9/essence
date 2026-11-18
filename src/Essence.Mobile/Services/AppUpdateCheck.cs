@@ -32,12 +32,16 @@ public sealed record KnownRelease(
 /// Looks for a newer build of the app among the GitHub releases of the repository it was built from (README → Versions): the
 /// latest release's APK is <c>essence-{versionCode}.apk</c>, a higher number than this build's is newer, and its tag gives
 /// the version name shown (<see cref="AppRelease.VersionOfTag"/>). Checked at start, when the app comes back and from the
-/// background job (<see cref="Updates.AppUpdateJob"/>), at most every <see cref="Interval"/>; found, it shows in About
-/// (IAppHost.NewerRelease), and <see cref="Updates.AppUpdater"/> installs it.
+/// background job (<see cref="Updates.AppUpdateJob"/>), at most every <see cref="Interval"/>, and each time About opens, at
+/// most every <see cref="AskedInterval"/>; found, it shows in About (IAppHost.NewerRelease), and
+/// <see cref="Updates.AppUpdater"/> installs it.
 /// </summary>
 public sealed class AppUpdateCheck(BuildInfo build, ServerSettings servers, TimeProvider time)
 {
     public static readonly TimeSpan Interval = TimeSpan.FromHours(12);
+
+    /// <summary>About asks again as it opens; GitHub answers 60 times an hour without a token.</summary>
+    public static readonly TimeSpan AskedInterval = TimeSpan.FromMinutes(1);
 
     private const string KnownKey = "essence.app-update";
     private const string CheckedKey = "essence.app-update-checked";
@@ -56,10 +60,22 @@ public sealed class AppUpdateCheck(BuildInfo build, ServerSettings servers, Time
     /// <summary>Raised when <see cref="Newer"/> changes, on any thread.</summary>
     public event Action? Changed;
 
+    /// <summary>Where the last check of this run is, as About shows it; null until one asks GitHub.</summary>
+    public AppUpdateCheckState? State { get; private set; }
+
+    /// <summary>
+    /// Raised when <see cref="State"/> changes, on any thread. Apart from <see cref="Changed"/>, which also gives a failed
+    /// install another try.
+    /// </summary>
+    public event Action? StateChanged;
+
     public bool Enabled => build.UpdateCheck && !string.IsNullOrEmpty(build.Repository) && _running > 1;
 
-    /// <summary>Shows what an earlier check found, then checks again if it's time. Never throws.</summary>
-    public async Task CheckAsync()
+    /// <summary>
+    /// Shows what an earlier check found, then checks again if it's time, or if <paramref name="asked"/> (About opened) and
+    /// the last check is older than <see cref="AskedInterval"/>. Never throws.
+    /// </summary>
+    public async Task CheckAsync(bool asked = false)
     {
         if (!Enabled)
         {
@@ -81,17 +97,25 @@ public sealed class AppUpdateCheck(BuildInfo build, ServerSettings servers, Time
         {
             var now = time.GetUtcNow();
             if (long.TryParse(Preferences.Default.Get<string?>(CheckedKey, null), NumberStyles.Integer, CultureInfo.InvariantCulture, out var checkedAt)
-                && now - DateTimeOffset.FromUnixTimeMilliseconds(checkedAt) < Interval)
+                && now - DateTimeOffset.FromUnixTimeMilliseconds(checkedAt) < (asked ? AskedInterval : Interval))
             {
+                // Checked a moment ago (only answers are kept): what that found stands.
+                if (asked)
+                {
+                    SetState(AppUpdateCheckState.Checked);
+                }
+
                 return;
             }
 
+            SetState(AppUpdateCheckState.Checking);
             using var http = servers.CreateProbeClient();
             using var request = new HttpRequestMessage(HttpMethod.Get, build.UpdateFeed ?? $"https://api.github.com/repos/{build.Repository}/releases/latest");
             request.Headers.Accept.ParseAdd("application/vnd.github+json");
             using var response = await http.SendAsync(request);
             if (!response.IsSuccessStatusCode)
             {
+                SetState(AppUpdateCheckState.Failed);
                 return;
             }
 
@@ -105,14 +129,26 @@ public sealed class AppUpdateCheck(BuildInfo build, ServerSettings servers, Time
                 Preferences.Default.Set(KnownKey, JsonSerializer.Serialize(found, MobileJsonContext.Default.KnownRelease));
                 Offer(found);
             }
+
+            SetState(AppUpdateCheckState.Checked);
         }
         catch (Exception ex) when (ex is HttpRequestException or System.Net.WebException or IOException or JsonException or TaskCanceledException)
         {
             // Offline (Android's handler throws WebException), or GitHub didn't answer: next time.
+            SetState(AppUpdateCheckState.Failed);
         }
         finally
         {
             Volatile.Write(ref _checking, 0);
+        }
+    }
+
+    private void SetState(AppUpdateCheckState state)
+    {
+        if (State != state)
+        {
+            State = state;
+            StateChanged?.Invoke();
         }
     }
 

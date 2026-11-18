@@ -29,8 +29,17 @@ public interface IAppHost
     Task InstallUpdateAsync();
 
     /// <summary>
-    /// Raised when <see cref="NewerRelease"/>, <see cref="UpdateInstall"/> or <see cref="WidgetsFollow"/> may have changed,
-    /// on any thread.
+    /// Where looking for a newer build is, which About shows while it hasn't found one; null when the build doesn't look,
+    /// or hasn't yet.
+    /// </summary>
+    AppUpdateCheckState? UpdateCheck { get; }
+
+    /// <summary>Looks for a newer build now, as About opens, unless it just did. Never throws.</summary>
+    Task CheckForUpdateAsync();
+
+    /// <summary>
+    /// Raised when <see cref="NewerRelease"/>, <see cref="UpdateInstall"/>, <see cref="UpdateCheck"/> or
+    /// <see cref="WidgetsFollow"/> may have changed, on any thread.
     /// </summary>
     event Action? Changed;
 
@@ -53,6 +62,18 @@ public enum WidgetFollowState
 
     /// <summary>Turned on, but Android no longer lets the app use the location all the time.</summary>
     Paused,
+}
+
+/// <summary>Where looking for a newer build is, as About shows it.</summary>
+public enum AppUpdateCheckState
+{
+    Checking,
+
+    /// <summary>The releases answered: About shows the newer build they have, or that the app is up to date.</summary>
+    Checked,
+
+    /// <summary>Offline, or the releases didn't answer: About offers to try again.</summary>
+    Failed,
 }
 
 /// <summary>Where installing a newer build is, as About shows it.</summary>

@@ -105,8 +105,9 @@ To check it against OpenStreetMap's development server, point a local api at it 
 
 A release build looks for a newer build in its repository's latest GitHub release ([README → Android app
 releases](../../README.md#android-app-releases)): when it starts, when it comes back, and from a background job, at most
-every 12 hours (`Services/AppUpdateCheck.cs`). Once one is found, About says so, with a dot on its button, and the app
-installs it itself (`Platforms/Android/Updates`):
+every 12 hours, and each time About opens, at most every minute (`Services/AppUpdateCheck.cs`). About says it's looking,
+then that the app is up to date, or that it couldn't look, with Retry. Once one is found, About says so, with a dot on its
+button, and the app installs it itself (`Platforms/Android/Updates`):
 
 - **In the background**, on Wi-Fi with the battery and storage not low: the job downloads the APK into the app's cache
   and checks it against the size and SHA-256 that GitHub lists for it. A minute after the app leaves the screen, or at
