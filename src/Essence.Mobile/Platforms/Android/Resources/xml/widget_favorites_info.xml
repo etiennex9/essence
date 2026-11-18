@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Refreshed by WorkManager (WidgetUpdates.cs), not by the launcher: updatePeriodMillis is 0. As short as the others:
+<!-- Refreshed by the app's jobs (WidgetUpdates.cs), not by the launcher: updatePeriodMillis is 0. As short as the others:
      shorter, it shows the favorites that fit (WidgetViews). -->
 <appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
     android:minWidth="250dp"

@@ -165,7 +165,7 @@ internal static class WidgetLocator
 
 /// <summary>
 /// ↻ on a widget that ranks from where you are: one fix, then a refresh. A foreground service started by a tap on a widget
-/// may use the location with only "While using the app" (Android's exemptions for widgets), which a broadcast or WorkManager
+/// may use the location with only "While using the app" (Android's exemptions for widgets), which a broadcast or a job
 /// may not, so ↻ starts it directly (<see cref="WidgetViews"/>). From Android 12 its notice rarely shows: Android waits 10 s
 /// before showing one, and a fix takes less. Its Java name is fixed, as the widgets' are.
 /// </summary>
@@ -306,7 +306,7 @@ internal static class WidgetTracking
 
 /// <summary>
 /// A passive fix (<see cref="WidgetTracking"/>): kept, and when it moved from where the widgets ranked, a refresh. Nothing else
-/// here: Samsung freezes the app in the background, so the work goes through WorkManager. Not exported; its Java name is fixed,
+/// here: Samsung freezes the app in the background, so the work goes through a job (<see cref="WidgetUpdates"/>). Not exported; its Java name is fixed,
 /// since Android holds the request by it.
 /// </summary>
 [BroadcastReceiver(Name = "io.github.etiennex9.essence.widgets.WidgetLocationReceiver", Exported = false)]

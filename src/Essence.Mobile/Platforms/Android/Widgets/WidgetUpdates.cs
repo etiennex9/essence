@@ -1,14 +1,14 @@
+using Android.App;
+using Android.App.Job;
 using Android.Appwidget;
 using Android.Content;
-using Android.Runtime;
-using AndroidX.Work;
 using Essence.Mobile.Services;
 using Essence.UI.App;
 using Essence.UI.App.Widgets;
 using Essence.UI.Resources;
 using Essence.UI.Services;
 using Microsoft.Extensions.Localization;
-using Java.Util.Concurrent;
+using AndroidLog = Android.Util.Log;
 
 namespace Essence.Mobile.Widgets;
 
@@ -16,35 +16,43 @@ namespace Essence.Mobile.Widgets;
 /// When the widgets are refreshed: every 30 minutes while any is placed (prices change through the day; Android may batch
 /// it), and now when one is added or set up, on its ↻ button (after a fix, for those that rank from where you are), when the
 /// app goes to the background (its cars, places, favorites or fuel may have changed), after the server changes, and with
-/// Follow on, when you've moved (<see cref="WidgetLocationReceiver"/>). Each is one WorkManager job for all widgets, run
-/// when there's a network.
+/// Follow on, when you've moved (<see cref="WidgetLocationReceiver"/>). Each is one job for all widgets, run when there's a
+/// network. Android's JobScheduler itself, as for the updates (<see cref="Updates.AppUpdates"/>), not WorkManager:
+/// WorkManager ran a refresh that came due in the app's own process when that was still there, and from Android 15 a
+/// process kept after leaving the screen has no network, so the widgets said they couldn't be updated.
 /// </summary>
 public static class WidgetUpdates
 {
-    private const string PeriodicName = "essence.widgets.periodic";
-    private const string NowName = "essence.widgets.now";
+    // Beside the updates' jobs, far above the ids WorkManager gave its own.
+    private const int PeriodicId = 1_045_601;
+    private const int NowId = 1_045_602;
     private static readonly TimeSpan Every = TimeSpan.FromMinutes(30);
 
+    /// <summary>Kept as it is when already scheduled.</summary>
     public static void Schedule(Context context)
     {
-        var request = new PeriodicWorkRequest.Builder(
-                Java.Lang.Class.FromType(typeof(WidgetRefreshWorker)), (long)Every.TotalMinutes, TimeUnit.Minutes!)
-            .SetConstraints(NeedsNetwork())
-            .Build();
-        WorkManager.GetInstance(context).EnqueueUniquePeriodicWork(PeriodicName, ExistingPeriodicWorkPolicy.Keep!, (PeriodicWorkRequest)request);
-    }
-
-    public static void RefreshNow(Context context)
-    {
-        if (!AnyPlaced(context))
+        if (Scheduler(context) is not { } scheduler)
         {
             return;
         }
 
-        var request = new OneTimeWorkRequest.Builder(Java.Lang.Class.FromType(typeof(WidgetRefreshWorker)))
-            .SetConstraints(NeedsNetwork())
-            .Build();
-        WorkManager.GetInstance(context).EnqueueUniqueWork(NowName, ExistingWorkPolicy.Replace!, (OneTimeWorkRequest)request);
+        ForgetWorkManager(scheduler);
+        if (scheduler.GetPendingJob(PeriodicId) is null)
+        {
+            scheduler.Schedule(Job(context, PeriodicId).SetPeriodic((long)Every.TotalMilliseconds)!.SetPersisted(true)!.Build()!);
+        }
+    }
+
+    /// <summary>
+    /// Replaces a refresh waiting for the network, and stops one running, so that it can't finish after this one and show
+    /// older answers.
+    /// </summary>
+    public static void RefreshNow(Context context)
+    {
+        if (AnyPlaced(context) && Scheduler(context) is { } scheduler)
+        {
+            scheduler.Schedule(Job(context, NowId).Build()!);
+        }
     }
 
     /// <summary>The last widget of one kind was removed: the refreshes stop if none of the others is placed.</summary>
@@ -52,7 +60,7 @@ public static class WidgetUpdates
     {
         if (!AnyPlaced(context))
         {
-            WorkManager.GetInstance(context).CancelUniqueWork(PeriodicName);
+            Scheduler(context)?.Cancel(PeriodicId);
             WidgetTracking.Update(context, wanted: false);
         }
     }
@@ -72,49 +80,115 @@ public static class WidgetUpdates
 
     private static bool AnyPlaced(Context context) => Placed(context).Any();
 
-    private static Constraints NeedsNetwork() => new Constraints.Builder().SetRequiredNetworkType(NetworkType.Connected!).Build();
+    private static JobScheduler? Scheduler(Context context) => context.GetSystemService(Context.JobSchedulerService) as JobScheduler;
+
+    private static JobInfo.Builder Job(Context context, int id) =>
+        new JobInfo.Builder(id, new ComponentName(context, Java.Lang.Class.FromType(typeof(WidgetRefreshJob))))
+            .SetRequiredNetworkType(NetworkType.Any)!;
+
+    /// <summary>
+    /// The refreshes an older version left to WorkManager, which the app no longer has: in WorkManager's own namespace from
+    /// Android 14, beside these before.
+    /// </summary>
+    private static void ForgetWorkManager(JobScheduler scheduler)
+    {
+        if (OperatingSystem.IsAndroidVersionAtLeast(34))
+        {
+            scheduler.ForNamespace("androidx.work.systemjobscheduler").CancelAll();
+        }
+
+        foreach (var job in scheduler.AllPendingJobs)
+        {
+            if (job.Service?.ClassName == "androidx.work.impl.background.systemjob.SystemJobService")
+            {
+                scheduler.Cancel(job.Id);
+            }
+        }
+    }
 }
 
 /// <summary>
-/// Refreshes every placed widget. Its Java name is fixed: WorkManager keeps the jobs it has queued by that name. A run that
-/// WorkManager replaces with a newer one (ExistingWorkPolicy.Replace) is stopped, so it can't finish after it and show older
-/// answers; runs never overlap.
+/// Refreshes every placed widget (<see cref="WidgetUpdates"/>). Runs never overlap: one that a newer refresh replaces is
+/// stopped first. Not exported; its Java name is fixed, since Android keeps the jobs by it.
 /// </summary>
-[Register("io/github/etiennex9/essence/widgets/WidgetRefreshWorker")]
-public sealed class WidgetRefreshWorker(Context context, WorkerParameters workerParams) : Worker(context, workerParams)
+[Service(Name = "io.github.etiennex9.essence.widgets.WidgetRefreshJob", Permission = "android.permission.BIND_JOB_SERVICE", Exported = false)]
+public sealed class WidgetRefreshJob : JobService
 {
     /// <summary>A background fix (5 s) and the API's 20 s.</summary>
     private static readonly TimeSpan Budget = TimeSpan.FromSeconds(30);
     private static readonly SemaphoreSlim OneAtATime = new(1, 1);
 
-    private readonly CancellationTokenSource _stop = new(Budget);
+    private readonly Dictionary<int, CancellationTokenSource> _running = [];
 
-    public override Result DoWork()
+    public override bool OnStartJob(JobParameters? parameters)
     {
-        try
+        if (parameters is null)
         {
-            OneAtATime.Wait(_stop.Token);
+            return false;
+        }
+
+        var stop = new CancellationTokenSource(Budget);
+        lock (_running)
+        {
+            _running[parameters.JobId] = stop;
+        }
+
+        _ = Task.Run(async () =>
+        {
             try
             {
-                WidgetRefresher.RefreshAsync(ApplicationContext, _stop.Token).GetAwaiter().GetResult();
+                await OneAtATime.WaitAsync(stop.Token);
+                try
+                {
+                    await WidgetRefresher.RefreshAsync(ApplicationContext ?? this, stop.Token);
+                }
+                finally
+                {
+                    OneAtATime.Release();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Out of time or replaced: what was done stays; the next refresh does the rest.
+            }
+            catch (Exception ex)
+            {
+                AndroidLog.Warn("Essence.Widgets", $"Refresh: {ex.GetType().Name}: {ex.Message}");
             }
             finally
             {
-                OneAtATime.Release();
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Out of time or replaced: what was done stays; the next refresh does the rest.
-        }
+                lock (_running)
+                {
+                    // A refresh that replaced this one has the same id.
+                    if (_running.TryGetValue(parameters.JobId, out var current) && current == stop)
+                    {
+                        _running.Remove(parameters.JobId);
+                    }
+                }
 
-        return Result.InvokeSuccess()!;
+                stop.Dispose();
+            }
+
+            JobFinished(parameters, wantsReschedule: false);
+        });
+        return true;
     }
 
-    public override void OnStopped()
+    /// <summary>Replaced, or stopped by Android (the network went): the run ends, and one Android stopped runs again later.</summary>
+    public override bool OnStopJob(JobParameters? parameters)
     {
-        base.OnStopped();
-        _stop.Cancel();
+        if (parameters is not null)
+        {
+            lock (_running)
+            {
+                if (_running.TryGetValue(parameters.JobId, out var stop))
+                {
+                    stop.Cancel();
+                }
+            }
+        }
+
+        return true;
     }
 }
 
