@@ -29,6 +29,11 @@ public sealed record MarkerModel(
     double PillFrom = 0,
     bool Closed = false);
 
+/// <summary>A saved place's icon on the map, as <c>essenceMap.js</c> draws it.</summary>
+/// <param name="Icon">The icon's path data (24×24 view box): a house, a briefcase or a pin.</param>
+/// <param name="Label">What it's called, read out and shown on hover.</param>
+public sealed record PlaceMarkerModel(string Id, double Lat, double Lon, string Icon, string Label);
+
 /// <summary>What the page keeps across a reload for a new release, besides the map's view.</summary>
 /// <param name="StationPushed">The page pushed the <c>?station=</c> history entry (MapPage), so closing still goes back.</param>
 /// <param name="ListPushed">The same for <c>?view=</c>.</param>
@@ -76,6 +81,12 @@ public interface IMapListener
 
     /// <summary>A press and hold on the map, not on a marker (a right-click on desktops).</summary>
     Task OnMapHeldAsync(double latitude, double longitude);
+
+    /// <summary>A saved place's icon, by the place's id.</summary>
+    Task OnPlaceClickedAsync(string id);
+
+    /// <summary>The pin dragged elsewhere, while it can be (<see cref="MapInterop.SetPinAsync"/>).</summary>
+    Task OnPinMovedAsync(double latitude, double longitude);
 }
 
 /// <summary>The MapLibre map behind <c>essenceMap.js</c>: the JS side owns the map and the marker DOM, C# everything else.</summary>
@@ -137,8 +148,16 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
     public ValueTask SetRangeEndAsync(GeoPoint? point, string label) =>
         InvokeAsync("setRangeEnd", point?.Latitude, point?.Longitude, label);
 
-    /// <summary>The pin a press and hold dropped; null removes it.</summary>
-    public ValueTask SetPinAsync(GeoPoint? point) => InvokeAsync("setPin", point?.Latitude, point?.Longitude);
+    /// <summary>The pin a press and hold dropped, or a saved place's; null removes it.</summary>
+    /// <param name="draggable">It can be dragged elsewhere (a saved place being edited): the map says where it ends up.</param>
+    public ValueTask SetPinAsync(GeoPoint? point, bool draggable = false) =>
+        InvokeAsync("setPin", point?.Latitude, point?.Longitude, draggable);
+
+    /// <summary>Pans the pin out from under its card, when the card covers it, so it can be seen and dragged.</summary>
+    public ValueTask RevealPinAsync() => InvokeAsync("revealPin");
+
+    /// <summary>The saved places' icons: the map shows exactly these.</summary>
+    public ValueTask SetPlacesAsync(IReadOnlyList<PlaceMarkerModel> places) => InvokeAsync("setPlaces", places);
 
     /// <summary>Ends with the point in the middle of the part of the map the panes leave uncovered.</summary>
     /// <param name="waitForPane">Waits for a pane opening to be in place first.</param>
@@ -187,6 +206,12 @@ public sealed class MapInterop(IJSRuntime js) : IAsyncDisposable
 
     [JSInvokable]
     public Task OnMapHeld(double latitude, double longitude) => _listener?.OnMapHeldAsync(latitude, longitude) ?? Task.CompletedTask;
+
+    [JSInvokable]
+    public Task OnPlaceClicked(string id) => _listener?.OnPlaceClickedAsync(id) ?? Task.CompletedTask;
+
+    [JSInvokable]
+    public Task OnPinMoved(double latitude, double longitude) => _listener?.OnPinMovedAsync(latitude, longitude) ?? Task.CompletedTask;
 
     public async ValueTask DisposeAsync()
     {

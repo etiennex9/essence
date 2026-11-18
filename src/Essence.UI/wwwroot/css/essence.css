@@ -474,11 +474,15 @@ body {
     background: #ba7517;
 }
 
-/* A teardrop pointing down, its tip on the point. */
+/* A teardrop pointing down, its tip on the point. Clicks go through it, to the map or a station under it, except while
+   it can be dragged: what a drag leaves inline (MapLibre's pointer-events) doesn't outlive that. */
 .ess-pin {
     width: 30px;
     height: 30px;
-    pointer-events: none;
+}
+
+.ess-pin:not(.is-draggable) {
+    pointer-events: none !important;
 }
 
 .ess-pin::before {
@@ -505,6 +509,85 @@ body {
     height: 8px;
     border-radius: 50%;
     background: #ffffff;
+}
+
+/* A saved place being edited: its pin can be dragged elsewhere, and says so by its cursor. */
+.ess-pin.is-draggable {
+    pointer-events: auto;
+    cursor: grab;
+    touch-action: none;
+}
+
+.ess-pin.is-draggable:active {
+    cursor: grabbing;
+}
+
+/* ---- The saved places: Home, Work and the others, each a round icon on a short tail (PillObstacle.Place) ---- */
+
+/* Over the stations' prices, under the trip's labels, the pin and Best near you's flags. */
+.ess-place {
+    z-index: 99980;
+    padding: 0 0 6px;
+    border: 0;
+    background: none;
+    cursor: pointer;
+}
+
+.ess-place-icon {
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    box-sizing: border-box;
+    border: 2px solid #ffffff;
+    border-radius: 50%;
+    background: #1d1d1b;
+    color: #ffffff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+    transform-origin: 50% calc(100% + 6px);
+    transition: transform 120ms ease-out;
+}
+
+/* Tail: the border's white, with the dark fill on top. */
+.ess-place-icon::before,
+.ess-place-icon::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    border-style: solid;
+    border-color: transparent;
+}
+
+.ess-place-icon::before {
+    bottom: -8px;
+    border-width: 7px 5.5px 0;
+    border-top-color: #ffffff;
+}
+
+.ess-place-icon::after {
+    bottom: -5px;
+    border-width: 5px 3.5px 0;
+    border-top-color: #1d1d1b;
+}
+
+.ess-place:hover .ess-place-icon {
+    transform: scale(1.1);
+}
+
+.ess-place:focus-visible {
+    outline: none;
+}
+
+.ess-place:focus-visible .ess-place-icon {
+    box-shadow: 0 0 0 2px #185fa5, 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .ess-place-icon {
+        transition: none;
+    }
 }
 
 /* ---- MapLibre controls, matched to the theme ---- */

@@ -165,6 +165,93 @@ public class SavedPlacesTests
     }
 
     [Fact]
+    public async Task A_place_edited_keeps_its_id_and_its_spot_among_the_others()
+    {
+        var places = new SavedPlaces(_preferences);
+        await places.SaveAsync(PlaceKind.Other, House, "Gym");
+        var cottage = await places.SaveAsync(PlaceKind.Other, House, "Cottage", "1 Chemin du Lac");
+        await places.SaveAsync(PlaceKind.Other, House, "School");
+        var changes = 0;
+        places.Changed += () => changes++;
+
+        var edited = await places.UpdateAsync(cottage.Id, PlaceKind.Other, Office, "  Chalet  ", "1000 Rue De La Gauchetière Ouest, Montréal");
+
+        var reloaded = new SavedPlaces(_preferences);
+        await reloaded.LoadAsync();
+        Assert.Equal(["Gym", "Chalet", "School"], reloaded.Places.Select(p => p.Name));
+        Assert.Equal(new SavedPlace(cottage.Id, PlaceKind.Other, "Chalet", Office.Latitude, Office.Longitude, "1000 Rue De La Gauchetière Ouest, Montréal"), edited);
+        Assert.Equal(edited, reloaded.Places[1]);
+        Assert.Equal(1, changes);
+    }
+
+    [Fact]
+    public async Task A_place_moved_drops_its_old_address_and_one_left_where_it_was_keeps_it()
+    {
+        var places = new SavedPlaces(_preferences);
+        var home = await places.SaveAsync(PlaceKind.Home, House, address: "6200 Rue Saint-Hubert, Montréal");
+
+        var kept = await places.UpdateAsync(home.Id, PlaceKind.Home, House);
+        var moved = await places.UpdateAsync(home.Id, PlaceKind.Home, Office);
+
+        Assert.Equal(home, kept);
+        Assert.Equal(Office, moved!.Point);
+        Assert.Null(moved.Address);
+    }
+
+    [Fact]
+    public async Task An_address_looked_up_before_a_place_moved_isnt_given_to_it()
+    {
+        var places = new SavedPlaces(_preferences);
+        var gym = await places.SaveAsync(PlaceKind.Other, House, "Gym");
+        await places.UpdateAsync(gym.Id, PlaceKind.Other, Office);
+
+        await places.SetAddressAsync(gym.Id, "6200 Rue Saint-Hubert, Montréal", House);
+        Assert.Null(places.Places[0].Address);
+
+        await places.SetAddressAsync(gym.Id, "1000 Rue De La Gauchetière Ouest, Montréal", Office);
+        Assert.Equal("1000 Rue De La Gauchetière Ouest, Montréal", places.Places[0].Address);
+    }
+
+    [Fact]
+    public async Task A_place_made_work_replaces_the_work_saved_before()
+    {
+        var places = new SavedPlaces(_preferences);
+        await places.SaveAsync(PlaceKind.Work, Office);
+        var gym = await places.SaveAsync(PlaceKind.Other, House, "Gym");
+
+        var work = await places.UpdateAsync(gym.Id, PlaceKind.Work, House, "ignored");
+
+        Assert.Equal(new SavedPlace(gym.Id, PlaceKind.Work, "", House.Latitude, House.Longitude), work);
+        Assert.Equal(work, Assert.Single(places.Places));
+    }
+
+    [Fact]
+    public async Task A_home_made_a_named_place_needs_a_name_and_a_blank_one_keeps_the_old()
+    {
+        var places = new SavedPlaces(_preferences);
+        var home = await places.SaveAsync(PlaceKind.Home, House);
+        var gym = await places.SaveAsync(PlaceKind.Other, Office, "Gym");
+
+        var named = await places.UpdateAsync(home.Id, PlaceKind.Other, House, "Parents");
+        var blank = await places.UpdateAsync(gym.Id, PlaceKind.Other, Office, "   ");
+
+        Assert.Equal("Parents", named!.Name);
+        Assert.Equal("Gym", blank!.Name);
+        Assert.Null(places.Home);
+    }
+
+    [Fact]
+    public async Task A_place_forgotten_meanwhile_isnt_edited()
+    {
+        var places = new SavedPlaces(_preferences);
+        var gym = await places.SaveAsync(PlaceKind.Other, House, "Gym");
+        await places.RemoveAsync(gym.Id);
+
+        Assert.Null(await places.UpdateAsync(gym.Id, PlaceKind.Home, House));
+        Assert.Empty(places.Places);
+    }
+
+    [Fact]
     public async Task A_forgotten_place_comes_back_where_it_was()
     {
         var places = new SavedPlaces(_preferences);

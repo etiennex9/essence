@@ -542,6 +542,22 @@ public sealed class WidgetFeedsTests : IDisposable
     }
 
     [Fact]
+    public async Task A_named_place_made_home_on_the_map_is_called_home_and_offered_as_home()
+    {
+        var places = new SavedPlaces(_preferences);
+        var gym = await places.SaveAsync(PlaceKind.Other, FarPoint, "Gym");
+        var stored = WidgetPlaceRef.For(gym);
+        Assert.Equal("Gym", _feeds.PlaceName(stored, places));
+
+        await places.UpdateAsync(gym.Id, PlaceKind.Home, FarPoint);
+
+        Assert.Equal("Home", _feeds.PlaceName(stored, places));
+        Assert.Equal(new WidgetPlaceRef(PlaceKind.Home), stored.Current(places));
+        Assert.Equal(WidgetPlaceRef.You, WidgetPlaceRef.You.Current(places));
+        Assert.Equal(new WidgetPlaceRef(PlaceKind.Other, "gone"), new WidgetPlaceRef(PlaceKind.Other, "gone").Current(places));
+    }
+
+    [Fact]
     public void French_widgets_read_in_french()
     {
         CultureInfo.CurrentCulture = CultureInfo.CurrentUICulture = CultureInfo.GetCultureInfo("fr-CA");

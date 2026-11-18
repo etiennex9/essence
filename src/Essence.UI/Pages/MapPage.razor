@@ -148,8 +148,9 @@
 
     @if (_pin is { } pin)
     {
-        <DroppedPin Point="pin" UserLocation="_userLocation" TripsUnavailable="TripsUnavailable" OnClose="ClearPinAsync"
-                    OnTrip="StartTripAsync" OnBestNear="BestNearPinAsync" />
+        <DroppedPin @ref="_droppedPin" Point="pin" PlaceId="@_pinPlace" UserLocation="_userLocation" TripsUnavailable="TripsUnavailable"
+                    OnClose="ClearPinAsync" OnTrip="StartTripAsync" OnBestNear="BestNearPinAsync" OnPlaceChanged="id => _pinPlace = id"
+                    OnEditingChanged="SetPinEditingAsync" OnMovePin="MovePinAsync" OnRevealPin="RevealPinAsync" />
     }
 
     <AboutDialog @ref="_about" />
@@ -269,11 +270,22 @@
     /// <summary>The trip the tab had open is read (TripState.LoadAsync): a <c>?view=trip</c> without one falls back.</summary>
     private bool _tripLoaded;
 
-    /// <summary>A press and hold dropped a pin here: its card shows.</summary>
+    /// <summary>A press and hold dropped a pin here, or a saved place's icon was clicked: its card shows.</summary>
     private GeoPoint? _pin;
 
-    /// <summary>The pin the map shows (<see cref="MapPin"/>), set again only when it changes.</summary>
-    private GeoPoint? _mapPin;
+    /// <summary>The saved place whose card shows (its icon was clicked, or the pin was saved as it); null for a pin dropped.</summary>
+    private string? _pinPlace;
+
+    /// <summary>That place is being edited in its card: its pin can be dragged, and a press and hold moves it.</summary>
+    private bool _pinEditing;
+
+    private DroppedPin? _droppedPin;
+
+    /// <summary>The pin the map shows (<see cref="MapPin"/>) and whether it can be dragged, set again only when they change.</summary>
+    private (GeoPoint? Point, bool Draggable) _mapPin;
+
+    /// <summary>The saved places' icons the map shows (<see cref="RenderPlacesAsync"/>), sent again only when they change.</summary>
+    private string? _placesDrawn;
 
     /// <summary>What the map draws of the trip (<see cref="RenderTripAsync"/>), drawn again only when it changes.</summary>
     private (TripPlan? Plan, TripDestination? Destination) _drawnTrip;
@@ -485,6 +497,7 @@
         {
             await SyncSelectedAsync();
             await SyncPinAsync();
+            await RenderPlacesAsync();
             await RenderMarkersAsync();
             await RenderTripAsync();
             await FitToBestAsync();
@@ -552,6 +565,7 @@
         _mapReady = true;
         Updates.Start();
         await SyncSelectedAsync();
+        await RenderPlacesAsync();
         await RenderTripAsync();
         await FitToTripAsync();
         var planning = Trips.SetFuelAsync(_fuel);
@@ -973,7 +987,10 @@
         return [.. markers.Select(m => m.Marker with { Z = places[m.Marker.Id].Z, PillFrom = places[m.Marker.Id].PillFrom })];
     }
 
-    /// <summary>What the map draws over the stations: the trip's destination and where its range runs out, and the pin.</summary>
+    /// <summary>
+    /// What the map draws over the stations: the trip's destination and where its range runs out, the pin, and the saved
+    /// places' icons.
+    /// </summary>
     private List<PillObstacle> MapLabels()
     {
         List<PillObstacle> labels = [];
@@ -992,6 +1009,7 @@
             labels.Add(PillObstacle.Pin(pin));
         }
 
+        labels.AddRange(MapPlaces.Select(p => PillObstacle.Place(p.Point)));
         return labels;
     }
 
@@ -1038,18 +1056,70 @@
     /// </summary>
     private GeoPoint? MapPin => _pin ?? (BestOpen && Best.Origin is { Kind: OriginKind.Pin } origin ? origin.Point : null);
 
-    /// <summary>Shows <see cref="MapPin"/> on the map when it changed, and says so: the prices must then make room for it.</summary>
+    /// <summary>
+    /// Shows <see cref="MapPin"/> on the map, draggable while its saved place is edited, when that changed; true when it
+    /// moved: the prices and the saved places' icons must then make room for it.
+    /// </summary>
     private async Task<bool> SyncPinAsync()
     {
-        var pin = MapPin;
+        (GeoPoint? Point, bool Draggable) pin = (MapPin, _pin is not null && _pinEditing);
         if (!_mapReady || pin == _mapPin)
         {
             return false;
         }
 
+        var moved = pin.Point != _mapPin.Point;
         _mapPin = pin;
-        await _map!.SetPinAsync(pin);
-        return true;
+        await _map!.SetPinAsync(pin.Point, pin.Draggable);
+        return moved;
+    }
+
+    /// <summary>The pin as it is now, and what makes room for it once it moved: the saved places' icons, and the prices.</summary>
+    private async Task UpdatePinAsync()
+    {
+        if (await SyncPinAsync())
+        {
+            await RenderPlacesAsync();
+            await RenderMarkersAsync();
+        }
+    }
+
+    /// <summary>
+    /// The saved places the map shows an icon for: all but one the pin stands on (its own, while its card shows) and the
+    /// trip's destination, which has its label.
+    /// </summary>
+    private IEnumerable<SavedPlace> MapPlaces
+    {
+        get
+        {
+            var pin = MapPin;
+            var destination = TripMode ? Trips.Destination?.Point : null;
+            return Places.Places.Where(p => p.Point != pin && p.Point != destination);
+        }
+    }
+
+    /// <summary>Draws the saved places' icons (<see cref="MapPlaces"/>), when they changed.</summary>
+    private async Task RenderPlacesAsync()
+    {
+        if (!_mapReady)
+        {
+            return;
+        }
+
+        List<PlaceMarkerModel> places =
+        [
+            .. MapPlaces.Select(p => new PlaceMarkerModel(
+                p.Id, p.Latitude, p.Longitude, p.Kind switch { PlaceKind.Home => Icons.Home, PlaceKind.Work => Icons.Work, _ => Icons.Place },
+                L["PlaceMarker", PlaceName(p)])),
+        ];
+        var drawn = string.Join('\n', places.Select(p => FormattableString.Invariant($"{p.Id}|{p.Lat}|{p.Lon}|{p.Icon}|{p.Label}")));
+        if (drawn == _placesDrawn)
+        {
+            return;
+        }
+
+        _placesDrawn = drawn;
+        await _map!.SetPlacesAsync(places);
     }
 
     /// <summary>Rings <see cref="MapSelected"/> on the map, when it changed.</summary>
@@ -1281,26 +1351,92 @@
             flags: flags, labels: labels);
     }
 
-    /// <summary>A press and hold on the map: a pin drops there, with its card.</summary>
+    /// <summary>
+    /// A press and hold on the map: a pin drops there, with its card. While a saved place is edited in its card, its pin
+    /// moves there instead.
+    /// </summary>
     public async Task OnMapHeldAsync(double latitude, double longitude)
     {
-        _pin = new GeoPoint(latitude, longitude);
-        if (await SyncPinAsync())
+        var point = new GeoPoint(latitude, longitude);
+        if (_pin is not null && _pinEditing)
         {
-            await RenderMarkersAsync();
+            await MovePinAsync(point);
+            return;
         }
 
+        (_pin, _pinPlace, _pinEditing) = (point, null, false);
+        await UpdatePinAsync();
         StateHasChanged();
+    }
+
+    /// <summary>
+    /// A saved place's icon: its card opens, its pin on it, as a pin dropped there would. While the place is edited, its
+    /// icon is where it was: the pin goes back there, and the edit goes on.
+    /// </summary>
+    public async Task OnPlaceClickedAsync(string id)
+    {
+        if (Places.Places.FirstOrDefault(p => p.Id == id) is not { } place)
+        {
+            return;
+        }
+
+        if (_pin is not null && _pinPlace == id && _pinEditing)
+        {
+            await MovePinAsync(place.Point);
+            return;
+        }
+
+        (_pin, _pinPlace, _pinEditing) = (place.Point, id, false);
+        await UpdatePinAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>The pin of a saved place being edited was dragged elsewhere (the map has it there already).</summary>
+    public async Task OnPinMovedAsync(double latitude, double longitude)
+    {
+        if (_pin is not null && _pinEditing)
+        {
+            await MovePinAsync(new GeoPoint(latitude, longitude));
+        }
+    }
+
+    /// <summary>
+    /// The pin of the saved place being edited moves (dragged, a press and hold elsewhere, its icon), or goes back to the
+    /// place (the edit cancelled, the place forgotten): its card is told first, so it keeps the edit.
+    /// </summary>
+    private async Task MovePinAsync(GeoPoint point)
+    {
+        if (_pin is null)
+        {
+            return;
+        }
+
+        _pin = point;
+        _droppedPin?.MovedTo(point);
+        await UpdatePinAsync();
+        StateHasChanged();
+    }
+
+    /// <summary>A saved place's card opened, or grew to edit it: its pin is panned out from under it.</summary>
+    private async Task RevealPinAsync()
+    {
+        if (_mapReady && _pin is not null)
+        {
+            await _map!.RevealPinAsync();
+        }
+    }
+
+    /// <summary>The saved place's card starts or ends editing it: its pin can be dragged meanwhile.</summary>
+    private async Task SetPinEditingAsync(bool editing)
+    {
+        _pinEditing = editing && _pin is not null;
+        await UpdatePinAsync();
     }
 
     private async Task ClearPinAsync()
     {
-        _pin = null;
-        if (await SyncPinAsync())
-        {
-            await RenderMarkersAsync();
-        }
-
+        (_pin, _pinPlace, _pinEditing) = (null, null, false);
+        await UpdatePinAsync();
         StateHasChanged();
     }
 
@@ -1310,7 +1446,7 @@
     /// </summary>
     private async Task BestNearPinAsync(BestOrigin origin)
     {
-        _pin = null;
+        (_pin, _pinPlace, _pinEditing) = (null, null, false);
         var ranking = Best.SetOriginAsync(origin);
         if (View == TripView)
         {
@@ -1322,11 +1458,7 @@
         }
 
         await ranking;
-        if (await SyncPinAsync())
-        {
-            await RenderMarkersAsync();
-        }
-
+        await UpdatePinAsync();
         StateHasChanged();
     }
 
@@ -1532,10 +1664,16 @@
 
     /// <summary>
     /// A click on the map: on phones, the sheet open shrinks to its header so the map shows, and stays so; otherwise, or with
-    /// a pin dropped, what's on top closes as on Escape.
+    /// a pin dropped, what's on top closes as on Escape. While a saved place is edited in its card, the edit stays: a tap
+    /// that only closes the phone's keyboard mustn't lose it.
     /// </summary>
     public async Task OnMapClickedAsync()
     {
+        if (_pin is not null && _pinEditing)
+        {
+            return;
+        }
+
         if (_pin is null && _map is not null && await _map.CollapsePaneAsync())
         {
             return;
@@ -1545,11 +1683,12 @@
     }
 
     /// <summary>
-    /// Escape, or a click on the map no sheet takes: closes what's on top, the dropped pin's card, the details, My cars or the
-    /// address search, the trip (back to Best near you), else the list.
+    /// Escape, or a click on the map no sheet takes: closes what's on top, the edit of a saved place in its card, the dropped
+    /// pin's card, the details, My cars or the address search, the trip (back to Best near you), else the list.
     /// </summary>
     public Task OnDismissAsync() =>
-        _pin is not null ? ClearPinAsync()
+        _pin is not null && _pinEditing ? _droppedPin?.CancelEditAsync() ?? Task.CompletedTask
+        : _pin is not null ? ClearPinAsync()
         : Station is not null ? CloseDetailsAsync()
         : View == CarsView ? CloseCarsAsync()
         : View == PlacesView ? ClosePlacesAsync()
@@ -1846,14 +1985,20 @@
         }
 
         await SyncSelectedAsync();
+        await RenderPlacesAsync();
         await RenderMarkersAsync();
         await RenderTripAsync();
         await FitToTripAsync();
         StateHasChanged();
     });
 
-    /// <summary>Home or Work saved or forgotten: the phone chip's "To Work" follows.</summary>
-    private void OnPlacesChanged() => InvokeAsync(StateHasChanged);
+    /// <summary>A place saved, edited or forgotten: its icon on the map, and the phone chip's "To Work", follow.</summary>
+    private void OnPlacesChanged() => InvokeAsync(async () =>
+    {
+        await RenderPlacesAsync();
+        await RenderMarkersAsync();
+        StateHasChanged();
+    });
 
     /// <summary>
     /// A new Best near you, or another station shown on top: the map and the chip follow. Estimates while routing reads
@@ -1871,6 +2016,7 @@
 
         await SyncSelectedAsync();
         await SyncPinAsync();
+        await RenderPlacesAsync();
         await RenderMarkersAsync();
         await FitToBestAsync();
         StateHasChanged();

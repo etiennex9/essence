@@ -272,14 +272,20 @@ public sealed class WidgetFeeds(
         _ => "",
     };
 
-    /// <summary>How a place is named on a widget: Home, Work, its own name, or "you" for where you are.</summary>
-    public string PlaceName(WidgetPlaceRef place, SavedPlaces places) => place.Kind switch
+    /// <summary>
+    /// How a place is named on a widget: Home, Work, its own name, or "you" for where you are. A named place since made Home
+    /// or Work on the map (same id) is called that.
+    /// </summary>
+    public string PlaceName(WidgetPlaceRef place, SavedPlaces places)
     {
-        PlaceKind.Home => l["Home"],
-        PlaceKind.Work => l["Work"],
-        _ when place.IsYou => l["WidgetYou"],
-        _ => place.Find(places) is { Name: { Length: > 0 } name } ? name : l["WidgetPlace"],
-    };
+        var found = place.Find(places);
+        return place.IsYou ? l["WidgetYou"] : (found?.Kind ?? place.Kind) switch
+        {
+            PlaceKind.Home => l["Home"],
+            PlaceKind.Work => l["Work"],
+            _ => found is { Name: { Length: > 0 } name } ? name : l["WidgetPlace"],
+        };
+    }
 
     private async Task<(string Fuel, CarProfile Car, SavedPlaces Places)> LoadAsync()
     {

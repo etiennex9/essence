@@ -804,6 +804,24 @@
   <data name="OtherPlace" xml:space="preserve">
     <value>Autre…</value>
   </data>
+  <data name="SavedPlace" xml:space="preserve">
+    <value>Lieu enregistré</value>
+  </data>
+  <data name="PlaceMarker" xml:space="preserve">
+    <value>{0}, lieu enregistré</value>
+  </data>
+  <data name="EditPlaceLabel" xml:space="preserve">
+    <value>Modifier {0}</value>
+  </data>
+  <data name="MovePinTouch" xml:space="preserve">
+    <value>Pour déplacer ce lieu, faites glisser l’épingle, ou maintenez le doigt à son nouvel endroit.</value>
+  </data>
+  <data name="MovePinMouse" xml:space="preserve">
+    <value>Pour déplacer ce lieu, faites glisser l’épingle, ou maintenez le bouton enfoncé (ou faites un clic droit) à son nouvel endroit.</value>
+  </data>
+  <data name="Forget" xml:space="preserve">
+    <value>Oublier</value>
+  </data>
   <data name="BestFromPin" xml:space="preserve">
     <value>Classées à partir de {0}.</value>
   </data>

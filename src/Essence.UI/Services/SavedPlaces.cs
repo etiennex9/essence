@@ -79,11 +79,13 @@ public sealed class SavedPlaces(IPreferenceStore preferences)
     }
 
     /// <summary>The address of a place saved without one, once the address search has it.</summary>
-    public async Task SetAddressAsync(string id, string address)
+    /// <param name="at">Where it was looked up: a place moved from there since (<see cref="UpdateAsync"/>) doesn't take it.</param>
+    public async Task SetAddressAsync(string id, string address, GeoPoint? at = null)
     {
         await LoadAsync();
         var index = _places.FindIndex(p => p.Id == id);
-        if (index < 0 || TrimAddress(address) is not { } trimmed || _places[index].Address == trimmed)
+        if (index < 0 || TrimAddress(address) is not { } trimmed || _places[index].Address == trimmed
+            || (at is { } point && _places[index].Point != point))
         {
             return;
         }
@@ -106,6 +108,47 @@ public sealed class SavedPlaces(IPreferenceStore preferences)
         _places[index] = _places[index] with { Name = trimmed };
         await WriteAsync();
         Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// A place edited from its pin on the map: what it's saved as, its name and where it is, under the same id, which links
+    /// (<c>?to=</c>) and the Android widgets set up with a named place keep finding it by (widgets set up with Home or Work
+    /// follow whichever place is that). Made Home or Work, it replaces the one saved before, as saving does. A blank name
+    /// keeps the one it had; moved, it takes <paramref name="address"/>, null until it's known. Null when it isn't saved any
+    /// more.
+    /// </summary>
+    public async Task<SavedPlace?> UpdateAsync(string id, PlaceKind kind, GeoPoint point, string name = "", string? address = null)
+    {
+        await LoadAsync();
+        var old = _places.Find(p => p.Id == id);
+        if (old is null || !Enum.IsDefined(kind))
+        {
+            return null;
+        }
+
+        name = kind != PlaceKind.Other ? "" : Trim(name) is { Length: > 0 } trimmed ? trimmed : old.Kind == PlaceKind.Other ? old.Name : "";
+        var place = old with
+        {
+            Kind = kind,
+            Name = name,
+            Latitude = point.Latitude,
+            Longitude = point.Longitude,
+            Address = point == old.Point ? TrimAddress(address) ?? old.Address : TrimAddress(address),
+        };
+        if (place == old)
+        {
+            return old;
+        }
+
+        if (kind != PlaceKind.Other)
+        {
+            _places.RemoveAll(p => p.Kind == kind && p.Id != id);
+        }
+
+        _places[_places.FindIndex(p => p.Id == id)] = place;
+        await WriteAsync();
+        Changed?.Invoke();
+        return place;
     }
 
     /// <summary>Forgets a place; what's returned puts it back (<see cref="RestoreAsync"/>), or null when it wasn't saved.</summary>
