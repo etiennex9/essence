@@ -825,6 +825,21 @@
   <data name="AppUpdateDownload" xml:space="preserve">
     <value>Télécharger</value>
   </data>
+  <data name="AppUpdateInstall" xml:space="preserve">
+    <value>Installer</value>
+  </data>
+  <data name="AppUpdateDownloading" xml:space="preserve">
+    <value>Téléchargement de la version {0}…</value>
+  </data>
+  <data name="AppUpdateDownloadingPercent" xml:space="preserve">
+    <value>Téléchargement de la version {0}… {1} %</value>
+  </data>
+  <data name="AppUpdateInstalling" xml:space="preserve">
+    <value>Installation de la version {0}. L’application se ferme pour se mettre à jour : rouvrez-la une fois terminé.</value>
+  </data>
+  <data name="AppUpdateFailed" xml:space="preserve">
+    <value>Impossible d’installer la version {0}</value>
+  </data>
   <data name="ServerTitle" xml:space="preserve">
     <value>Choisir un serveur</value>
   </data>

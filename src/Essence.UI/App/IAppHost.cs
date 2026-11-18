@@ -19,7 +19,19 @@ public interface IAppHost
     /// <summary>A newer build of the app, once one is found; null until then.</summary>
     AppRelease? NewerRelease { get; }
 
-    /// <summary>Raised when <see cref="NewerRelease"/> or <see cref="WidgetsFollow"/> may have changed, on any thread.</summary>
+    /// <summary>
+    /// How far the host is with installing <see cref="NewerRelease"/> itself; null when it can't, and About links to the
+    /// release's page instead.
+    /// </summary>
+    AppInstallState? UpdateInstall { get; }
+
+    /// <summary>Downloads and installs <see cref="NewerRelease"/>, which closes the app; Android may ask first.</summary>
+    Task InstallUpdateAsync();
+
+    /// <summary>
+    /// Raised when <see cref="NewerRelease"/>, <see cref="UpdateInstall"/> or <see cref="WidgetsFollow"/> may have changed,
+    /// on any thread.
+    /// </summary>
     event Action? Changed;
 
     /// <summary>Opens the host's screen for choosing another server.</summary>
@@ -43,6 +55,24 @@ public enum WidgetFollowState
     Paused,
 }
 
+/// <summary>Where installing a newer build is, as About shows it.</summary>
+public enum AppInstallStage
+{
+    /// <summary>Found, and installs itself in the background, or now with Install.</summary>
+    Ready,
+
+    Downloading,
+
+    /// <summary>Handed to Android, which closes the app to install it.</summary>
+    Installing,
+
+    /// <summary>Couldn't be downloaded or installed: About links to the release's page.</summary>
+    Failed,
+}
+
+/// <param name="Percent">How much of the download is done, while downloading; null when its size isn't known.</param>
+public sealed record AppInstallState(AppInstallStage Stage, int? Percent = null);
+
 /// <param name="Version">As shown, e.g. <c>2026.11.07.2</c>.</param>
 /// <param name="Url">Where to get it: the release's page.</param>
 public sealed record AppRelease(string Version, Uri Url)
@@ -58,5 +88,29 @@ public sealed record AppRelease(string Version, Uri Url)
         _ => tag.TrimStart('v'),
     };
 
+    /// <summary>
+    /// The version code in the name a release gives its APK: <c>essence-449482.apk</c> is 449482. Null for any other file.
+    /// </summary>
+    public static long? VersionCodeOfApk(string? name) =>
+        name is { } n && n.StartsWith(ApkPrefix, StringComparison.Ordinal) && n.EndsWith(ApkSuffix, StringComparison.Ordinal)
+        && n.Length - ApkPrefix.Length - ApkSuffix.Length is > 0 and <= 15
+        && long.TryParse(n.AsSpan(ApkPrefix.Length, n.Length - ApkPrefix.Length - ApkSuffix.Length), System.Globalization.NumberStyles.None,
+            System.Globalization.CultureInfo.InvariantCulture, out var code)
+            ? code
+            : null;
+
+    /// <summary>
+    /// The SHA-256 in GitHub's digest of a release's file (<c>sha256:&lt;64 hex digits&gt;</c>), in lowercase. Null for
+    /// another algorithm, or none.
+    /// </summary>
+    public static string? Sha256OfDigest(string? digest) =>
+        digest is { Length: 7 + 64 } d && d.StartsWith("sha256:", StringComparison.OrdinalIgnoreCase) && d.AsSpan(7).ContainsAnyExcept(HexDigits) is false
+            ? d[7..].ToLowerInvariant()
+            : null;
+
     private const string TagPrefix = "android-";
+    private const string ApkPrefix = "essence-";
+    private const string ApkSuffix = ".apk";
+
+    private static readonly System.Buffers.SearchValues<char> HexDigits = System.Buffers.SearchValues.Create("0123456789abcdefABCDEF");
 }

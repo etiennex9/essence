@@ -6,25 +6,29 @@ using Microsoft.Extensions.Localization;
 namespace Essence.Mobile.Services;
 
 /// <summary>
-/// What the app adds to Essence.UI's page (<see cref="IAppHost"/>): its version name, the server, newer builds, and whether
-/// the widgets follow where you are.
+/// What the app adds to Essence.UI's page (<see cref="IAppHost"/>): its version name, the server, newer builds and installing
+/// them, and whether the widgets follow where you are.
 /// </summary>
 public sealed class MobileAppHost : IAppHost
 {
     private readonly ServerSettings _servers;
     private readonly AppUpdateCheck _updates;
+    private readonly Updates.AppUpdater _updater;
     private readonly BuildInfo _build;
     private readonly IStringLocalizer<Strings> _l;
     private int _toldTooOld;
 
-    public MobileAppHost(ServerSettings servers, AppUpdateCheck updates, BuildInfo build, AppHttpHandler http, IStringLocalizer<Strings> l)
+    public MobileAppHost(
+        ServerSettings servers, AppUpdateCheck updates, Updates.AppUpdater updater, BuildInfo build, AppHttpHandler http, IStringLocalizer<Strings> l)
     {
         _servers = servers;
         _updates = updates;
+        _updater = updater;
         _build = build;
         _l = l;
         http.TooOld += OnTooOld;
         _updates.Changed += OnChanged;
+        _updater.Changed += OnChanged;
     }
 
     // CI's builds have a version code above 1 (README → Versions); a local or pull request build has 1, and version 0.0.0.
@@ -36,6 +40,10 @@ public sealed class MobileAppHost : IAppHost
     public string ServerName => _servers.ServerId ?? "";
 
     public AppRelease? NewerRelease => _updates.Newer;
+
+    public AppInstallState? UpdateInstall => _updater.State;
+
+    public Task InstallUpdateAsync() => _updater.InstallAsync();
 
     public event Action? Changed;
 
