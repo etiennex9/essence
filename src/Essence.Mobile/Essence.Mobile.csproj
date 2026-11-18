@@ -29,7 +29,11 @@
     <EssenceDefaultServer Condition="'$(EssenceDefaultServer)' == '' and '$(Configuration)' == 'Debug'">http://localhost:8080/</EssenceDefaultServer>
     <!-- owner/name on GitHub, whose releases the app checks for a newer build. -->
     <EssenceRepository Condition="'$(EssenceRepository)' == ''"></EssenceRepository>
+    <!-- Looks for newer builds and installs them; false also leaves the permissions to install out (Google Play). -->
     <EssenceUpdateCheck Condition="'$(EssenceUpdateCheck)' == ''">true</EssenceUpdateCheck>
+    <DefineConstants Condition="'$(EssenceUpdateCheck)' == 'true'">$(DefineConstants);ESSENCE_SELF_UPDATE</DefineConstants>
+    <!-- Read instead of GitHub's latest release: only to try the update on a phone (README in this folder). -->
+    <EssenceUpdateFeed Condition="'$(EssenceUpdateFeed)' == ''"></EssenceUpdateFeed>
     <!-- Lets the widgets follow where you are with "Allow all the time"; false leaves the permission out (Google Play). -->
     <EssenceBackgroundLocation Condition="'$(EssenceBackgroundLocation)' == ''">true</EssenceBackgroundLocation>
     <DefineConstants Condition="'$(EssenceBackgroundLocation)' == 'true'">$(DefineConstants);ESSENCE_BACKGROUND_LOCATION</DefineConstants>
@@ -43,6 +47,7 @@
     <AssemblyMetadata Include="Essence.DefaultServer" Value="$(EssenceDefaultServer)" />
     <AssemblyMetadata Include="Essence.Repository" Value="$(EssenceRepository)" />
     <AssemblyMetadata Include="Essence.UpdateCheck" Value="$(EssenceUpdateCheck)" />
+    <AssemblyMetadata Include="Essence.UpdateFeed" Value="$(EssenceUpdateFeed)" />
   </ItemGroup>
 
   <ItemGroup>

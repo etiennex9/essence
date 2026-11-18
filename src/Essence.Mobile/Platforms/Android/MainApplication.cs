@@ -12,4 +12,11 @@ namespace Essence.Mobile;
 public class MainApplication(IntPtr handle, JniHandleOwnership ownership) : MauiApplication(handle, ownership)
 {
     protected override MauiApp CreateMauiApp() => MauiProgram.CreateMauiApp();
+
+    public override void OnCreate()
+    {
+        base.OnCreate();
+        // Before any activity starts: an update found in the background installs only while none shows.
+        RegisterActivityLifecycleCallbacks(Updates.AppForeground.Instance);
+    }
 }

@@ -78,9 +78,33 @@
                 }
                 @if (host.NewerRelease is { } newer)
                 {
-                    <p class="app-update">
-                        @L["AppUpdateAvailable", newer.Version]
-                        · <a href="@newer.Url" target="_blank" rel="noopener">@L["AppUpdateDownload"]</a>
+                    @* The app installs it itself where it can (IAppHost.UpdateInstall); else, and when that failed, the
+                       release's page. *@
+                    <p class="app-update" aria-live="polite">
+                        @switch (host.UpdateInstall)
+                        {
+                            case { Stage: AppInstallStage.Ready }:
+                                @L["AppUpdateAvailable", newer.Version]
+                                <text> · </text><button type="button" class="link" @onclick="() => host.InstallUpdateAsync()">@L["AppUpdateInstall"]</button>
+                                break;
+                            case { Stage: AppInstallStage.Downloading, Percent: { } percent }:
+                                @L["AppUpdateDownloadingPercent", newer.Version, percent]
+                                break;
+                            case { Stage: AppInstallStage.Downloading }:
+                                @L["AppUpdateDownloading", newer.Version]
+                                break;
+                            case { Stage: AppInstallStage.Installing }:
+                                @L["AppUpdateInstalling", newer.Version]
+                                break;
+                            case { Stage: AppInstallStage.Failed }:
+                                @L["AppUpdateFailed", newer.Version]
+                                <text> · </text><a href="@newer.Url" target="_blank" rel="noopener">@L["AppUpdateDownload"]</a>
+                                break;
+                            default:
+                                @L["AppUpdateAvailable", newer.Version]
+                                <text> · </text><a href="@newer.Url" target="_blank" rel="noopener">@L["AppUpdateDownload"]</a>
+                                break;
+                        }
                     </p>
                 }
             }

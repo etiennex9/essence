@@ -825,6 +825,21 @@
   <data name="AppUpdateDownload" xml:space="preserve">
     <value>Download</value>
   </data>
+  <data name="AppUpdateInstall" xml:space="preserve">
+    <value>Install</value>
+  </data>
+  <data name="AppUpdateDownloading" xml:space="preserve">
+    <value>Downloading version {0}…</value>
+  </data>
+  <data name="AppUpdateDownloadingPercent" xml:space="preserve">
+    <value>Downloading version {0}… {1}%</value>
+  </data>
+  <data name="AppUpdateInstalling" xml:space="preserve">
+    <value>Installing version {0}. The app closes to update: open it again once it’s done.</value>
+  </data>
+  <data name="AppUpdateFailed" xml:space="preserve">
+    <value>Couldn’t install version {0}</value>
+  </data>
   <data name="ServerTitle" xml:space="preserve">
     <value>Choose a server</value>
   </data>

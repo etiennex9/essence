@@ -8,7 +8,8 @@ The Android app: a .NET MAUI Blazor Hybrid app that hosts `Essence.UI`, the same
   a route you drive often, which can follow where you are ([below](#widgets-that-follow-where-you-are));
 - API calls through .NET's `HttpClient`, so no CORS entry is needed, each saying which build asks
   (`Essence-Android/<version name> (<version code>)`, see [API compatibility](../../README.md#api-compatibility));
-- an update check against the GitHub releases of the repository that built it, shown in About.
+- updates from the GitHub releases of the repository that built it, which it downloads and installs itself
+  ([below](#updates)).
 
 ## The server
 
@@ -88,6 +89,73 @@ and a server naming another API than the account's asks for the account to be li
 To check it against OpenStreetMap's development server, point a local api at it (`OSM_CLIENT_ID`, `OSM_AUTH_URL` and
 `OSM_API_URL` in `.env`) with an application registered there, run the app as below, and link from About.
 
+## Updates
+
+A release build looks for a newer build in its repository's latest GitHub release ([README → Android app
+releases](../../README.md#android-app-releases)): when it starts, when it comes back, and from a background job, at most
+every 12 hours (`Services/AppUpdateCheck.cs`). Once one is found, About says so, with a dot on its button, and the app
+installs it itself (`Platforms/Android/Updates`):
+
+- **In the background**, on Wi-Fi with the battery and storage not low: the job downloads the APK into the app's cache
+  and checks it against the size and SHA-256 that GitHub lists for it. A minute after the app leaves the screen, or at
+  the job's next run, it hands the APK to Android's `PackageInstaller`, which also checks that it's signed with the
+  installed app's key. From Android 12, Android installs it without asking, once the user has allowed installing apps
+  from Essence. Never while one of the app's screens shows, since installing closes the app. The job is Android's
+  JobScheduler's, not WorkManager's: WorkManager runs a job that's due in the app's process when that's still there, and
+  from Android 15 a process kept after leaving the screen has no network.
+- **About → Install** downloads it on any network and installs it now. The first time, Android asks to allow installing
+  apps from Essence (*Install unknown apps*); before Android 12, it asks each time. Allowing it restarts the app, while
+  Android carries on with the install: the app finds that install among its sessions, and says *Installing* rather than
+  offering Install again, which would install it twice. The app closes to update, and the user opens it again.
+
+Google Play Protect may first ask to scan a build it hasn't seen (*App scan recommended*): the install waits for that
+answer, and About says *Installing* meanwhile. Where it can't (a download or an install that failed, or an APK the
+release doesn't list), About links to the release's page instead. A build that would have to ask in the background waits
+for Install rather than trying again. Pull request builds don't check (version code 1). `-p:EssenceUpdateCheck=false`
+turns it all off and leaves the two permissions, `REQUEST_INSTALL_PACKAGES` and `UPDATE_PACKAGES_WITHOUT_USER_ACTION`,
+out of the manifest: a Google Play build would.
+
+### Try the updates on a phone
+
+Without making a release, build a debug app beside the installed release (its own package, so the release keeps its
+data) at two version codes, with the APK holding its code (`EmbedAssembliesIntoApk`, which debug builds otherwise deploy
+apart) and a feed of your own in place of GitHub's:
+
+```bash
+dotnet build src/Essence.Mobile/Essence.Mobile.csproj -f net10.0-android -p:ApplicationId=io.github.etiennex9.essence.debug "-p:ApplicationTitle=Essence (debug)" -p:IntermediateOutputPath=obj/side/ -p:OutputPath=bin/side/ -p:EmbedAssembliesIntoApk=true -p:ApplicationVersion=2 -p:ApplicationDisplayVersion=0.0.2 -p:EssenceRepository=<owner>/<name> -p:EssenceUpdateFeed=http://localhost:8099/latest.json
+```
+
+Copy `bin/side/io.github.etiennex9.essence.debug-Signed.apk` aside as `essence-2.apk`, build again with
+`ApplicationVersion=3` and `0.0.3` into `essence-3.apk`, and serve that folder on port 8099 with a `latest.json` shaped
+like GitHub's answer: `tag_name` (`android-0.0.3`), `html_url` (an `https://` page), and in `assets`, `name`
+(`essence-3.apk`), `browser_download_url` (`http://localhost:8099/essence-3.apk`), `size` and `digest`
+(`sha256:<hex>`). Then forward the port, install version 2 and open it:
+
+```bash
+adb reverse tcp:8099 tcp:8099
+```
+
+```bash
+adb install -r essence-2.apk
+```
+
+About offers version 0.0.3: Install takes it from there. To see it install in the background, build a version 4,
+point `latest.json` at it, and make the app forget when it last checked: stop it, since it keeps its preferences in memory,
+then edit them (debug builds let `run-as` at their files):
+
+```bash
+adb shell am force-stop io.github.etiennex9.essence.debug
+```
+
+```bash
+adb shell run-as io.github.etiennex9.essence.debug sed -i /essence.app-update-checked/d shared_prefs/io.github.etiennex9.essence.debug_preferences.xml
+```
+
+Open the app, which finds it, and leave it: a minute later, on Wi-Fi, it updates without a word.
+`adb logcat -s Essence.Update` shows why one didn't install. Rebuild each version rather than reusing a version code: the
+app keeps what it last found, and an APK that isn't the one it found doesn't check out. Afterwards, `adb install -r -d`
+puts a build of version code 1 back (a debug build may go down a version), so that the usual builds install over it.
+
 ## Run it on a phone
 
 Install the MAUI Android workload: Visual Studio's *.NET Multi-platform App UI development* workload, or
@@ -160,7 +228,8 @@ The APK and the App Bundle land in `src/Essence.Mobile/bin/Release/net10.0-andro
 | `ApplicationVersion` | The version code: minutes since 2026-01-01 00:00 UTC (`$(( ($(date -u +%s) - $(date -u -d 2026-01-01T00:00:00Z +%s)) / 60 ))`). Android updates an app only to a higher one. |
 | `EssenceDefaultServer` | Fills in the first launch's server. Empty by default; `http://localhost:8080/` in Debug. |
 | `EssenceRepository` | `owner/name` on GitHub, whose latest release the update check reads. Empty: no check. |
-| `EssenceUpdateCheck` | `false` turns the update check off; a version code of 1 never checks either. |
+| `EssenceUpdateCheck` | `false` turns the [updates](#updates) off and leaves the permissions to install out of the manifest; a version code of 1 never checks either. |
+| `EssenceUpdateFeed` | Read instead of GitHub's latest release, to try the updates on a phone ([below](#try-the-updates-on-a-phone)). Empty by default. |
 | `EssenceBackgroundLocation` | `false` leaves *Allow all the time* out of the manifest, and Follow where I am out of the app (a Google Play build). `true` by default. |
 | `EssenceReleaseNotesDir` | The folder with `release.json` and `changelog-*.json` that About shows: `src/Essence.Mobile/release/` by default, ignored by git. Without them, About says *Development version*; with them and a version code of 1, it shows their day as the version. |
 

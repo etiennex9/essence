@@ -38,6 +38,7 @@ public static class MauiProgram
         // One per BlazorWebView: a page started after the server changed talks to the new one.
         services.AddScoped(sp => sp.GetRequiredService<ServerSettings>().CreateApiClient());
         services.AddSingleton<AppUpdateCheck>();
+        services.AddSingleton<Updates.AppUpdater>();
         services.AddSingleton<MobileAppHost>();
         services.AddSingleton<IAppHost>(sp => sp.GetRequiredService<MobileAppHost>());
         services.AddSingleton<DeepLinks>();

@@ -922,8 +922,9 @@ artifact, for 30 days.
 `2026.11.07`, then `2026.11.07.2`, `2026.11.07.3`… The workflow counts the day's `android-` tags, so a number whose
 release failed halfway is skipped. The code is the minutes from 2026-01-01 00:00 UTC to the build, e.g. `449482`: it grows
 with every build, which Android requires to update an app, and the release notes call it the build. About in the app
-shows the version name. The app's update check reads the latest release and compares its APK's number with its own;
-About then offers the newer one by its version name, with a link to the release's page. Pull requests that touch the app
+shows the version name. The app's update check reads the latest release and compares its APK's number with its own; the
+app then downloads that APK and installs it itself, on Wi-Fi while it isn't on screen, or right away from About → Install
+([src/Essence.Mobile](src/Essence.Mobile/README.md#updates)). Where it can't, About links to the release's page. Pull requests that touch the app
 get an APK in the run's artifacts, kept 7 days: version `0.0.0` (1), signed with a debug key, no server filled in,
 *Development version* in About, no update check. Android won't install it over a release, or a release over it, since
 their keys differ: uninstall first.

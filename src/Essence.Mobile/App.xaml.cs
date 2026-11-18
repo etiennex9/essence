@@ -16,17 +16,21 @@ public partial class App : Application
     private readonly NativeSessionStore _session;
     private readonly DeepLinks _links;
     private readonly AppUpdateCheck _updates;
+    private readonly Updates.AppUpdater _updater;
     private readonly IStringLocalizer<Strings> _l;
     private readonly MobileAppHost _host;
 
     /// <param name="host">Taken here so it listens for a server's 426 from the start, before About asks for it.</param>
-    public App(ServerSettings servers, NativeSessionStore session, DeepLinks links, AppUpdateCheck updates, IStringLocalizer<Strings> l, MobileAppHost host)
+    public App(
+        ServerSettings servers, NativeSessionStore session, DeepLinks links, AppUpdateCheck updates, Updates.AppUpdater updater,
+        IStringLocalizer<Strings> l, MobileAppHost host)
     {
         InitializeComponent();
         _servers = servers;
         _session = session;
         _links = links;
         _updates = updates;
+        _updater = updater;
         _l = l;
         _host = host;
         RequestedThemeChanged += (_, _) => SystemBars.Update();
@@ -37,12 +41,23 @@ public partial class App : Application
     protected override Window CreateWindow(IActivationState? activationState)
     {
         var window = new Window(_servers.Current is null ? NewServerPage(changing: false) : NewMainPage()) { Title = "Essence" };
-        window.Created += (_, _) => _ = _updates.CheckAsync();
+        window.Created += (_, _) =>
+        {
+            _ = _updates.CheckAsync();
+            // The background job that downloads and installs updates, and the APK of the update just installed.
+            Updates.AppUpdates.Schedule(Platform.AppContext, _updates.Enabled);
+            _ = Task.Run(_updater.CleanUp);
+        };
         window.Stopped += (_, _) =>
         {
             MapHost.Current?.OnAppStopped();
             // Cars, places, favorites or the fuel may have changed.
             Widgets.WidgetUpdates.RefreshNow(Platform.AppContext);
+            // An update waiting installs once the app has been away a while.
+            if (_updater.State is not null)
+            {
+                Updates.AppUpdates.SoonAfterLeaving(Platform.AppContext);
+            }
         };
         window.Resumed += (_, _) =>
         {
