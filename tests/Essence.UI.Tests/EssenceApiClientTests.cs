@@ -39,6 +39,32 @@ public class EssenceApiClientTests
     }
 
     [Fact]
+    public async Task The_trends_are_asked_for_the_area_and_read_with_a_rise_and_a_pattern()
+    {
+        var (client, requests) = Client(_ => Json(
+            """
+            {"fuel":"Régulier","asOf":"2026-11-26T05:20:00Z","radiusKm":10,"stations":160,
+             "now":{"at":"2026-11-26T05:20:00Z","lowestCents":140.9,"medianCents":162.9,"stations":160},
+             "yesterday":{"at":"2026-11-25T05:20:00Z","medianCents":160.9,"nowMedianCents":162.9,"stations":159},"lastWeek":null,
+             "low":{"stationId":3,"name":null,"brand":"Costco","priceCents":139.9,"from":"2026-11-25T19:00:00Z","to":null,"stillNow":false},
+             "last24h":{"from":"2026-11-25T05:30:00Z","stepMinutes":15,"lowestCents":[140.9,null],"medianCents":[160.9,null]},
+             "jump":{"since":"2026-11-26T05:05:01Z","until":"2026-11-26T06:05:00Z","raised":116,"stations":160,"riseCents":11,
+               "beforeCents":151.9,"afterCents":162.9,"notRaised":[{"id":7,"priceCents":151.9}],"usual":true},
+             "pattern":{"jumpsAround":"00:00:00","lowestFromHour":18,"lowestToHour":0,"days":28,"cheapestDays":[4,5],"weeks":6}}
+            """));
+
+        var result = await client.GetTrendsAsync(new TrendsQuery(45.5017, -73.5673, "Régulier", true), TestContext.Current.CancellationToken);
+
+        Assert.Equal("/stations/trends?lat=45.5017&lon=-73.5673&fuel=R%C3%A9gulier&costco=true", Assert.Single(requests).RequestUri!.PathAndQuery);
+        var trends = result.Value!;
+        Assert.Equal([new NotRaisedStation(7, 151.9m)], trends.Jump!.NotRaised);
+        Assert.Equal(new TimeOnly(0, 0), trends.Pattern!.JumpsAround);
+        Assert.Equal([4, 5], trends.Pattern.CheapestDays);
+        Assert.Equal([140.9m, null], trends.Last24h!.LowestCents);
+        Assert.False(trends.Low!.StillNow);
+    }
+
+    [Fact]
     public async Task A_place_search_s_numbers_are_invariant_in_French()
     {
         var previous = CultureInfo.CurrentCulture;

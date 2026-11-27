@@ -18,6 +18,7 @@
     --ess-warning-text: #633806;
     /* Money saved. */
     --ess-good: #27500a;
+    --ess-good-bg: #eaf3de;
     --ess-shadow: 0 1px 2px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
     --ess-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.12), 0 12px 32px rgba(0, 0, 0, 0.12);
     --ess-fuel-0: #0f6e56;
@@ -60,6 +61,7 @@
         --ess-warning-bg: #412402;
         --ess-warning-text: #fac775;
         --ess-good: #97c459;
+        --ess-good-bg: #1f2a12;
         --ess-shadow: 0 1px 2px rgba(0, 0, 0, 0.4), 0 2px 8px rgba(0, 0, 0, 0.3);
         --ess-shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.4);
         --ess-fuel-0: #5dcaa5;

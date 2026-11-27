@@ -38,6 +38,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<ComparedStations>();
         services.AddScoped<CarProfiles>();
         services.AddScoped<BestNearYou>();
+        services.AddScoped<AreaTrends>();
         services.AddScoped<SavedPlaces>();
         services.AddScoped<TripState>();
         services.AddScoped<PlaceSearch>();

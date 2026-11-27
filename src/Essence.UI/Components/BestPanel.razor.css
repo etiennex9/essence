@@ -571,9 +571,19 @@
     color: var(--ess-warning-text);
 }
 
-/* Closes soon after the driver gets there, or closed then: a tag like Members', on its own line in a tile. */
+/* Closes soon after the driver gets there, or closed then: a tag like Members', on its own line in a tile, never two. */
 .tile .tag {
+    max-width: 100%;
     margin-top: 1px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Not up yet: good news, in green, while a rise goes through the area. */
+.tag.is-good {
+    background: var(--ess-good-bg);
+    color: var(--ess-good);
 }
 
 /* The stations left out for their hours: one muted line at the end, under every station shown. */

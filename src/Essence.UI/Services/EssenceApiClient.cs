@@ -69,6 +69,19 @@ public sealed class EssenceApiClient(HttpClient http)
             EssenceJsonContext.Default.BestNearby,
             cancellationToken);
 
+    /// <summary>
+    /// How prices move around a point (<c>/stations/trends</c>): <see cref="ApiError.NotFound"/> from a server older than
+    /// it. The point goes in the query string, which Essence.Web's nginx doesn't log for this path.
+    /// </summary>
+    public Task<ApiResult<PriceTrends>> GetTrendsAsync(TrendsQuery query, CancellationToken cancellationToken) =>
+        GetAsync(
+            string.Create(
+                CultureInfo.InvariantCulture,
+                $"stations/trends?lat={query.Latitude:0.######}&lon={query.Longitude:0.######}&fuel={Uri.EscapeDataString(query.Fuel)}"
+                + $"&costco={(query.CostcoMember ? "true" : "false")}"),
+            EssenceJsonContext.Default.PriceTrends,
+            cancellationToken);
+
     /// <summary>Where to fill up on the way to a destination, for a car (<c>/trips/best</c>).</summary>
     public Task<ApiResult<TripPlan>> GetTripAsync(TripQuery query, CancellationToken cancellationToken) =>
         GetTripAsync(query, [], cancellationToken);
@@ -229,6 +242,7 @@ public sealed record TripQuery(
 [JsonSerializable(typeof(List<NearbyStation>))]
 [JsonSerializable(typeof(StationDetail))]
 [JsonSerializable(typeof(BestNearby))]
+[JsonSerializable(typeof(PriceTrends))]
 [JsonSerializable(typeof(TripPlan))]
 [JsonSerializable(typeof(List<PriceHistoryDto>))]
 [JsonSerializable(typeof(List<PlaceSuggestion>))]

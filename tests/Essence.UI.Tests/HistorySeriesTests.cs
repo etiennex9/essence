@@ -9,6 +9,27 @@ public class HistorySeriesTests
     private static readonly DateTimeOffset To = From.AddDays(10);
 
     [Fact]
+    public void The_area_s_samples_hold_until_the_next_the_last_until_now_with_gaps()
+    {
+        var series = new AreaSeries(From, 15, [150m, 150m, null, 148m], [160m, 161m, null, 159m]);
+        var asOf = From.AddMinutes(50);
+
+        var data = HistorySeries.Area(series, asOf);
+
+        Assert.Equal((From, asOf), (data.From, data.To));
+        var median = data.Series.Single(s => s.Key == "median").Steps;
+        var lowest = data.Series.Single(s => s.Key == "lowest").Steps;
+        Assert.Equal([new PriceStep(From, From.AddMinutes(30), 150m), new PriceStep(From.AddMinutes(45), asOf, 148m)], lowest);
+        Assert.Equal(new PriceStep(From.AddMinutes(15), From.AddMinutes(30), 161m), median[1]);
+    }
+
+    [Fact]
+    public void An_area_without_prices_draws_nothing()
+    {
+        Assert.True(HistorySeries.Area(new AreaSeries(From, 15, [null, null], [null, null]), From.AddMinutes(30)).IsEmpty);
+    }
+
+    [Fact]
     public void Rows_are_clamped_to_the_range_and_open_rows_run_to_the_end()
     {
         var data = HistorySeries.Build(
