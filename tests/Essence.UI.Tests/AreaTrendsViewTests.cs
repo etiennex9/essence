@@ -36,7 +36,7 @@ public sealed class AreaTrendsViewTests : IDisposable
         new("Régulier", Night, 10, 160, new AreaPrices(Night, 140.9m, 162.9m, 160), null, null, null, null, jump, pattern);
 
     [Theory]
-    [InlineData("en-CA", "Prices are going up since 12:05 a.m.: 116 of 160 stations up about 11 ¢.")]
+    [InlineData("en-CA", "Prices have been going up since 12:05 a.m.: 116 of 160 stations up about 11 ¢.")]
     [InlineData("fr-CA", "Les prix montent depuis 0 h 05 : 116 stations sur 160 ont augmenté d’environ 11 ¢.")]
     public void A_rise_going_on_says_so_until_it_ends(string culture, string text)
     {
@@ -108,7 +108,7 @@ public sealed class AreaTrendsViewTests : IDisposable
         var low = new AreaLow(3, null, "Costco", 139.9m, Night.AddHours(-12), Night.AddMinutes(-85), StillNow: false);
 
         Assert.Equal(text, Plain(_view.LowText(low, "Costco", Night, Zone)));
-        Assert.Equal("Lowest in 24 h: 139.9 at Costco, still now.", Culture("en-CA", () => _view.LowText(low with { To = null, StillNow = true }, "Costco", Night, Zone)));
+        Assert.Equal("Lowest in 24 h: 139.9 at Costco, its price now.", Culture("en-CA", () => _view.LowText(low with { To = null, StillNow = true }, "Costco", Night, Zone)));
         Assert.Equal("Lowest in 24 h: 139.9 at Costco.", Culture("en-CA", () => _view.LowText(low with { To = null }, "Costco", Night, Zone)));
     }
 
@@ -118,9 +118,10 @@ public sealed class AreaTrendsViewTests : IDisposable
         var up = new AreaChange(Night.AddDays(-1), 154.9m, 162.9m, 160);
         var down = up with { NowMedianCents = 151.9m };
 
-        Assert.Equal(("+8.0 ¢", "is-up"), (AreaTrendsView.Change(up), AreaTrendsView.ChangeTone(up)));
-        Assert.Equal(("−3.0 ¢", "is-down"), (AreaTrendsView.Change(down), AreaTrendsView.ChangeTone(down)));
-        Assert.Equal(("0.0 ¢", null), (AreaTrendsView.Change(up with { NowMedianCents = 154.9m }), AreaTrendsView.ChangeTone(up with { NowMedianCents = 154.9m })));
+        // A no-break space before ¢, so the figure never wraps.
+        Assert.Equal(("+8.0 ¢", "is-up"), (AreaTrendsView.Change(up), AreaTrendsView.ChangeTone(up)));
+        Assert.Equal(("−3.0 ¢", "is-down"), (AreaTrendsView.Change(down), AreaTrendsView.ChangeTone(down)));
+        Assert.Equal(("0.0 ¢", null), (AreaTrendsView.Change(up with { NowMedianCents = 154.9m }), AreaTrendsView.ChangeTone(up with { NowMedianCents = 154.9m })));
         Assert.Equal(("—", null), (AreaTrendsView.Change(null), AreaTrendsView.ChangeTone(null)));
     }
 

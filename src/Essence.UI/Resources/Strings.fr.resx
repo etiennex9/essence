@@ -1366,7 +1366,7 @@
     <value>Le plus bas en 24 h : {0} chez {1} (jusqu’à hier à {2}).</value>
   </data>
   <data name="TrendsJump" xml:space="preserve">
-    <value>Les prix montent depuis {3} : {0} stations sur {1} ont augmenté d’environ {2} ¢.</value>
+    <value>Les prix montent depuis {3} : {0} stations sur {1} ont augmenté d’environ {2} ¢.</value>
   </data>
   <data name="TrendsPatternBoth" xml:space="preserve">
     <value>Ici, les prix montent habituellement vers {0} et sont au plus bas {1}.</value>

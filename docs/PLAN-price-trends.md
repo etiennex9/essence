@@ -287,9 +287,15 @@ each simulated every 5 minutes with the rules below. The local DB covers only ab
 ### Phase B as built
 - **One rise line, no "went up":** the card and the tags say a rise is going on until its `Until`, then stop with no
   new answer (the pane renders again then); a rise that's over isn't told.
-- **No sentence ends on a clock time in English** ("12:05 a.m.." would read the period twice): "Prices are going up
-  since 12:05 a.m.: …", "Around 11:45 p.m., prices here usually go up.", "Lowest in 24 h: 139.9 at Esso (until
-  12:10 a.m.)."
+- **No sentence ends on a clock time in English** ("12:05 a.m.." would read the period twice): "Prices have been going
+  up since 12:05 a.m.: …", "Around 11:45 p.m., prices here usually go up.", "Lowest in 24 h: 139.9 at Esso (until
+  12:10 a.m.)." A no-break space comes before ¢.
+- **The cheapest days are a sentence of their own**: "They’re usually lowest on Thursdays and Fridays.", or "Here,
+  prices are usually lowest on …" when the pattern says nothing else.
+- **Asked in turn** (review fixes): the first request asks the server whether it has the trends without the point
+  (`GET /stations/trends`: 400 when it has, 404 when it's older), since an older server's web container would log the
+  point; a request dropped when the pane closes is asked again when it opens; an answer more than 30 minutes old isn't
+  shown; a failure is tried again 30 seconds later at the earliest, not at each tap.
 - **Shorter figure labels:** "Yesterday" / "Last week" ("Hier" / "7 jours"), with what they compare in their tooltip:
   "Since yesterday" was cut off in the desktop panel's 400 px.
 - **The parts of the day** are 5: at night (0–5), in the morning (5–11), around noon (11–14), in the afternoon (14–17),

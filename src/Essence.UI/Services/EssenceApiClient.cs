@@ -70,8 +70,17 @@ public sealed class EssenceApiClient(HttpClient http)
             cancellationToken);
 
     /// <summary>
+    /// Whether the server has the trends, asked without a point: <see cref="ApiError.Invalid"/> (400, the point missing)
+    /// when it has, <see cref="ApiError.NotFound"/> from a server older than them. An older server's web container logs the
+    /// query strings of paths it doesn't know, so the point isn't sent until the server is known to have them.
+    /// </summary>
+    public async Task<ApiError> ProbeTrendsAsync(CancellationToken cancellationToken) =>
+        (await GetAsync("stations/trends", EssenceJsonContext.Default.PriceTrends, cancellationToken)).Error;
+
+    /// <summary>
     /// How prices move around a point (<c>/stations/trends</c>): <see cref="ApiError.NotFound"/> from a server older than
-    /// it. The point goes in the query string, which Essence.Web's nginx doesn't log for this path.
+    /// it. The point goes in the query string, which Essence.Web's nginx doesn't log for this path; ask
+    /// <see cref="ProbeTrendsAsync"/> first.
     /// </summary>
     public Task<ApiResult<PriceTrends>> GetTrendsAsync(TrendsQuery query, CancellationToken cancellationToken) =>
         GetAsync(

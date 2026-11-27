@@ -26,6 +26,8 @@ public class AreaTrendsTests
     private readonly FakeTimeProvider _time = new(new DateTimeOffset(2026, 10, 24, 12, 0, 0, TimeSpan.Zero));
     private readonly List<Uri> _requests = [];
     private HttpStatusCode _trendsStatus = HttpStatusCode.OK;
+    private HttpStatusCode _probeStatus = HttpStatusCode.BadRequest;
+    private TaskCompletionSource? _gate;
     private TimeSpan? _retryAfter;
     private DateTimeOffset _importedAt;
     private readonly BestNearYou _best;
@@ -39,7 +41,12 @@ public class AreaTrendsTests
         _trends = new AreaTrends(api, _best, _time);
     }
 
-    private List<Uri> TrendsRequests => [.. _requests.Where(u => u.AbsolutePath.EndsWith("/stations/trends", StringComparison.Ordinal))];
+    /// <summary>The trends asked for a point; the server is asked first whether it has them, without one.</summary>
+    private List<Uri> TrendsRequests =>
+        [.. _requests.Where(u => u.AbsolutePath.EndsWith("/stations/trends", StringComparison.Ordinal) && u.Query.Length > 0)];
+
+    private List<Uri> Probes =>
+        [.. _requests.Where(u => u.AbsolutePath.EndsWith("/stations/trends", StringComparison.Ordinal) && u.Query.Length == 0)];
 
     [Fact]
     public async Task Nothing_is_asked_while_the_pane_doesnt_show_Best_near_you()
@@ -60,6 +67,7 @@ public class AreaTrendsTests
 
         var request = Assert.Single(TrendsRequests);
         Assert.Equal("?lat=45.5017&lon=-73.5673&fuel=R%C3%A9gulier&costco=false", request.Query);
+        Assert.Single(Probes);
         Assert.Equal(164.9m, _trends.For(_best.ResultQuery)!.Now!.MedianCents);
     }
 
@@ -110,9 +118,9 @@ public class AreaTrendsTests
     }
 
     [Fact]
-    public async Task An_older_server_isnt_asked_again()
+    public async Task An_older_server_is_never_sent_the_point_nor_asked_again()
     {
-        _trendsStatus = HttpStatusCode.NotFound;
+        _probeStatus = HttpStatusCode.NotFound;
         _trends.Attach();
         await _best.SetOriginAsync(Montreal);
 
@@ -120,7 +128,36 @@ public class AreaTrendsTests
         await _trends.RefreshAsync();
 
         Assert.True(_trends.Unsupported);
-        Assert.Single(TrendsRequests);
+        Assert.Single(Probes);
+        Assert.Empty(TrendsRequests);
+        Assert.Null(_trends.For(_best.ResultQuery));
+    }
+
+    [Fact]
+    public async Task A_request_dropped_when_the_pane_closes_is_asked_again_when_it_opens()
+    {
+        await _best.SetOriginAsync(Montreal);
+        _gate = new TaskCompletionSource();
+
+        _trends.Attach();
+        _trends.Detach();
+        _gate.SetResult();
+        await Task.Yield();
+        _trends.Attach();
+        await _trends.RefreshAsync();
+
+        Assert.NotNull(_trends.For(_best.ResultQuery));
+    }
+
+    [Fact]
+    public async Task An_answer_more_than_30_minutes_old_isnt_shown()
+    {
+        _trends.Attach();
+        await _best.SetOriginAsync(Montreal);
+        _trends.Detach();
+
+        _time.Advance(TimeSpan.FromMinutes(31));
+
         Assert.Null(_trends.For(_best.ResultQuery));
     }
 
@@ -133,10 +170,14 @@ public class AreaTrendsTests
         _time.Advance(TimeSpan.FromMinutes(11));
         var asked = TrendsRequests.Count;
 
+        // A tap on a tile right after the failure doesn't ask again; 30 seconds later, Best near you's next change does.
+        _best.Select(1);
         await _trends.RefreshAsync();
-        await _trends.RefreshAsync();
+        Assert.Equal(asked, TrendsRequests.Count);
 
-        Assert.Equal(asked + 2, TrendsRequests.Count);
+        _time.Advance(TimeSpan.FromSeconds(31));
+        await _trends.RefreshAsync();
+        Assert.Equal(asked + 1, TrendsRequests.Count);
         Assert.NotNull(_trends.For(_best.ResultQuery));
     }
 
@@ -176,7 +217,13 @@ public class AreaTrendsTests
         {
             test._requests.Add(request.RequestUri!);
             var trends = request.RequestUri!.AbsolutePath.EndsWith("/stations/trends", StringComparison.Ordinal);
-            var status = trends ? test._trendsStatus : HttpStatusCode.OK;
+            var probe = trends && request.RequestUri.Query.Length == 0;
+            if (trends && !probe && test._gate is { } gate)
+            {
+                return Answer(gate.Task, request, cancellationToken);
+            }
+
+            var status = probe ? test._probeStatus : trends ? test._trendsStatus : HttpStatusCode.OK;
             var response = new HttpResponseMessage(status);
             if (status == HttpStatusCode.OK)
             {
@@ -189,6 +236,14 @@ public class AreaTrendsTests
             }
 
             return Task.FromResult(response);
+        }
+
+        /// <summary>The answer once <paramref name="gate"/> opens: a request still on its way meanwhile, cancelled like a real one.</summary>
+        private async Task<HttpResponseMessage> Answer(Task gate, HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            await gate.WaitAsync(cancellationToken);
+            test._gate = null;
+            return await SendAsync(request, cancellationToken);
         }
     }
 }

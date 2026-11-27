@@ -1357,7 +1357,7 @@
     <value>Lowest in 24 h: {0} at {1}.</value>
   </data>
   <data name="TrendsLowNow" xml:space="preserve">
-    <value>Lowest in 24 h: {0} at {1}, still now.</value>
+    <value>Lowest in 24 h: {0} at {1}, its price now.</value>
   </data>
   <data name="TrendsLowUntil" xml:space="preserve">
     <value>Lowest in 24 h: {0} at {1} (until {2}).</value>
@@ -1366,7 +1366,7 @@
     <value>Lowest in 24 h: {0} at {1} (until {2} yesterday).</value>
   </data>
   <data name="TrendsJump" xml:space="preserve">
-    <value>Prices are going up since {3}: {0} of {1} stations up about {2} ¢.</value>
+    <value>Prices have been going up since {3}: {0} of {1} stations up about {2} ¢.</value>
   </data>
   <data name="TrendsPatternBoth" xml:space="preserve">
     <value>Here, prices usually go up around {0} and are lowest {1}.</value>

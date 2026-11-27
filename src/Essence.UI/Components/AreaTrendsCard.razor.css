@@ -1,10 +1,7 @@
-/* How prices move around: under Best near you's tiles, before Also worth it. */
-.trends {
-    margin-top: 14px;
-}
+/* How prices move around: under Best near you's tiles, before Also worth it, as far below as the pane's other sections. */
 
-/* As Also worth it's title (BestPanel.razor.css), which doesn't reach in here. */
-h3.trends-title {
+/* As Also worth it's title (BestPanel.razor.css), which doesn't reach in here; above the pane's own h3 rule. */
+.trends h3.trends-title {
     margin: 0 0 6px;
     font-size: 12px;
     font-weight: 600;

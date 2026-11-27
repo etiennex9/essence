@@ -47,9 +47,9 @@ public sealed class AreaTrendsView(IStringLocalizer<Strings> l)
             Formatting.Clock(jump.Since, zone, culture, l["Midnight"])];
     }
 
-    /// <summary>The median's change since then: "+8.0 ¢", "−3.0 ¢", "0.0 ¢"; "—" without a comparison.</summary>
+    /// <summary>The median's change since then: "+8.0 ¢", "−3.0 ¢", "0.0 ¢" (a no-break space before ¢); "—" without a comparison.</summary>
     public static string Change(AreaChange? change) =>
-        change is null ? "—" : $"{Formatting.Change(change.NowMedianCents - change.MedianCents, CultureInfo.CurrentCulture)} ¢";
+        change is null ? "—" : $"{Formatting.Change(change.NowMedianCents - change.MedianCents, CultureInfo.CurrentCulture)}\u00A0¢";
 
     /// <summary>The figure's tone: up in amber, down in green; none unchanged or without a comparison.</summary>
     public static string? ChangeTone(AreaChange? change) => change is null
