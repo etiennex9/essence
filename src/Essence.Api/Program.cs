@@ -20,6 +20,9 @@ builder.Services.AddEssenceDbContext(connectionString, o => o.UseQueryTrackingBe
 // In Development, Clock:Now starts the clock at another moment, to check which stations are left out at another time of day.
 builder.Services.AddSingleton(SimulatedTime.For(builder.Environment.IsDevelopment(), builder.Configuration[SimulatedTime.ConfigKey]));
 builder.Services.AddSingleton<StationSnapshot>();
+// The trends' price history and area patterns, in memory: one copy shared by every request (PriceTimeline).
+builder.Services.AddSingleton<PriceTimeline>();
+builder.Services.AddSingleton<TrendPatterns>();
 builder.Services.AddOsrmRouting(builder.Configuration);
 builder.Services.AddPhotonGeocoding(builder.Configuration);
 builder.Services.AddDataServiceMonitor(
@@ -79,6 +82,7 @@ app.MapHealthChecks("/alive", new HealthCheckOptions { Predicate = _ => false })
 app.MapSourceHealthEndpoints();
 
 app.MapStationEndpoints();
+app.MapTrendEndpoints();
 app.MapPositionEndpoints();
 app.MapTripEndpoints();
 app.MapPlaceEndpoints();
