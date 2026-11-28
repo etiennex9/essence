@@ -4,18 +4,22 @@ using Npgsql;
 namespace Essence.Migrator;
 
 /// <summary>
-/// Creates (or updates the password of) the two application roles and grants them their privileges.
-/// Runs after migrations so that "ALL TABLES" includes every table. Idempotent.
+/// Creates (or updates the password of) the application roles and grants them their privileges: the ingest's writer, the
+/// API's reader, and with a password for it, the API's usage role, which writes the usage counts and nothing else (README →
+/// Usage). Runs after migrations so that "ALL TABLES" includes every table. Idempotent.
 /// </summary>
 internal static class RoleProvisioner
 {
     public const string WriterRole = "essence_writer";
     public const string ReaderRole = "essence_reader";
+    public const string UsageRole = "essence_usage";
 
+    /// <param name="usagePassword">Null or empty: no usage role is created (an existing one is left as it is).</param>
     public static async Task ProvisionAsync(
         string adminConnectionString,
         string writerPassword,
         string readerPassword,
+        string? usagePassword,
         ILogger logger,
         CancellationToken cancellationToken)
     {
@@ -33,15 +37,37 @@ internal static class RoleProvisioner
             GRANT USAGE ON SCHEMA public TO {WriterRole}, {ReaderRole};
 
             GRANT SELECT ON ALL TABLES IN SCHEMA public TO {ReaderRole};
+            -- The day's salt would let whoever reads usage_web find a visitor's address by trying addresses.
+            REVOKE SELECT ON usage_salts FROM {ReaderRole};
 
             GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA public TO {WriterRole};
             GRANT DELETE ON current_prices, station_hours, position_candidates TO {WriterRole};
             GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {WriterRole};
             REVOKE INSERT, UPDATE ON "__EFMigrationsHistory" FROM {WriterRole};
+            -- The usage counts are the API's, through its usage role.
+            REVOKE ALL ON usage_android, usage_web, usage_salts FROM {WriterRole};
             """, cancellationToken);
 
+        if (!string.IsNullOrEmpty(usagePassword))
+        {
+            await EnsureLoginRoleAsync(connection, UsageRole, usagePassword, cancellationToken);
+            await ExecuteAsync(connection, $"""
+                GRANT CONNECT ON DATABASE {database} TO {UsageRole};
+                GRANT USAGE ON SCHEMA public TO {UsageRole};
+                GRANT SELECT, INSERT ON usage_android, usage_web TO {UsageRole};
+                GRANT SELECT, INSERT, DELETE ON usage_salts TO {UsageRole};
+                """, cancellationToken);
+        }
+
         await transaction.CommitAsync(cancellationToken);
-        logger.LogInformation("Roles {WriterRole} and {ReaderRole} are provisioned.", WriterRole, ReaderRole);
+        if (string.IsNullOrEmpty(usagePassword))
+        {
+            logger.LogInformation("Roles {WriterRole} and {ReaderRole} are provisioned; without Roles:UsagePassword, no {UsageRole}.", WriterRole, ReaderRole, UsageRole);
+        }
+        else
+        {
+            logger.LogInformation("Roles {WriterRole}, {ReaderRole} and {UsageRole} are provisioned.", WriterRole, ReaderRole, UsageRole);
+        }
     }
 
     private static async Task EnsureLoginRoleAsync(NpgsqlConnection connection, string role, string password, CancellationToken cancellationToken)

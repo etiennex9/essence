@@ -24,6 +24,31 @@ namespace Essence.Data.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "earthdistance");
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
+            modelBuilder.Entity("Essence.Data.Entities.AndroidUsage", b =>
+                {
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date")
+                        .HasColumnName("day");
+
+                    b.Property<Guid>("Install")
+                        .HasColumnType("uuid")
+                        .HasColumnName("install");
+
+                    b.Property<long>("VersionCode")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version_code");
+
+                    b.Property<string>("Version")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("version");
+
+                    b.HasKey("Day", "Install", "VersionCode")
+                        .HasName("pk_usage_android");
+
+                    b.ToTable("usage_android", (string)null);
+                });
+
             modelBuilder.Entity("Essence.Data.Entities.CurrentPrice", b =>
                 {
                     b.Property<long>("StationId")
@@ -546,6 +571,44 @@ namespace Essence.Data.Migrations
                         .HasDatabaseName("ix_station_hours_station_id_source");
 
                     b.ToTable("station_hours", (string)null);
+                });
+
+            modelBuilder.Entity("Essence.Data.Entities.UsageSalt", b =>
+                {
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date")
+                        .HasColumnName("day");
+
+                    b.Property<byte[]>("Salt")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("salt");
+
+                    b.HasKey("Day")
+                        .HasName("pk_usage_salts");
+
+                    b.ToTable("usage_salts", (string)null);
+                });
+
+            modelBuilder.Entity("Essence.Data.Entities.WebUsage", b =>
+                {
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date")
+                        .HasColumnName("day");
+
+                    b.Property<Guid>("Visitor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("visitor");
+
+                    b.Property<string>("Os")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("os");
+
+                    b.HasKey("Day", "Visitor")
+                        .HasName("pk_usage_web");
+
+                    b.ToTable("usage_web", (string)null);
                 });
 
             modelBuilder.Entity("Essence.Data.Entities.CurrentPrice", b =>
