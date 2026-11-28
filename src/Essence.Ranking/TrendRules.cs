@@ -162,4 +162,11 @@ public static class TrendRules
     /// in the Montréal and Gatineau areas over 30 days (0.5 flagged 5–8 %).
     /// </summary>
     public const double CheapShare = 0.4;
+
+    /// <summary>
+    /// A usually cheap station isn't said to be while, at the latest import, more than this share of its neighbours with a
+    /// price are cheaper (those at its price counting half): more of them cheaper than dearer. In the Montréal area, those
+    /// that go up at midnight are often still dearer than the late ones the next morning, by 10 ¢ or more.
+    /// </summary>
+    public const double CheapNowRank = 0.5;
 }

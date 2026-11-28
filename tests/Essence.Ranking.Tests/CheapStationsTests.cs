@@ -57,6 +57,8 @@ public class CheapStationsTests
         var found = Find(At(0, 140m, membersOnly: true), At(1, 150m), At(2, 160m), At(3, 160m), At(4, 161m), At(5, 162m));
 
         Assert.Equal([1L, 2L], found.Stations.Ids);
+        Assert.Equal([2L, 3L, 4L, 5L, 6L], found.Neighbours[1].Order());
+        Assert.Equal([3L, 4L, 5L, 6L], found.Neighbours[2].Order());
     }
 
     [Fact]
@@ -119,5 +121,52 @@ public class CheapStationsTests
     public void Nothing_before_the_first_import()
     {
         Assert.Null(CheapStations.Find([At(0, 150m)], Coverage.None, End));
+    }
+
+    /// <summary>Its neighbours, at one price all along.</summary>
+    private static readonly CheapCandidate[] Others = [At(1, 160m), At(2, 160m), At(3, 161m), At(4, 162m), At(5, 165m)];
+
+    /// <summary>The usually cheap stations not dear now, as of the last import.</summary>
+    private static IReadOnlyList<long> NotDearNow(params CheapCandidate[] stations)
+    {
+        var coverage = Imports(Start, End);
+        var now = End.AddMinutes(3);
+        var found = CheapStations.Find(stations, coverage, now)!;
+        return CheapStations.NotDearNow(found, id => stations.Single(s => s.Id == id).Prices, coverage, now);
+    }
+
+    /// <summary>Station 1, the cheapest all along until an hour ago.</summary>
+    private static CheapCandidate CheapUntil(decimal? cents) => Candidate(0, false, 0.3, (Start, 150m), (End.AddHours(-1), cents));
+
+    [Fact]
+    public void One_dearer_now_than_most_of_its_neighbours_is_left_out()
+    {
+        // 163 against 160, 160, 161, 162 and 165: four cheaper, one dearer.
+        Assert.Empty(NotDearNow([CheapUntil(163m), .. Others]));
+        Assert.Equal([1L], NotDearNow([CheapUntil(150m), .. Others]));
+    }
+
+    [Fact]
+    public void One_in_the_middle_now_stays()
+    {
+        // 161 against 160, 160, 161, 162 and 165: two cheaper, two dearer, one at its price.
+        Assert.Equal([1L], NotDearNow([CheapUntil(161m), .. Others]));
+    }
+
+    [Fact]
+    public void One_without_a_price_now_stays()
+    {
+        Assert.Equal([1L], NotDearNow([CheapUntil(null), .. Others]));
+    }
+
+    [Fact]
+    public void One_with_fewer_than_four_neighbours_priced_now_stays()
+    {
+        // Only two of them still have a price: nothing says it's dear.
+        var fading = new[] { 160m, 160m, 161m, 162m, 165m }
+            .Select((cents, i) => Candidate(i + 1, false, 0.3, (Start, cents), (End.AddHours(-1), i < 2 ? cents : null)))
+            .ToArray();
+
+        Assert.Equal([1L], NotDearNow([CheapUntil(170m), .. fading]));
     }
 }

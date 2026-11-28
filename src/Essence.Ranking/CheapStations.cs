@@ -8,7 +8,9 @@ public sealed record CheapCandidate(long Id, double Latitude, double Longitude, 
 /// <param name="AsOf">The latest import the history was read to.</param>
 /// <param name="Days">How many days of history were compared: <see cref="TrendRules.CheapWindow"/>'s, fewer on a younger history.</param>
 /// <param name="Rated">How many stations had enough moments counted to be rated, for the log.</param>
-public sealed record UsualCheapness(DateTimeOffset AsOf, int Days, int Rated, StationSet Stations);
+/// <param name="Neighbours">Each usually cheap station's neighbours, by id, for <see cref="CheapStations.NotDearNow"/>.</param>
+public sealed record UsualCheapness(
+    DateTimeOffset AsOf, int Days, int Rated, StationSet Stations, IReadOnlyDictionary<long, long[]> Neighbours);
 
 /// <summary>
 /// Which stations are usually cheap: every <see cref="TrendRules.CheapStep"/> of the last <see cref="TrendRules.CheapWindow"/>
@@ -88,7 +90,7 @@ public static class CheapStations
         }
 
         var rated = 0;
-        var usual = new List<long>();
+        var usual = new Dictionary<long, long[]>();
         for (var i = 0; i < count; i++)
         {
             if (counted[i] < TrendRules.CheapMinSamples)
@@ -99,12 +101,57 @@ public static class CheapStations
             rated++;
             if (cheap[i] / (double)counted[i] >= TrendRules.CheapShare)
             {
-                usual.Add(stations[i].Id);
+                usual[stations[i].Id] = [.. neighbours[i].Select(j => stations[j].Id)];
             }
         }
 
         var days = first is { } start ? (int)Math.Round((asOf - start) / (double)TimeSpan.TicksPerDay) : 0;
-        return new UsualCheapness(new DateTimeOffset(asOf, TimeSpan.Zero), days, rated, StationSet.Of(usual));
+        return new UsualCheapness(new DateTimeOffset(asOf, TimeSpan.Zero), days, rated, StationSet.Of(usual.Keys), usual);
+    }
+
+    /// <summary>
+    /// The usually cheap stations, those dear right now aside: at the latest import at or before <paramref name="now"/>,
+    /// more of their neighbours with a price were cheaper than dearer (<see cref="TrendRules.CheapNowRank"/>). One with no
+    /// price then, or fewer than <see cref="TrendRules.CheapMinOthers"/> neighbours with one, stays: nothing says it's dear.
+    /// </summary>
+    /// <param name="pricesOf">A station's prices for the fuel, by id; null for one with none.</param>
+    public static IReadOnlyList<long> NotDearNow(
+        UsualCheapness usual, Func<long, StationPrices?> pricesOf, Coverage coverage, DateTimeOffset now)
+    {
+        if (coverage.LatestAtOrBefore(now.UtcTicks) is not { } asOf)
+        {
+            return usual.Stations.Ids;
+        }
+
+        int? PriceOf(long id) => pricesOf(id)?.TenthsAt(asOf, asOf);
+
+        var kept = new List<long>(usual.Stations.Count);
+        foreach (var id in usual.Stations.Ids)
+        {
+            if (PriceOf(id) is not { } price)
+            {
+                kept.Add(id);
+                continue;
+            }
+
+            // As in Find: twice the neighbours cheaper, plus those at the same price.
+            int priced = 0, below = 0;
+            foreach (var other in usual.Neighbours[id])
+            {
+                if (PriceOf(other) is { } theirs)
+                {
+                    priced++;
+                    below += theirs < price ? 2 : theirs == price ? 1 : 0;
+                }
+            }
+
+            if (priced < TrendRules.CheapMinOthers || below / (2.0 * priced) <= TrendRules.CheapNowRank)
+            {
+                kept.Add(id);
+            }
+        }
+
+        return kept;
     }
 
     /// <summary>Each station's neighbours, by index: those within <see cref="TrendRules.CheapWithinKm"/>, Costco aside.</summary>

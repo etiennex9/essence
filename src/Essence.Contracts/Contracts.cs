@@ -380,9 +380,13 @@ public sealed record DailyPattern(
 
 /// <summary>
 /// The stations whose price for the fuel is usually among the cheapest around them (<c>/stations/usually-cheap</c>): in the
-/// cheapest fifth of the stations within 10 km at least 40 % of the time over the last 30 days.
+/// cheapest fifth of the stations within 10 km at least 40 % of the time over the last 30 days, and not dearer than most
+/// of them at the latest import.
 /// </summary>
-/// <param name="AsOf">The latest import the history was read to; null before the first import, with no stations.</param>
+/// <param name="AsOf">
+/// The latest import the history was read to, once a day; null before the first import, with no stations. Which are dear
+/// now is as of the answer's <c>Last-Modified</c>.
+/// </param>
 /// <param name="Days">How many days of history were compared: 30, fewer on a server with a younger history.</param>
 /// <param name="Ids">The stations, by id.</param>
 public sealed record UsuallyCheapStations(string Fuel, DateTimeOffset? AsOf, int Days, IReadOnlyList<long> Ids);

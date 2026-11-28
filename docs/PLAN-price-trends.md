@@ -312,14 +312,21 @@ each simulated every 5 minutes with the rules below. The local DB covers only ab
   the neighbours once, sorted by latitude. On the local database: 0.27 s for Régulier over 1,981 stations rated, 0.19 s
   for Diesel. `TrendRules` holds the constants (`CheapWindow` … `CheapShare`).
 - **The contract** is `UsuallyCheapStations(Fuel, AsOf, Days, Ids)`: `AsOf` (the latest import read) rather than
-  `ComputedAt`, like `PriceTrends`; `AsOf` null and no ids before the first import, sent `no-store`.
+  `ComputedAt`, like `PriceTrends`; `AsOf` null and no ids before the first import.
+- **Not while dear now** (owner, 2026-11-28, after the phone check): on a Sainte-Thérèse → Terrebonne trip at 9:50,
+  three Terrebonne stations said "Usually cheap" at 161.9–162.9 beside a 148.9 pick, the midnight rise's leftovers.
+  Each request now leaves out a usually cheap station when, at the latest import, more of its neighbours with a price
+  are cheaper than dearer (`CheapNowRank`, 4 priced at least; one with no price stays). The day's computation keeps each
+  flagged station's neighbours for that (`UsualCheapness.Neighbours`), so it's about 10k comparisons a request. The
+  answer then follows the imports: `Last-Modified` and no 304 after 10 minutes (`WithDataVersion(clockDependent)`, a
+  new day's list coming with no new data), in place of the hour-long `Cache-Control` first planned.
 - **The cache** (`UsuallyCheapCache`) computes a fuel the first time it's asked, concurrent requests waiting for that
   one; after a new date in Québec or 24 hours, the last answer is served while the next is computed. A refresh that
   fails is tried again 10 minutes later; a first one, at the next request.
 - **Production shares at 0.4** (the analysis script's `MODE=cheap`, 2026-11-28): 13.6 % of the 176 stations rated
   within 15 km of Québec City, 2.2 % of Sherbrooke's 46. The local database flagged a third around Québec City: its
   gaps, not the rule.
-- **The UI** asks a fuel's answer the first time a tag for it is wanted (`UsuallyCheap.Is`), again after 6 hours, a
+- **The UI** asks a fuel's answer the first time a tag for it is wanted (`UsuallyCheap.Is`), again after 10 minutes, a
   failure after a minute at the earliest, and never again after a 404. The tag is in the details on the map fuel's line,
   in the favorites' and the comparison's rows after the name, and in Best's rows below the tiles, near you and on the
   way (a station's own, unlike the area's rise): the hours first, then "Not up yet", then "Usually cheap", one besides

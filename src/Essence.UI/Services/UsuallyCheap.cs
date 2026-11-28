@@ -5,14 +5,15 @@ namespace Essence.UI.Services;
 /// <summary>
 /// Which stations are usually among the cheapest around them, for each fuel (<c>/stations/usually-cheap</c>), for the
 /// "Usually cheap" tag. A fuel's answer is asked for the first time a tag for it is wanted (<see cref="Is"/>), then again
-/// <see cref="MaxAge"/> after it came: the server works it out once a day. A server that hasn't it (404, an older one)
+/// <see cref="MaxAge"/> after it came: the server works out the stations once a day, but leaves out those dear at the
+/// latest import, which comes about every 5 minutes. A server that hasn't it (404, an older one)
 /// isn't asked again, and no tag shows. A failure keeps the last answer and is tried again <see cref="RetryAfterFailure"/>
 /// later at the earliest; a 429 waits as long as it says.
 /// </summary>
 public sealed class UsuallyCheap : IDisposable
 {
-    /// <summary>A fuel's answer is asked for again after this.</summary>
-    public static readonly TimeSpan MaxAge = TimeSpan.FromHours(6);
+    /// <summary>A fuel's answer is asked for again after this, as the trends card's.</summary>
+    public static readonly TimeSpan MaxAge = TimeSpan.FromMinutes(10);
 
     /// <summary>After a failure, the next try waits this long, however many tags want it meanwhile.</summary>
     public static readonly TimeSpan RetryAfterFailure = TimeSpan.FromMinutes(1);

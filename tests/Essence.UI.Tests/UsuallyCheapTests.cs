@@ -41,16 +41,16 @@ public class UsuallyCheapTests
     }
 
     [Fact]
-    public void Each_fuel_is_asked_once_then_again_six_hours_later()
+    public void Each_fuel_is_asked_once_then_again_ten_minutes_later()
     {
         _cheap.Is(3, "Régulier");
         _cheap.Is(3, "Diesel");
-        _time.Advance(TimeSpan.FromHours(5));
+        _time.Advance(TimeSpan.FromMinutes(9));
         _cheap.Is(3, "Régulier");
 
         Assert.Equal(2, _requests.Count);
 
-        _time.Advance(TimeSpan.FromHours(1));
+        _time.Advance(TimeSpan.FromMinutes(1));
         _cheap.Is(3, "Régulier");
 
         Assert.Equal(3, _requests.Count);

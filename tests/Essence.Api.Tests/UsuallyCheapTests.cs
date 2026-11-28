@@ -30,8 +30,9 @@ public class UsuallyCheapTests
         var get = document.RootElement.GetProperty("paths").GetProperty("/stations/usually-cheap").GetProperty("get");
         Assert.Equal("Stations", get.GetProperty("tags")[0].GetString());
         Assert.Contains("cheapest fifth", get.GetProperty("description").GetString());
+        Assert.Contains("left out while it's dear", get.GetProperty("description").GetString());
         Assert.Equal(["fuel"], get.GetProperty("parameters").EnumerateArray().Select(p => p.GetProperty("name").GetString()));
-        Assert.False(get.GetProperty("responses").TryGetProperty("304", out _));
+        Assert.True(get.GetProperty("responses").TryGetProperty("304", out _));
     }
 
     [Fact]

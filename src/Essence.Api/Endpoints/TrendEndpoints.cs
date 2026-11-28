@@ -34,11 +34,10 @@ public static class TrendEndpoints
         + "days that the data covers, each operating station's price is ranked among those of the operating stations within "
         + "10 km (Costco, members only, aside; those at the same price count half), when 4 of them at least had one. It's "
         + "usually cheap when it was in the cheapest fifth at 40 % of those moments, with a week of them at least. Computed "
-        + "once a day for each fuel, from the price history read as `/stations/trends` reads it. The only answer here "
-        + "without `Last-Modified`: it changes once a day, so it may be kept an hour.";
-
-    /// <summary>How long a client may keep <c>/stations/usually-cheap</c>'s answer: it changes once a day.</summary>
-    internal const string UsuallyCheapCacheControl = "public, max-age=3600";
+        + "once a day for each fuel, from the price history read as `/stations/trends` reads it. A usually cheap station is "
+        + "left out while it's dear: at the latest import, more of those stations with a price were cheaper than dearer "
+        + "(4 of them at least). No 304 once the data is more than 10 minutes old: a new day's stations may come with no "
+        + "new data.";
 
     public static IEndpointRouteBuilder MapTrendEndpoints(this IEndpointRouteBuilder app)
     {
@@ -49,7 +48,8 @@ public static class TrendEndpoints
             .WithDataVersion(clockDependent: true);
         group.MapGet("/usually-cheap", UsuallyCheap)
             .WithSummary("The stations usually among the cheapest around them")
-            .WithDescription(UsuallyCheapDescription);
+            .WithDescription(UsuallyCheapDescription)
+            .WithDataVersion(clockDependent: true);
         return app;
     }
 
@@ -58,7 +58,7 @@ public static class TrendEndpoints
         StationSnapshot snapshot,
         PriceTimeline timeline,
         UsuallyCheapCache cheap,
-        HttpContext http,
+        TimeProvider time,
         CancellationToken cancellationToken,
         [Description("Régulier, Super or Diesel (accents optional). Required.")] string? fuel = null)
     {
@@ -72,10 +72,10 @@ public static class TrendEndpoints
         var current = await snapshot.GetAsync(db, cancellationToken);
         var window = await timeline.GetAsync(db, current.Version, cancellationToken);
         var found = await cheap.GetAsync(fuelType.Id, current, window, cancellationToken);
-
-        // Before the first import there's nothing to keep: the next request may have it.
-        http.Response.Headers.CacheControl = found is null ? "no-store" : UsuallyCheapCacheControl;
-        return TypedResults.Ok(new UsuallyCheapStations(fuelType.Code, found?.AsOf, found?.Days ?? 0, found?.Stations.Ids ?? []));
+        var ids = found is null
+            ? []
+            : CheapStations.NotDearNow(found, id => window.Of(id, fuelType.Id), window.Coverage, time.GetUtcNow());
+        return TypedResults.Ok(new UsuallyCheapStations(fuelType.Code, found?.AsOf, found?.Days ?? 0, ids));
     }
 
     private static async Task<Results<Ok<PriceTrends>, ValidationProblem>> Trends(
