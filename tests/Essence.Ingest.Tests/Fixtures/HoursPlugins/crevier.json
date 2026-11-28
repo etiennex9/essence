@@ -1,0 +1,489 @@
+{
+  "success": true,
+  "data": [
+    {
+      "market": "CA",
+      "country": "CA",
+      "locationId": "52792",
+      "locationType": "Retail",
+      "coordinates": {
+        "latitude": "46.6619831",
+        "longitude": "-71.5713512"
+      },
+      "siteStatus": "active",
+      "siteAddressLine1": "959 Rue de l'Église",
+      "siteAddressLine2": null,
+      "siteAddressLine3": "Chaudière-Appalaches",
+      "siteCity": "SAINT-ANTOINE-DE-TILLY",
+      "siteStateProvince": "QC",
+      "sitePostalCode": "G0S 2C0",
+      "siteCountry": "CA",
+      "siteTwentyFourSeven": false,
+      "siteRegularHours": [
+        {
+          "closeTime": "20:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Monday"
+        },
+        {
+          "closeTime": "20:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Tuesday"
+        },
+        {
+          "closeTime": "20:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Wednesday"
+        },
+        {
+          "closeTime": "20:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Thursday"
+        },
+        {
+          "closeTime": "20:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Friday"
+        },
+        {
+          "closeTime": "20:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Saturday"
+        },
+        {
+          "closeTime": "20:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Sunday"
+        }
+      ],
+      "siteHasTransActionSupport": true,
+      "updatedAt": "2026-11-23T14.39.32.135543Z",
+      "siteNumber": "43321",
+      "services": [
+        {
+          "serviceType": "Forecourt",
+          "serviceStatus": "active",
+          "country": "CA",
+          "serviceRegularHours": [
+            {
+              "closeTime": "20:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Monday"
+            },
+            {
+              "closeTime": "20:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Tuesday"
+            },
+            {
+              "closeTime": "20:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Wednesday"
+            },
+            {
+              "closeTime": "20:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Thursday"
+            },
+            {
+              "closeTime": "20:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Friday"
+            },
+            {
+              "closeTime": "20:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Saturday"
+            },
+            {
+              "closeTime": "20:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Sunday"
+            }
+          ],
+          "updatedAt": "2026-11-23T14.39.32.135543Z",
+          "siteNumber": "43321",
+          "serviceLoyaltyBrand": null,
+          "serviceLoyaltyEarn": false,
+          "serviceLoyaltyRedeem": false,
+          "serviceBrand": "Crevier",
+          "serviceTwentyFourSeven": false,
+          "siteHasTransActionSupport": true,
+          "serviceFuelNinetyFourOctane": false,
+          "serviceHasAir": false,
+          "serviceHasPropaneExchange": false,
+          "serviceHasDiesel": false,
+          "serviceHasPayAtPumpEnabled": false,
+          "serviceServiceCategory": false,
+          "serviceHasVacuum": false,
+          "serviceHasTapAndPayAtPump": false
+        }
+      ]
+    },
+    {
+      "market": "CA",
+      "country": "CA",
+      "locationId": "52614",
+      "locationType": "Retail",
+      "coordinates": {
+        "latitude": "46.9202862",
+        "longitude": "-72.6928147"
+      },
+      "siteStatus": "active",
+      "siteAddressLine1": "590 Chem. Saint-Joseph",
+      "siteAddressLine2": null,
+      "siteAddressLine3": null,
+      "siteCity": "TROIS-RIVES",
+      "siteStateProvince": "QC",
+      "sitePostalCode": "G0X 2C0",
+      "siteCountry": "CA",
+      "siteTwentyFourSeven": false,
+      "siteRegularHours": [
+        {
+          "closeTime": "23:59",
+          "openTime": "00:00",
+          "dayOfWeek": "Monday"
+        },
+        {
+          "closeTime": "23:59",
+          "openTime": "00:00",
+          "dayOfWeek": "Tuesday"
+        },
+        {
+          "closeTime": "23:59",
+          "openTime": "00:00",
+          "dayOfWeek": "Wednesday"
+        },
+        {
+          "closeTime": "23:59",
+          "openTime": "00:00",
+          "dayOfWeek": "Thursday"
+        },
+        {
+          "closeTime": "23:59",
+          "openTime": "00:00",
+          "dayOfWeek": "Friday"
+        },
+        {
+          "closeTime": "23:59",
+          "openTime": "00:00",
+          "dayOfWeek": "Saturday"
+        },
+        {
+          "closeTime": "23:59",
+          "openTime": "00:00",
+          "dayOfWeek": "Sunday"
+        }
+      ],
+      "siteHasTransActionSupport": false,
+      "updatedAt": "2026-11-23T14.39.32.135543Z",
+      "siteNumber": "52337",
+      "services": [
+        {
+          "serviceType": "Forecourt",
+          "serviceStatus": "active",
+          "country": "CA",
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:59",
+              "openTime": "00:00",
+              "dayOfWeek": "Monday"
+            },
+            {
+              "closeTime": "23:59",
+              "openTime": "00:00",
+              "dayOfWeek": "Tuesday"
+            },
+            {
+              "closeTime": "23:59",
+              "openTime": "00:00",
+              "dayOfWeek": "Wednesday"
+            },
+            {
+              "closeTime": "23:59",
+              "openTime": "00:00",
+              "dayOfWeek": "Thursday"
+            },
+            {
+              "closeTime": "23:59",
+              "openTime": "00:00",
+              "dayOfWeek": "Friday"
+            },
+            {
+              "closeTime": "23:59",
+              "openTime": "00:00",
+              "dayOfWeek": "Saturday"
+            },
+            {
+              "closeTime": "23:59",
+              "openTime": "00:00",
+              "dayOfWeek": "Sunday"
+            }
+          ],
+          "updatedAt": "2026-11-23T14.39.32.135543Z",
+          "siteNumber": "52337",
+          "serviceLoyaltyBrand": null,
+          "serviceLoyaltyEarn": false,
+          "serviceLoyaltyRedeem": false,
+          "serviceBrand": "Crevier",
+          "serviceTwentyFourSeven": false,
+          "siteHasTransActionSupport": false,
+          "serviceFuelNinetyFourOctane": false,
+          "serviceHasAir": false,
+          "serviceHasPropaneExchange": false,
+          "serviceHasDiesel": false,
+          "serviceHasPayAtPumpEnabled": false,
+          "serviceServiceCategory": false,
+          "serviceHasVacuum": false,
+          "serviceHasTapAndPayAtPump": false
+        }
+      ]
+    },
+    {
+      "market": "CA",
+      "country": "CA",
+      "locationId": "52545",
+      "locationType": "Retail",
+      "coordinates": {
+        "latitude": "45.8584915",
+        "longitude": "-72.4611992"
+      },
+      "siteStatus": "active",
+      "siteAddressLine1": "1970 Bd Mercure",
+      "siteAddressLine2": null,
+      "siteAddressLine3": null,
+      "siteCity": "DRUMMONDVILLE",
+      "siteStateProvince": "QC",
+      "sitePostalCode": "J2B 3P4",
+      "siteCountry": "CA",
+      "siteTwentyFourSeven": false,
+      "siteRegularHours": [
+        {
+          "closeTime": "12:00",
+          "openTime": "00:00",
+          "dayOfWeek": "Monday"
+        },
+        {
+          "closeTime": "12:00",
+          "openTime": "00:00",
+          "dayOfWeek": "Tuesday"
+        },
+        {
+          "closeTime": "12:00",
+          "openTime": "00:00",
+          "dayOfWeek": "Wednesday"
+        },
+        {
+          "closeTime": "12:00",
+          "openTime": "00:00",
+          "dayOfWeek": "Thursday"
+        },
+        {
+          "closeTime": "12:00",
+          "openTime": "00:00",
+          "dayOfWeek": "Friday"
+        },
+        {
+          "closeTime": "12:00",
+          "openTime": "00:00",
+          "dayOfWeek": "Saturday"
+        },
+        {
+          "closeTime": "12:00",
+          "openTime": "00:00",
+          "dayOfWeek": "Sunday"
+        }
+      ],
+      "siteHasTransActionSupport": false,
+      "updatedAt": "2026-11-23T14.39.32.135543Z",
+      "siteNumber": "52268",
+      "services": [
+        {
+          "serviceType": "Forecourt",
+          "serviceStatus": "active",
+          "country": "CA",
+          "serviceRegularHours": [
+            {
+              "closeTime": "12:00",
+              "openTime": "00:00",
+              "dayOfWeek": "Monday"
+            },
+            {
+              "closeTime": "12:00",
+              "openTime": "00:00",
+              "dayOfWeek": "Tuesday"
+            },
+            {
+              "closeTime": "12:00",
+              "openTime": "00:00",
+              "dayOfWeek": "Wednesday"
+            },
+            {
+              "closeTime": "12:00",
+              "openTime": "00:00",
+              "dayOfWeek": "Thursday"
+            },
+            {
+              "closeTime": "12:00",
+              "openTime": "00:00",
+              "dayOfWeek": "Friday"
+            },
+            {
+              "closeTime": "12:00",
+              "openTime": "00:00",
+              "dayOfWeek": "Saturday"
+            },
+            {
+              "closeTime": "12:00",
+              "openTime": "00:00",
+              "dayOfWeek": "Sunday"
+            }
+          ],
+          "updatedAt": "2026-11-23T14.39.32.135543Z",
+          "siteNumber": "52268",
+          "serviceLoyaltyBrand": null,
+          "serviceLoyaltyEarn": false,
+          "serviceLoyaltyRedeem": false,
+          "serviceBrand": "Crevier",
+          "serviceTwentyFourSeven": false,
+          "siteHasTransActionSupport": false,
+          "serviceFuelNinetyFourOctane": false,
+          "serviceHasAir": false,
+          "serviceHasPropaneExchange": false,
+          "serviceHasDiesel": false,
+          "serviceHasPayAtPumpEnabled": false,
+          "serviceServiceCategory": false,
+          "serviceHasVacuum": false,
+          "serviceHasTapAndPayAtPump": false
+        }
+      ]
+    },
+    {
+      "market": "CA",
+      "country": "CA",
+      "locationId": "52789",
+      "locationType": "Retail",
+      "coordinates": {
+        "latitude": "45.6068864",
+        "longitude": "-74.5840975"
+      },
+      "siteStatus": "active",
+      "siteAddressLine1": "1536 Main St E",
+      "siteAddressLine2": null,
+      "siteAddressLine3": "Prescott and Russell United Counties",
+      "siteCity": "HAWKESBURY",
+      "siteStateProvince": "ON",
+      "sitePostalCode": "K6A 2Y1",
+      "siteCountry": "CA",
+      "siteTwentyFourSeven": false,
+      "siteRegularHours": [
+        {
+          "closeTime": "23:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Monday"
+        },
+        {
+          "closeTime": "23:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Tuesday"
+        },
+        {
+          "closeTime": "23:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Wednesday"
+        },
+        {
+          "closeTime": "23:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Thursday"
+        },
+        {
+          "closeTime": "23:00",
+          "openTime": "06:00",
+          "dayOfWeek": "Friday"
+        },
+        {
+          "closeTime": "23:00",
+          "openTime": "07:00",
+          "dayOfWeek": "Saturday"
+        },
+        {
+          "closeTime": "23:00",
+          "openTime": "07:00",
+          "dayOfWeek": "Sunday"
+        }
+      ],
+      "siteHasTransActionSupport": true,
+      "updatedAt": "2026-11-23T14.39.32.135543Z",
+      "siteNumber": "43319",
+      "services": [
+        {
+          "serviceType": "Forecourt",
+          "serviceStatus": "active",
+          "country": "CA",
+          "serviceRegularHours": [
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Monday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Tuesday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Wednesday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Thursday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "06:00",
+              "dayOfWeek": "Friday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "07:00",
+              "dayOfWeek": "Saturday"
+            },
+            {
+              "closeTime": "23:00",
+              "openTime": "07:00",
+              "dayOfWeek": "Sunday"
+            }
+          ],
+          "updatedAt": "2026-11-23T14.39.32.135543Z",
+          "siteNumber": "43319",
+          "serviceLoyaltyBrand": null,
+          "serviceLoyaltyEarn": false,
+          "serviceLoyaltyRedeem": false,
+          "serviceBrand": "Crevier",
+          "serviceTwentyFourSeven": false,
+          "siteHasTransActionSupport": true,
+          "serviceFuelNinetyFourOctane": false,
+          "serviceHasAir": false,
+          "serviceHasPropaneExchange": false,
+          "serviceHasDiesel": false,
+          "serviceHasPayAtPumpEnabled": false,
+          "serviceServiceCategory": false,
+          "serviceHasVacuum": false,
+          "serviceHasTapAndPayAtPump": false
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "totalRecords": 4,
+    "totalPages": 1,
+    "currentPage": 1,
+    "pageSize": 1000,
+    "hasNextPage": false,
+    "hasPrevPage": false
+  }
+}

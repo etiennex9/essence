@@ -1,0 +1,5 @@
+Nom;Adresse;Municipalité;Code postal;Latitude;Longitude;Bannière;Heures d'ouverture
+"Station du Lac";"125, rue Principale";"Saint-Exemple";"G0A 1A0";"46.81234";"-71.21234";"Exemple";"Lun-Ven : 6 h à 22 h; Sam. et dim. : 7 h à 21 h"
+"Relais du Nord";"2000 boulevard du Nord";"Ville-Exemple";"J8X 1A1";"45.48012";"-75.70123";"Exemple";"Ouvert 24 h/24, 7j/7"
+"Poste de la Rivière";"77 chemin de la Rivière";"Rivière-Exemple";"G5L 2B2";"48.45001";"-68.52002";"Exemple";"Tous les jours de 6h00 à 23h00 sauf l'été"
+"Garage Frontière";"10 Main Street";"Exampletown";"K1A 0B1";"45.42001";"-75.69002";"Exemple";"Mon-Fri 6am-10pm, Sat-Sun 7am-9pm"

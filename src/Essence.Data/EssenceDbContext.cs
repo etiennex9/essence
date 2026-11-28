@@ -20,7 +20,11 @@ public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options)
     public DbSet<Import> Imports => Set<Import>();
     public DbSet<StationHoursEntry> StationHours => Set<StationHoursEntry>();
     public DbSet<HoursImport> HoursImports => Set<HoursImport>();
+    public DbSet<HoursSourceEntry> HoursSources => Set<HoursSourceEntry>();
     public DbSet<PositionCandidate> PositionCandidates => Set<PositionCandidate>();
+    public DbSet<AndroidUsage> AndroidUsage => Set<AndroidUsage>();
+    public DbSet<WebUsage> WebUsage => Set<WebUsage>();
+    public DbSet<UsageSalt> UsageSalts => Set<UsageSalt>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -102,6 +106,8 @@ public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options)
             e.HasIndex(x => new { x.Source, x.FinishedAt });
         });
 
+        modelBuilder.Entity<HoursSourceEntry>(e => e.HasKey(x => x.Source));
+
         modelBuilder.Entity<PositionCandidate>(e =>
         {
             // At most one per station; the ingest replaces them all at each run.
@@ -109,6 +115,25 @@ public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options)
             e.Property(x => x.StationId).ValueGeneratedNever();
             e.Property(x => x.Evidence).HasColumnType("jsonb");
             e.HasOne(x => x.Station).WithMany().HasForeignKey(x => x.StationId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // The usage counts (README → Usage), apart from the stations' data: their own role writes them.
+        modelBuilder.Entity<AndroidUsage>(e =>
+        {
+            e.ToTable("usage_android");
+            e.HasKey(x => new { x.Day, x.Install, x.VersionCode });
+        });
+
+        modelBuilder.Entity<WebUsage>(e =>
+        {
+            e.ToTable("usage_web");
+            e.HasKey(x => new { x.Day, x.Visitor });
+        });
+
+        modelBuilder.Entity<UsageSalt>(e =>
+        {
+            e.ToTable("usage_salts");
+            e.HasKey(x => x.Day);
         });
     }
 }

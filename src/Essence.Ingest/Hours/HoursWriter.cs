@@ -143,6 +143,45 @@ public sealed class HoursWriter(EssenceDbContext db, TimeProvider timeProvider) 
     }
 
     /// <summary>
+    /// Stores each source's profile (<c>hours_sources</c>), those that changed only: the API ranks the sources' rows by
+    /// them and serves their labels. A source turned off keeps its row, harmless without rows of hours, and kept for when
+    /// it's turned on again.
+    /// </summary>
+    public async Task SaveProfilesAsync(IReadOnlyDictionary<string, Essence.Ranking.HoursSourceProfile> profiles, CancellationToken cancellationToken)
+    {
+        var names = profiles.Keys.ToList();
+        var stored = await db.HoursSources.Where(s => names.Contains(s.Source)).ToDictionaryAsync(s => s.Source, StringComparer.Ordinal, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        foreach (var (source, profile) in profiles)
+        {
+            var kind = Essence.Ranking.HoursSourceKinds.Name(profile.Kind);
+            if (!stored.TryGetValue(source, out var entry))
+            {
+                db.HoursSources.Add(new HoursSourceEntry { Source = source, Label = profile.Label, Kind = kind, Rank = profile.Rank, UpdatedAt = now });
+            }
+            else if (entry.Label != profile.Label || entry.Kind != kind || entry.Rank != profile.Rank)
+            {
+                (entry.Label, entry.Kind, entry.Rank, entry.UpdatedAt) = (profile.Label, kind, profile.Rank, now);
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    /// <summary>The spec a plugin's last good run was made under (<see cref="HoursSourceEntry.GoodSpec"/>), or null.</summary>
+    public async Task<string?> LoadGoodSpecAsync(string source, CancellationToken cancellationToken) =>
+        await db.HoursSources.Where(s => s.Source == source).Select(s => s.GoodSpec).FirstOrDefaultAsync(cancellationToken);
+
+    /// <summary>Keeps the spec a plugin's run that was just written was made under: the next runs are gated against it.</summary>
+    public async Task SaveGoodSpecAsync(string source, string spec, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        await db.HoursSources
+            .Where(s => s.Source == source && s.GoodSpec != spec)
+            .ExecuteUpdateAsync(s => s.SetProperty(e => e.GoodSpec, spec).SetProperty(e => e.UpdatedAt, now), cancellationToken);
+    }
+
+    /// <summary>
     /// Removes the rows of every source that has runs but isn't in <paramref name="enabled"/> (turned off, or gone from the
     /// image), and records a <see cref="HoursImportStatus.Disabled"/> run for each, in one transaction. Nothing refreshes
     /// those rows any more, so they'd serve forever, outranking fresher sources, and the source would show as stale for

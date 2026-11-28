@@ -1,4 +1,5 @@
 using Essence.Data.Entities;
+using Essence.Ingest.Hours.Plugins;
 using Microsoft.Extensions.Options;
 
 namespace Essence.Ingest.Hours;
@@ -7,12 +8,14 @@ namespace Essence.Ingest.Hours;
 /// Fetches each hours source on the <see cref="HoursSchedule"/>'s schedule (weekly, at night), matches its records to the
 /// feed's stations and writes the source's rows, one source at a time. Every <see cref="HoursOptions.RematchEvery"/>, the
 /// sources' last downloads are matched again when the feed's stations changed, so a station added or moved gets its hours
-/// within the hour without asking the source. A failed or rejected run leaves the source's rows as they were.
+/// within the hour without asking the source. A failed or rejected run leaves the source's rows as they were. On a start,
+/// each source turned on has its profile stored (<see cref="IHoursSource.Profile"/>), for the API to rank its hours by.
 /// </summary>
 public sealed class HoursWorker(
     IServiceScopeFactory scopeFactory,
     HoursSchedule schedule,
     HoursCache cache,
+    HoursPluginCatalog plugins,
     TimeProvider timeProvider,
     IOptions<HoursOptions> options,
     ILogger<HoursWorker> logger) : BackgroundService
@@ -81,6 +84,18 @@ public sealed class HoursWorker(
     private async Task InitializeAsync(CancellationToken cancellationToken)
     {
         _startedAt = timeProvider.GetUtcNow();
+        foreach (var problem in plugins.Problems)
+        {
+            logger.LogError("Hours plugin skipped: {Problem}", problem);
+        }
+
+        foreach (var spec in plugins.Specs)
+        {
+            logger.LogInformation(
+                "Hours plugin {Source} ({Label}, {Kind}, rank {Rank}) from {Origin}.",
+                spec.Name, spec.Label, Essence.Ranking.HoursSourceKinds.Name(spec.Kind), spec.Rank, spec.Origin);
+        }
+
         while (true)
         {
             try
@@ -88,12 +103,28 @@ public sealed class HoursWorker(
                 await using var scope = scopeFactory.CreateAsyncScope();
                 var writer = scope.ServiceProvider.GetRequiredService<HoursWriter>();
                 var enabled = scope.ServiceProvider.GetServices<IHoursSource>().Where(s => s.Enabled).ToList();
-                foreach (var source in await writer.DisableAsync(enabled.Select(s => s.Name).ToHashSet(StringComparer.Ordinal), cancellationToken))
+
+                // A server's spec that can't be read isn't run, but its rows stay, going stale: a typo never deletes a source's hours.
+                foreach (var name in plugins.Unreadable.Where(n => enabled.All(s => s.Name != n)))
                 {
-                    logger.LogInformation(
-                        "The hours source {Source} is off, or gone from the image: its {Removed} rows were removed, and it's no longer checked.",
-                        source.Source, source.Removed);
+                    logger.LogWarning("Hours plugin {Source}'s spec can't be read: it isn't run, and its hours are kept until it's fixed or removed.", name);
                 }
+
+                if (plugins.KeepRowsOf(enabled.Select(s => s.Name)) is not { } kept)
+                {
+                    logger.LogWarning("A server's hours plugin spec can't be read and its name can't be told, or its folder can't be read: no source's hours are removed on this start.");
+                }
+                else
+                {
+                    foreach (var source in await writer.DisableAsync(kept, cancellationToken))
+                    {
+                        logger.LogInformation(
+                            "The hours source {Source} is off, or gone from the image: its {Removed} rows were removed, and it's no longer checked.",
+                            source.Source, source.Removed);
+                    }
+                }
+
+                await writer.SaveProfilesAsync(enabled.ToDictionary(s => s.Name, s => s.Profile, StringComparer.Ordinal), cancellationToken);
 
                 _sources.Clear();
                 foreach (var source in enabled)
@@ -104,6 +135,17 @@ public sealed class HoursWorker(
                         Runs = new SourceRuns(history.LastSuccess?.FinishedAt, history.LastAttempt?.FinishedAt, history.FailuresSinceSuccess),
                     };
                     state.NextRunAt = source.ShippedInImage ? _startedAt : schedule.NextRun(state.Runs, _startedAt, state.Index);
+
+                    // Its spec changed what's asked or kept since its last good run, a new engine keeps other fields, or it
+                    // took over a source in code: the download kept isn't matched again, so it runs now.
+                    var specChanged = source.SpecFingerprint is { } spec && await writer.LoadGoodSpecAsync(source.Name, cancellationToken) is { } good && good != spec;
+                    if (!source.ShippedInImage && (specChanged
+                        || await LoadCacheAsync(source.Name, cancellationToken) is { } cached && source.Kept(cached.Raw) != DownloadKept.Current))
+                    {
+                        state.NextRunAt = _startedAt;
+                        logger.LogInformation("Hours from {Source}: its download kept was made under another spec or engine, or by another source; it runs now.", source.Name);
+                    }
+
                     _sources.Add(state);
                     logger.LogInformation(
                         "Hours from {Source}: last success {LastSuccessAt:O}, {Failures} failures since; next run at {NextRunAt:O}.",
@@ -157,7 +199,8 @@ public sealed class HoursWorker(
             var match = HoursMatcher.Match(parsed.Records, stations.Stations, source.MatchRadiusM, source.OtherBrandReachM);
             matched = match.Counted;
             var history = await writer.LoadHistoryAsync(state.Name, cancellationToken);
-            if (HoursGate.Check(source, parsed, matched, history.LastGood?.Matched, options.Value.MinShareOfLastGood) is { } reason)
+            var goodSpec = source.SpecFingerprint is null ? null : await writer.LoadGoodSpecAsync(state.Name, cancellationToken);
+            if (HoursGate.Check(source, parsed, matched, HoursGate.Baseline(source, goodSpec, history.LastGood?.Matched), options.Value.MinShareOfLastGood) is { } reason)
             {
                 await writer.LogAsync(state.Name, HoursImportStatus.Rejected, startedAt, version, records, matched, warnings, reason, cancellationToken);
                 state.OnFailure(timeProvider.GetUtcNow());
@@ -171,6 +214,11 @@ public sealed class HoursWorker(
 
             var outcome = await writer.WriteAsync(
                 new HoursRun(state.Name, Rematch: false, startedAt, version, fetchedAt, records, warnings), match.Matches, cancellationToken);
+            if (source.SpecFingerprint is { } madeUnder)
+            {
+                await writer.SaveGoodSpecAsync(state.Name, madeUnder, cancellationToken);
+            }
+
             await SaveCacheAsync(state.Name, raw, version, fetchedAt, cached?.Version);
 
             state.OnSuccess(timeProvider.GetUtcNow(), stations.UpdatedAt);

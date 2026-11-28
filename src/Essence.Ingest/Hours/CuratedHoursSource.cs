@@ -27,6 +27,7 @@ public sealed class CuratedHoursSource(IOptions<HoursOptions> options) : IHoursS
 
     public string Name => SourceName;
     public bool Enabled => options.Value.Curated.Enabled;
+    public Essence.Ranking.HoursSourceProfile Profile => Essence.Ranking.HoursPrecedence.BuiltIn[SourceName];
     public bool ShippedInImage => true;
 
     /// <summary>Unused: curated rules name their station or their brand, never a point.</summary>

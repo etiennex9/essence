@@ -219,8 +219,14 @@ public sealed class HoursDraft
     /// <param name="chosen">The user ticked it.</param>
     public static (bool Allowed, bool Ticked) BrandChoice(bool sendsHours, bool chosen) => (sendsHours, sendsHours && chosen);
 
-    /// <summary>The hours are a brand's, or Essence's own: the same as them, they're not the user's to send.</summary>
+    /// <summary>
+    /// The hours are a brand's, Essence's own, or another's open data (whose terms may not be OpenStreetMap's): the same as
+    /// them, they're not the user's to send.
+    /// </summary>
     public static bool IsBrand(StationHours hours) => hours.Source != "osm";
+
+    /// <summary>The hours are open data's (<see cref="StationHours.SourceKind"/>), which the editor names as theirs, not the brand's.</summary>
+    public static bool IsOpenData(StationHours hours) => hours.SourceKind == "open-data";
 
     /// <summary>The hours edited say what the server's do (however either is written).</summary>
     public static bool SameAs(StationHours? server, OpeningHours edited) =>

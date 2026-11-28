@@ -134,7 +134,7 @@ public sealed class AppUpdateCheck(BuildInfo build, ServerSettings servers, Time
         }
         catch (Exception ex) when (ex is HttpRequestException or System.Net.WebException or IOException or JsonException or TaskCanceledException)
         {
-            // Offline (Android's handler throws WebException), or GitHub didn't answer: next time.
+            // Offline, or GitHub didn't answer: next time.
             SetState(AppUpdateCheckState.Failed);
         }
         finally

@@ -37,6 +37,11 @@ builder.Services.AddHealthChecks()
     .AddCheck<GeocodingHealthCheck>("geocoding", HealthStatus.Degraded)
     .AddCheck<HoursHealthCheck>("hours", HealthStatus.Degraded);
 builder.Services.AddPerIpRateLimiting(builder.Configuration);
+// Who uses the apps (README → Usage), written as the essence_usage role, the API's only writes: off without its connection string.
+if (builder.Configuration.GetConnectionString("Usage") is { Length: > 0 } usageConnectionString)
+{
+    builder.Services.AddUsageCounting(usageConnectionString);
+}
 
 // Essence.Web's nginx forwards /api/ here with the client's address (for the rate limit) and the public scheme, host and
 // /api prefix (for the OpenAPI document and Scalar). Trusted only from private networks, where that container lives.
@@ -67,6 +72,8 @@ builder.Services.AddCors(cors => cors.AddDefaultPolicy(policy =>
 var app = builder.Build();
 
 app.UseForwardedHeaders();
+// After the forwarded headers, so that a browser is told apart by its own address rather than the web container's.
+app.UseUsageCounting();
 app.UseExceptionHandler();
 app.UseStatusCodePages();
 app.UseCors();

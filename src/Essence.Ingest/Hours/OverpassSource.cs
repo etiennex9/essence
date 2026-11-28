@@ -50,6 +50,7 @@ public sealed class OverpassSource(OverpassClient client, IHoursStations station
 
     public string Name => SourceName;
     public bool Enabled => options.Value.Osm.Enabled;
+    public Essence.Ranking.HoursSourceProfile Profile => Essence.Ranking.HoursPrecedence.BuiltIn[SourceName];
     public bool ShippedInImage => false;
     public double MatchRadiusM => 150;
 

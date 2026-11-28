@@ -34,6 +34,7 @@ public sealed class CircleKSource(HoursClient client, HoursPacer pacer, IOptions
 
     public string Name => SourceName;
     public bool Enabled => options.Value.CircleK.Enabled;
+    public Essence.Ranking.HoursSourceProfile Profile => Essence.Ranking.HoursPrecedence.BuiltIn[SourceName];
     public bool ShippedInImage => false;
 
     /// <summary>Unused: a store matches its station by number, never by distance.</summary>

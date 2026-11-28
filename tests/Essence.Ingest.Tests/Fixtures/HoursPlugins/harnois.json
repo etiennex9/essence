@@ -1,0 +1,167 @@
+{
+  "stores": {
+    "1342": {
+      "ID": 47985,
+      "landingPageUrl": "https://harnoisenergies.com/fr/station/centre-multiservice-begin-inc/",
+      "title": "Centre Multiservice Bégin inc.",
+      "harnoisID": "1342",
+      "location": {
+        "coordinates": {
+          "latitude": 48.41388,
+          "longitude": -71.06744
+        },
+        "address1": "950, rue Bégin",
+        "city": "Chicoutimi",
+        "zip": "G7H 4P3",
+        "state": "Québec"
+      },
+      "values": {
+        "administrative-regions--saguenay---lac-saint-jean": true,
+        "OTH--26": true,
+        "PRI--1": true,
+        "RES--18": true,
+        "OTH--23": true,
+        "OTH--28": true,
+        "GIF--39": true,
+        "PRI--9": true,
+        "brands--harnois": true
+      },
+      "region": "Saguenay - Lac-Saint-Jean",
+      "services": {
+        "26": "Épicerie",
+        "1": "24hrs",
+        "23": "Accès pour personnes à mobilité réduite",
+        "28": "Prêt à manger",
+        "9": "Restaurant"
+      },
+      "catering": {
+        "18": "Autre restaurant"
+      },
+      "giftcard": {
+        "39": "Harnois"
+      },
+      "brand": "Harnois",
+      "brandKey": "harnois",
+      "key": "1342"
+    },
+    "1254": {
+      "ID": 47940,
+      "landingPageUrl": "https://harnoisenergies.com/fr/station/accomodation-du-domaine/",
+      "title": "Accomodation du Domaine",
+      "harnoisID": "1254",
+      "location": {
+        "coordinates": {
+          "latitude": 46.9511229,
+          "longitude": -71.2075793
+        },
+        "address1": "1779, boulevard Raymond",
+        "city": "Québec",
+        "zip": "G1B 0C5",
+        "state": "Québec"
+      },
+      "values": {
+        "administrative-regions--capitale-nationale": true,
+        "CAR--44": true,
+        "PRI--2": true,
+        "PRI--4": true,
+        "PRI--6": true,
+        "OTH--23": true,
+        "OTH--26": true,
+        "OTH--28": true,
+        "OTH--30": true,
+        "OTH--32": true,
+        "GIF--40": true,
+        "brands--esso": true
+      },
+      "region": "Capitale-Nationale",
+      "services": {
+        "44": "Accessible aux véhicules de 35pi et plus",
+        "2": "Diesel",
+        "4": "Paiement à la pompe",
+        "6": "Speedpass + acceptée",
+        "23": "Accès pour personnes à mobilité réduite",
+        "26": "Épicerie",
+        "28": "Prêt à manger",
+        "30": "Propane 20 LB (échange / vente)",
+        "32": "Station lave-glace"
+      },
+      "giftcard": {
+        "40": "Esso"
+      },
+      "brand": "Esso",
+      "brandKey": "esso",
+      "key": "1254"
+    },
+    "5020": {
+      "ID": 48266,
+      "landingPageUrl": "https://harnoisenergies.com/fr/station/accommodation-papillon/",
+      "title": "Accommodation Papillon",
+      "harnoisID": "5020",
+      "location": {
+        "coordinates": {
+          "latitude": 46.7087844,
+          "longitude": -71.8910002
+        },
+        "address1": "300, rue St-Charles",
+        "city": "Notre-Dame-de-Portneuf",
+        "zip": "G0A 2Y0",
+        "state": "Québec"
+      },
+      "values": {
+        "administrative-regions--capitale-nationale": true,
+        "GIF--43": true,
+        "PRI--2": true,
+        "brands--petro-t": true
+      },
+      "region": "Capitale-Nationale",
+      "giftcard": {
+        "43": "Pétro-T"
+      },
+      "services": {
+        "2": "Diesel"
+      },
+      "brand": "Pétro-T",
+      "brandKey": "petrot",
+      "key": "5020"
+    },
+    "1952": {
+      "ID": 48294,
+      "landingPageUrl": "https://harnoisenergies.com/fr/station/1000642064-ontario-inc/",
+      "title": "1000642064 ONTARIO INC.",
+      "harnoisID": "1952",
+      "location": {
+        "coordinates": {
+          "latitude": 45.4746259,
+          "longitude": -76.687184
+        },
+        "address1": "9 Raglan South Street",
+        "city": "Renfrew",
+        "zip": "K7V 1P8",
+        "state": "Ontario"
+      },
+      "values": {
+        "PRI--2": true,
+        "PRI--4": true,
+        "PRI--6": true,
+        "CAR--44": true,
+        "GIF--40": true,
+        "brands--esso": true
+      },
+      "services": {
+        "2": "Diesel",
+        "4": "Paiement à la pompe",
+        "6": "Speedpass + acceptée",
+        "44": "Accessible aux véhicules de 35pi et plus"
+      },
+      "giftcard": {
+        "40": "Esso"
+      },
+      "brand": "Esso",
+      "brandKey": "esso",
+      "key": "1952"
+    }
+  },
+  "form": {
+    "fields": []
+  }
+}
