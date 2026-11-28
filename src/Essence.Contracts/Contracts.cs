@@ -378,6 +378,15 @@ public sealed record DailyPattern(
     IReadOnlyList<int>? CheapestDays,
     int Weeks);
 
+/// <summary>
+/// The stations whose price for the fuel is usually among the cheapest around them (<c>/stations/usually-cheap</c>): in the
+/// cheapest fifth of the stations within 10 km at least 40 % of the time over the last 30 days.
+/// </summary>
+/// <param name="AsOf">The latest import the history was read to; null before the first import, with no stations.</param>
+/// <param name="Days">How many days of history were compared: 30, fewer on a server with a younger history.</param>
+/// <param name="Ids">The stations, by id.</param>
+public sealed record UsuallyCheapStations(string Fuel, DateTimeOffset? AsOf, int Days, IReadOnlyList<long> Ids);
+
 /// <summary>A place to go to, from the address search (<c>/places/search</c>) or for a point (<c>/places/reverse</c>).</summary>
 /// <param name="Label">What the place is called: "1000 Rue De La Gauchetière Ouest", "Rue Gaucher", "Laval", or a named place.</param>
 /// <param name="Detail">Where it is: "Montréal, QC H3A 4W5" for an address, the town for a street, the address for a named place.</param>

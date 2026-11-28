@@ -135,4 +135,31 @@ public static class TrendRules
 
     /// <summary>And below it on this share of the weeks.</summary>
     public const double WeeklyShare = 0.75;
+
+    /// <summary>A station is usually cheap or not over this much history.</summary>
+    public static readonly TimeSpan CheapWindow = TimeSpan.FromDays(30);
+
+    /// <summary>Its price is compared with its neighbours' every this often, on the half-hours.</summary>
+    public static readonly TimeSpan CheapStep = TimeSpan.FromMinutes(30);
+
+    /// <summary>Its neighbours: the stations this close, as Best near you's area.</summary>
+    public const double CheapWithinKm = 10;
+
+    /// <summary>A moment counts when at least this many neighbours had a price then.</summary>
+    public const int CheapMinOthers = 4;
+
+    /// <summary>
+    /// It's among the cheapest at a moment when fewer than this share of its neighbours were cheaper, those at its price
+    /// counting half: the cheapest fifth.
+    /// </summary>
+    public const double CheapRank = 0.2;
+
+    /// <summary>It's rated with at least this many moments counted: a week of half-hours.</summary>
+    public const int CheapMinSamples = 336;
+
+    /// <summary>
+    /// It's usually cheap when it was among the cheapest at this share of the moments counted: 12–14 % of the stations
+    /// in the Montréal and Gatineau areas over 30 days (0.5 flagged 5–8 %).
+    /// </summary>
+    public const double CheapShare = 0.4;
 }

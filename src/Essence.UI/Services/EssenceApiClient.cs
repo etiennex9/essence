@@ -91,6 +91,13 @@ public sealed class EssenceApiClient(HttpClient http)
             EssenceJsonContext.Default.PriceTrends,
             cancellationToken);
 
+    /// <summary>
+    /// The stations usually among the cheapest around them for the fuel (<c>/stations/usually-cheap</c>):
+    /// <see cref="ApiError.NotFound"/> from a server older than it.
+    /// </summary>
+    public Task<ApiResult<UsuallyCheapStations>> GetUsuallyCheapAsync(string fuel, CancellationToken cancellationToken) =>
+        GetAsync($"stations/usually-cheap?fuel={Uri.EscapeDataString(fuel)}", EssenceJsonContext.Default.UsuallyCheapStations, cancellationToken);
+
     /// <summary>Where to fill up on the way to a destination, for a car (<c>/trips/best</c>).</summary>
     public Task<ApiResult<TripPlan>> GetTripAsync(TripQuery query, CancellationToken cancellationToken) =>
         GetTripAsync(query, [], cancellationToken);
@@ -252,6 +259,7 @@ public sealed record TripQuery(
 [JsonSerializable(typeof(StationDetail))]
 [JsonSerializable(typeof(BestNearby))]
 [JsonSerializable(typeof(PriceTrends))]
+[JsonSerializable(typeof(UsuallyCheapStations))]
 [JsonSerializable(typeof(TripPlan))]
 [JsonSerializable(typeof(List<PriceHistoryDto>))]
 [JsonSerializable(typeof(List<PlaceSuggestion>))]

@@ -114,6 +114,19 @@
     color: var(--ess-text-muted);
 }
 
+/* Usually cheap, on the map fuel's line: good news, in green, as Best near you's tags. */
+.prices .tag {
+    padding: 3px 5px;
+    border-radius: 4px;
+    font: 600 10px/1 var(--ess-font);
+    white-space: nowrap;
+}
+
+.prices .tag.is-good {
+    background: var(--ess-good-bg);
+    color: var(--ess-good);
+}
+
 .swatch {
     width: 8px;
     height: 8px;

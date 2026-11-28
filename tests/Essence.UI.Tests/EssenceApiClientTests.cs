@@ -65,6 +65,18 @@ public class EssenceApiClientTests
     }
 
     [Fact]
+    public async Task The_usually_cheap_stations_are_asked_for_the_fuel()
+    {
+        var (client, requests) = Client(_ => Json("""{"fuel":"Régulier","asOf":"2026-11-26T05:20:00Z","days":30,"ids":[3,17]}"""));
+
+        var result = await client.GetUsuallyCheapAsync("Régulier", TestContext.Current.CancellationToken);
+
+        Assert.Equal("/stations/usually-cheap?fuel=R%C3%A9gulier", Assert.Single(requests).RequestUri!.PathAndQuery);
+        Assert.Equal([3L, 17L], result.Value!.Ids);
+        Assert.Equal(30, result.Value.Days);
+    }
+
+    [Fact]
     public async Task A_place_search_s_numbers_are_invariant_in_French()
     {
         var previous = CultureInfo.CurrentCulture;

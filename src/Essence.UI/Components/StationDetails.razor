@@ -6,6 +6,7 @@
 @inject ComparedStations Comparison
 @inject StationHoursView HoursViews
 @inject StationHoursOverrides Overrides
+@inject UsuallyCheap Cheap
 @inject TimeProvider Time
 @inject IStringLocalizer<Strings> L
 
@@ -91,7 +92,13 @@
                     {
                         var selected = string.Equals(price.Fuel, Fuel, StringComparison.OrdinalIgnoreCase);
                         <li class="@(selected ? "is-selected" : null)">
-                            <span class="fuel"><i class="swatch fuel-@Fuels.IndexOf(price.Fuel)"></i>@price.Fuel</span>
+                            <span class="fuel">
+                                <i class="swatch fuel-@Fuels.IndexOf(price.Fuel)"></i>@price.Fuel
+                                @if (selected && price.IsAvailable && Cheap.Is(_station.Id, price.Fuel))
+                                {
+                                    <span class="tag is-good" title="@L["UsuallyCheapHelp"]">@L["UsuallyCheap"]</span>
+                                }
+                            </span>
                             @if (price is { IsAvailable: true, PriceCents: { } cents })
                             {
                                 <span class="price">@Formatting.Price(cents, CultureInfo.CurrentCulture)<small> ¢/L</small></span>
@@ -254,6 +261,7 @@
         Favorites.Changed += OnListsChanged;
         Comparison.Changed += OnListsChanged;
         Overrides.Changed += OnHoursCorrected;
+        Cheap.Changed += OnListsChanged;
         await Favorites.LoadAsync();
         await Comparison.LoadAsync();
         await Overrides.LoadAsync();
@@ -492,6 +500,7 @@
         Favorites.Changed -= OnListsChanged;
         Comparison.Changed -= OnListsChanged;
         Overrides.Changed -= OnHoursCorrected;
+        Cheap.Changed -= OnListsChanged;
         _stationCts?.Cancel();
         _historyCts?.Cancel();
         _hoursTimer?.Dispose();

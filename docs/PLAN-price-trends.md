@@ -4,8 +4,9 @@ The plan of the price trends (`/stations/trends`, Best near you's area card, the
 tags, the Android alerts), with the owner's decisions and the figures the rules were set on. Settled: change a rule only
 with new measurements.
 
-> **Status (2026-11-27):** phases A and B are built (see "Phase A as built" and "Phase B as built"); C and D aren't.
-> Work in phase order: each phase ships on its own. To resume: tell Claude *"Implement docs/PLAN-price-trends.md, phase C"*.
+> **Status (2026-11-28):** phases A, B and C are built (see "Phase A as built", "Phase B as built" and "Phase C as
+> built"); D isn't. Work in phase order: each phase ships on its own. To resume: tell Claude *"Implement
+> docs/PLAN-price-trends.md, phase D"*.
 
 ## Context
 The owner wants to see price trends, not just "the lowest in the area in the last 24 h". Some of the ten ideas discussed
@@ -305,6 +306,27 @@ each simulated every 5 minutes with the rules below. The local DB covers only ab
   the tiles' place unchanged, the tags on one line on all three tiles and in the rows (the tags forced by a test patch
   of the answer, since `/stations/best` reads today's prices while the trends read the simulated night), and the French
   labels measured to fit.
+
+### Phase C as built
+- **`CheapStations.Find`** keeps only one price per station at a time (each half-hour in turn), not a matrix, and finds
+  the neighbours once, sorted by latitude. On the local database: 0.27 s for Régulier over 1,981 stations rated, 0.19 s
+  for Diesel. `TrendRules` holds the constants (`CheapWindow` … `CheapShare`).
+- **The contract** is `UsuallyCheapStations(Fuel, AsOf, Days, Ids)`: `AsOf` (the latest import read) rather than
+  `ComputedAt`, like `PriceTrends`; `AsOf` null and no ids before the first import, sent `no-store`.
+- **The cache** (`UsuallyCheapCache`) computes a fuel the first time it's asked, concurrent requests waiting for that
+  one; after a new date in Québec or 24 hours, the last answer is served while the next is computed. A refresh that
+  fails is tried again 10 minutes later; a first one, at the next request.
+- **Production shares at 0.4** (the analysis script's `MODE=cheap`, 2026-11-28): 13.6 % of the 176 stations rated
+  within 15 km of Québec City, 2.2 % of Sherbrooke's 46. The local database flagged a third around Québec City: its
+  gaps, not the rule.
+- **The UI** asks a fuel's answer the first time a tag for it is wanted (`UsuallyCheap.Is`), again after 6 hours, a
+  failure after a minute at the earliest, and never again after a 404. The tag is in the details on the map fuel's line,
+  in the favorites' and the comparison's rows after the name, and in Best's rows below the tiles, near you and on the
+  way (a station's own, unlike the area's rise): the hours first, then "Not up yet", then "Usually cheap", one besides
+  Members. Never on the tiles or the hero.
+- **Names stay on one line** in the rows: the tag goes under the name when it doesn't fit beside it ("Super Gaz",
+  "Canadian Tire" broke in two before), and in the favorites the French "Souvent moins chère" (105 px against a 89 px
+  column) reaches under the price, which is a line above.
 
 ### Phase C: the "Usually cheap" badge (API + UI; Android release)
 - **`src/Essence.Ranking/CheapStations.cs`:**

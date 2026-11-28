@@ -1422,4 +1422,10 @@
   <data name="NotUpYet" xml:space="preserve">
     <value>Pas encore monté</value>
   </data>
+  <data name="UsuallyCheap" xml:space="preserve">
+    <value>Souvent moins chère</value>
+  </data>
+  <data name="UsuallyCheapHelp" xml:space="preserve">
+    <value>Parmi le cinquième le moins cher des stations à moins de 10 km au moins 40 % du temps, ces 30 derniers jours</value>
+  </data>
 </root>
