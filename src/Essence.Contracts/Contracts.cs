@@ -284,6 +284,108 @@ public sealed record LeftOutStation(
     StationHours Hours,
     double EtaMin);
 
+/// <summary>
+/// How prices are moving around a point (<c>/stations/trends</c>), among the stations Best near you would look at there for
+/// the fuel: their prices now, against the same time yesterday and a week ago, the last 24 hours, a rise going through
+/// the area, and when prices usually go up and are lowest there.
+/// </summary>
+/// <param name="AsOf">"Now": the latest import's time; null before the first import, with every figure null.</param>
+/// <param name="RadiusKm">As <see cref="BestNearby.RadiusKm"/>: null when the area is the closest station at any distance.</param>
+/// <param name="Stations">How many stations the area has.</param>
+/// <param name="Now">The area's prices now; null without any.</param>
+/// <param name="Yesterday">The median now against the same time yesterday, on the area's clock; null when the data has a gap then or fewer than 3 stations had a price both times.</param>
+/// <param name="LastWeek">The same, against a week ago.</param>
+/// <param name="Low">The lowest price of the last 24 hours; null without one.</param>
+/// <param name="Last24h">The area's lowest and median prices over the last 24 hours; null without data.</param>
+/// <param name="Jump">A rise going through the area now; null when there's none, the area has fewer than 8 stations with a price, or the data is late.</param>
+/// <param name="Pattern">
+/// When prices usually go up and are lowest in the same area around the centre of the 1 km cell the point is in; null
+/// when they follow no clear pattern, or too few days say.
+/// </param>
+public sealed record PriceTrends(
+    string Fuel,
+    DateTimeOffset? AsOf,
+    double? RadiusKm,
+    int Stations,
+    AreaPrices? Now,
+    AreaChange? Yesterday,
+    AreaChange? LastWeek,
+    AreaLow? Low,
+    AreaSeries? Last24h,
+    PriceJump? Jump,
+    DailyPattern? Pattern);
+
+/// <param name="MedianCents">The middle price, the lower of the two middle ones with an even count: always a price a station posts.</param>
+/// <param name="Stations">How many stations had a price.</param>
+public sealed record AreaPrices(DateTimeOffset At, decimal LowestCents, decimal MedianCents, int Stations);
+
+/// <summary>The area's median earlier and now, among the stations that had a price both times.</summary>
+/// <param name="At">The moment compared with.</param>
+/// <param name="MedianCents">The median then.</param>
+/// <param name="NowMedianCents">The median now, of the same stations: it can differ from <see cref="AreaPrices.MedianCents"/>.</param>
+/// <param name="Stations">How many stations had a price both times.</param>
+public sealed record AreaChange(DateTimeOffset At, decimal MedianCents, decimal NowMedianCents, int Stations);
+
+/// <summary>The lowest price of the last 24 hours, prices that lasted under 20 minutes aside.</summary>
+/// <param name="From">When it started, or 24 hours ago if earlier.</param>
+/// <param name="To">When it ended; null while it's still the price, or when it ended during a gap in the data.</param>
+/// <param name="StillNow">It's still the station's price.</param>
+public sealed record AreaLow(long StationId, string? Name, string? Brand, decimal PriceCents, DateTimeOffset From, DateTimeOffset? To, bool StillNow);
+
+/// <summary>Samples every <paramref name="StepMinutes"/> minutes, the first at <paramref name="From"/>; null where the data has a gap.</summary>
+public sealed record AreaSeries(DateTimeOffset From, int StepMinutes, IReadOnlyList<decimal?> LowestCents, IReadOnlyList<decimal?> MedianCents);
+
+/// <summary>A rise going through the area: many of its stations raising their price at about the same time.</summary>
+/// <param name="Since">When it started: the moment a quarter of the area's stations (3 at least) had risen 5 ¢ or more within 3 hours.</param>
+/// <param name="Until">
+/// When it ends unless more stations that usually follow rise before (any station, where none is known to): 45 minutes
+/// after the last of them, 3 hours after it started at most.
+/// </param>
+/// <param name="Raised">How many stations rose in it and are still up.</param>
+/// <param name="Stations">How many stations of the area have a price.</param>
+/// <param name="RiseCents">The median rise of those that rose.</param>
+/// <param name="BeforeCents">The median price of those that rose, before.</param>
+/// <param name="AfterCents">And now.</param>
+/// <param name="NotRaised">
+/// The stations that usually follow the area's rises and are still at their price from before (and changed it in the
+/// last 2 days), cheapest first.
+/// </param>
+/// <param name="Usual">It came at about the time prices usually go up there (<see cref="DailyPattern.JumpsAround"/>, within 90 minutes).</param>
+public sealed record PriceJump(
+    DateTimeOffset Since,
+    DateTimeOffset Until,
+    int Raised,
+    int Stations,
+    decimal RiseCents,
+    decimal BeforeCents,
+    decimal AfterCents,
+    IReadOnlyList<NotRaisedStation> NotRaised,
+    bool Usual);
+
+/// <param name="PriceCents">Its price when the answer was made: not up yet while its price is still this or lower.</param>
+public sealed record NotRaisedStation(long Id, decimal PriceCents);
+
+/// <summary>When prices usually go up and are lowest in the area, on its clock.</summary>
+/// <param name="JumpsAround">The time of day prices usually go up, to the quarter-hour, over the last 28 days; null when not at one time often enough.</param>
+/// <param name="LowestFromHour">The first hour (0–23) prices are usually lowest in, over the last 28 days; null when the day's swing is small or not regular.</param>
+/// <param name="LowestToHour">
+/// The hour after the last of them, on a clock that goes round: 18 and 23 for 6 to 11 p.m., 18 and 0 for 6 p.m. to
+/// midnight, 22 and 1 for 10 p.m. to 1 a.m.
+/// </param>
+/// <param name="Days">How many of the last 28 days had enough data to say.</param>
+/// <param name="CheapestDays">
+/// The two days of the week prices are usually lowest, as ISO numbers (1 Monday to 7 Sunday, not .NET's DayOfWeek, where
+/// Sunday is 0), over the history kept (56 days); null when not clearly, or with fewer than 6 weeks of data.
+/// </param>
+/// <param name="Weeks">How many weeks the days of the week were judged on.</param>
+public sealed record DailyPattern(
+    TimeOnly? JumpsAround,
+    int? LowestFromHour,
+    int? LowestToHour,
+    int Days,
+    IReadOnlyList<int>? CheapestDays,
+    int Weeks);
+
 /// <summary>A place to go to, from the address search (<c>/places/search</c>) or for a point (<c>/places/reverse</c>).</summary>
 /// <param name="Label">What the place is called: "1000 Rue De La Gauchetière Ouest", "Rue Gaucher", "Laval", or a named place.</param>
 /// <param name="Detail">Where it is: "Montréal, QC H3A 4W5" for an address, the town for a street, the address for a named place.</param>
