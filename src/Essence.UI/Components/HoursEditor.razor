@@ -109,7 +109,8 @@
                         <p class="hint">@(brand is not null ? OsmEditTexts.BrandNote(L, _tags, Station.OsmBrand) : L["OsmBrandFirstHand"])</p>
                         @if (built is not null && Station.Hours is { } server && HoursDraft.SameAs(server, built))
                         {
-                            <p class="hint">@(HoursDraft.IsBrand(server) ? L["OsmBrandHours", Name] : L["OsmSameHours"])</p>
+                            <p class="hint">@(HoursDraft.IsOpenData(server) ? L["OsmOpenDataHours", server.SourceLabel ?? server.Source]
+                                : HoursDraft.IsBrand(server) ? L["OsmBrandHours", Name] : L["OsmSameHours"])</p>
                         }
                     }
                     <OsmAccountLine Why="true" />

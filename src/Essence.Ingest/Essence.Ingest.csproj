@@ -19,6 +19,8 @@
   <ItemGroup>
     <!-- Hours written down by hand (CuratedHoursSource): shipped in the assembly, so a new image brings new rules. -->
     <EmbeddedResource Include="Hours\curated-hours.json" LogicalName="Essence.Ingest.Hours.curated-hours.json" />
+    <!-- Hours plugins' specs (HoursPluginCatalog): shipped in the assembly, so a new image brings new sources. -->
+    <EmbeddedResource Include="Hours\Plugins\*.json" LogicalName="Essence.Ingest.Hours.Plugins.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

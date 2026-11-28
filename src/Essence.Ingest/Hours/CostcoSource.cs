@@ -38,6 +38,7 @@ public sealed class CostcoSource(HoursClient client, IOptions<HoursOptions> opti
 
     public string Name => SourceName;
     public bool Enabled => options.Value.Costco.Enabled;
+    public Essence.Ranking.HoursSourceProfile Profile => Essence.Ranking.HoursPrecedence.BuiltIn[SourceName];
     public bool ShippedInImage => false;
     public double MatchRadiusM => 600;
     public double? OtherBrandReachM => null;
