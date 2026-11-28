@@ -9,8 +9,8 @@ and shows them on a map of nearby stations.
 |---|---|
 | `src/Essence.Data` | EF Core model, migrations, `StationKey` normalizer, and the stations' reviewed position corrections (`curated-positions.json`, see [Position corrections](#position-corrections)). Shared by every app. |
 | `src/Essence.Ingest` | Worker: polls the feed, archives each new file, diffs it against the database and writes only the changes. Backfills missed versions from the Régie's xlsx files. Fetches stations' opening hours once a week and matches them to the stations (see [Opening hours](#opening-hours)). Lists once a day the stations whose point in the feed may be wrong, for review (see [Position corrections](#position-corrections)). |
-| `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. |
-| `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` roles and grants them. |
+| `src/Essence.Api` | ASP.NET Core minimal API (read-only DB role), OpenAPI + Scalar UI. Counts who uses the apps, as a role of its own (see [Usage](#usage)). |
+| `src/Essence.Migrator` | One-shot: applies migrations, creates the `essence_writer` / `essence_reader` / `essence_usage` roles and grants them. |
 | `src/Essence.Contracts` | The API's response records and the release notes', shared by the API, the UI and the release tool. |
 | `src/Essence.Ranking` | Which station to fill up at: costs, savings, the pick and its rules, the search area; for trips, the route's corridor, km along it, detours and the range; the OSRM and Photon clients, the address search's labels, and Québec's boundary; which source's opening hours a station shows (`HoursPrecedence`). Only `Essence.Hours` as a dependency; used by the API, and by the ingest for its Photon client. |
 | `src/Essence.Hours` | Stations' opening hours: OpenStreetMap's `opening_hours`, which every source's hours are put in, read (refusing what can't be told for sure) and written one way; Québec's time zones and holidays; whether a station is open, closes soon or is closed when the driver gets there. No dependencies, and trimmable for the web app. |
@@ -24,7 +24,7 @@ and shows them on a map of nearby stations.
 | `tests/Essence.Ingest.Tests` | xUnit unit tests: parsing (JSON and xlsx), diffing, scheduling, backfill planning, fetch decisions, archive. The hours: Costco's locator against a trimmed real answer, the curated rules, days and times as the locators write them, matching, the gate, the weekly night schedule across daylight time and the retries, the rows' diff, the cache, the runs' history, the settings. The position corrections: when one applies, expires (the Régie's point moved, or reached the corrected one) or no longer finds its station, and what the file refuses; the stations listed for review (two kinds agree far from the feed's point, one kind or the same kind twice doesn't, something at the feed's point keeps a station off, the address search's answers taken and refused, without the address search), the daily run's time and the settings. |
 | `tests/Essence.Ranking.Tests` | xUnit unit tests: fill costs, the Best near you ranking and its rules, the search area, eligibility; polylines, the corridor and km along, the trip's candidates, detours, range and ranking; the OSRM and Photon clients against stub servers; the address search's labels and filtering; Québec's boundary at its borders; which source's hours a station shows, stale sources and what's trusted; the stations left out because they'd be closed on arrival (trusted hours only, holidays, corrected hours, everything closed), and the rankings' reference and first station reached once they are. |
 | `tests/Essence.Hours.Tests` | xUnit unit tests: the sources' hours, strict and lenient, what's refused and why, the canonical rule and its round trip, the week's groups; open, closing soon and closed, past midnight and across daylight time; the holidays, Easter and the cautions; the time zones at their borders, and Canada's rule against the system's zones. |
-| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked); the stations' hours as served, when the snapshot loads them again, and the 304 rule with the hours; `ignoreHours`, the stations said to be left out, the 304 rule of an answer that depends on the clock, and the Development clock (`Clock:Now`); `/client-config` with and without an OpenStreetMap application, and the stations' OpenStreetMap elements; `/health/sources`, each source's verdict from runs given (failures in a row, rejected runs, re-matches, successes, staleness, never succeeded, the feed's age, sources turned off), its settings and JSON, and the endpoint with its database unreachable, HEAD and no rate limit; the position corrections in the snapshot, the details, Best near you's distances, the map's nearby stations and the hours' time zone, the 304 rule once they change, and `/stations/positions` (the corrections' states, the candidates and the entry to paste, its JSON and its place in the OpenAPI document). |
+| `tests/Essence.Api.Tests` | xUnit tests of the API in memory (WebApplicationFactory, no database): the address search's endpoints against a stub Photon, their rules, rate limit and logs; the hours sources' status and health check, from runs given (`/hours/sources` itself reads the database, so only its place in the OpenAPI document is checked); the stations' hours as served, when the snapshot loads them again, and the 304 rule with the hours; `ignoreHours`, the stations said to be left out, the 304 rule of an answer that depends on the clock, and the Development clock (`Clock:Now`); `/client-config` with and without an OpenStreetMap application, and the stations' OpenStreetMap elements; `/health/sources`, each source's verdict from runs given (failures in a row, rejected runs, re-matches, successes, staleness, never succeeded, the feed's age, sources turned off), its settings and JSON, and the endpoint with its database unreachable, HEAD and no rate limit; the position corrections in the snapshot, the details, Best near you's distances, the map's nearby stations and the hours' time zone, the 304 rule once they change, and `/stations/positions` (the corrections' states, the candidates and the entry to paste, its JSON and its place in the OpenAPI document); the usage counts (which requests count, the installation's hash and the build, browsers and their systems, the day's secret, once a day per installation or visitor, a failed write tried again, off without its connection string). |
 | `tests/Essence.UI.Tests` | xUnit unit tests: marker tones and loading, price history series, brands, formatting, the API client, car profiles, Best near you's refreshes, the station shown in Best near you and on the way, the open trip and saved places, the address search's debounce and cache, pins' addresses, the route's split at the range, Google Maps links, the release notes, translations; stations' hours as shown (open, closing soon, closed, the week, the source) in the station's time zone, closed markers, the hours on the Favorites widget and rows; what Best near you, Best on the way and their Go links say of a station closing soon after the driver gets there or closed then, the stations left out, the hours on the Best near a place and frequent route widgets, `ignoreHours` sent, and plans read and restored without the new fields; hours corrected on the device (kept per server, read leniently, winning everywhere, `ignoreHours` asked again with them), the editor's week and rule, and OpenStreetMap: the edit sent against a stub API (only the hours changed, escaping, ways, a version conflict, the changeset always closed, brand hours never sent on their own), linking with PKCE and the state checked, and the Android app's `essence://` links. |
 | `tests/Essence.Release.Tests` | xUnit unit tests: release days, changelog dating and pages, and every entry in `changelog/`. |
 
@@ -533,6 +533,8 @@ Fuel names accept or omit accents (`Regulier` = `Régulier`). Errors are Problem
 headers are trusted from private networks only, where the web container that forwards `/api/` lives; that container in turn
 takes the client's address from a reverse proxy on a private network. Allowed CORS origins come from `Cors:AllowedOrigins`:
 in Compose, `CORS_ORIGIN` from `.env`. The web container needs none, since the map calls the API through its own `/api/`.
+With `ConnectionStrings:Usage` set, the API counts which installations of the Android app and which browsers call it,
+per day ([Usage](#usage)).
 
 ### API compatibility
 
@@ -787,6 +789,66 @@ builds them. A package a workflow creates in a public repository should be publi
 summary warns about it, and its owner makes it public once (the repository's **Packages** → the package → **Package
 settings** → **Change visibility**): the autodeploy reads digests anonymously.
 
+### Usage
+
+How many people use Essence, with no analytics in the apps: the api counts the requests it already gets, and a Grafana
+of your own shows the counts, with the dashboard in [deploy/grafana-usage.json](deploy/grafana-usage.json).
+
+**What's counted:**
+
+- **The Android app**, each installation per day and build. Every call to its Essence server carries a random id the
+  app makes on its first run (`Essence-Install`; GitHub and OpenStreetMap never get it), beside its `User-Agent`,
+  `Essence-Android/<version name> (<version code>)`. `usage_android` keeps a hash of the id, the day (Québec's) and the
+  build; an installation that updates during a day counts under both builds that day. A placed widget calls the server
+  every 30 minutes, so it keeps its installation counted. A reinstall, or clearing the app's storage, makes a new
+  installation. Builds from before 2026-11-22 send no id and aren't counted; GitHub's download counts cover them:
+  `gh api "repos/etiennex9/essence/releases?per_page=100" --jq '.[] | [.tag_name, (.assets[] | select(.name | endswith(".apk")) | .download_count)] | @tsv'`
+  (an update the app installs itself downloads the APK too).
+- **The web app**, each browser per day, with the operating system its `User-Agent` names. Only calls made by a page's
+  script count (`Sec-Fetch-Mode` `cors` or `same-origin`): monitors, health checks, scripts, crawlers and an API address
+  opened in a tab send none. A browser is a hash of its address and `User-Agent`, keyed with a secret of the day
+  (`usage_salts`) that is deleted the next day: the same browser is a new visitor every day, and no address can be found
+  from `usage_web`, by the database's owner either.
+- **Nothing else**: no path, query string, location or address is kept, and nothing about it is logged.
+
+**How it's written.** With `ConnectionStrings:Usage` set, the api writes the new rows every 15 seconds (once per
+installation or visitor and day, and once more as it stops) as the `essence_usage` role, which can add rows to the
+usage tables and do nothing else: its other connection stays read-only. When the database can't be reached, up to
+20,000 rows wait for the next try. The migrator creates that role when `Roles:UsagePassword` is set. Without them,
+nothing is counted.
+
+**The dashboard**, **Essence usage**, reads the database as `essence_reader`, which can't read the day's secret:
+
+- **Android app**: active installations today and in the last 7 days, the newest build seen and the share of active
+  installations on it, new installations in the last 30 days, and those gone quiet (not seen for 14 days); active
+  installations per day by version (filter with **Version**), the versions in use, active installations per day, and
+  new installations per week.
+- **Web app**: visitors today, and per day over the last 7 and 30 days; visitors per day by system, and the systems over
+  the last 30 days.
+
+Other questions go to Grafana's **Explore**, in SQL, e.g. each build's installations over 30 days:
+`SELECT version, count(DISTINCT install) FROM usage_android WHERE day > current_date - 30 GROUP BY version`.
+
+**Setting it up on TrueNAS:**
+
+1. **The network.** Grafana runs as an app of its own, which reaches the database over a Docker network that neither
+   app owns, so that either can stop or update without the other (TrueNAS stops an app with `docker compose down`,
+   which removes the networks the app made). Create it once, in **System → Shell**: `sudo docker network create essence-db`.
+2. **The Essence app.** In **Apps → essence → Edit**, add from [deploy/truenas.yaml](deploy/truenas.yaml)
+   `Roles__UsagePassword` to `migrate`, `ConnectionStrings__Usage` to `api` (a new password, the same in both), the
+   `networks` of `postgres`, and the `networks` at the end, then **Save**. Postgres joins `essence-db` as
+   `essence-postgres`; no port is published.
+3. **Grafana.** **Apps → Discover Apps → Grafana → Install**. Under **Networks**, add `essence-db` with the `grafana`
+   container. Optionally, under **Additional Environment Variables**, `GF_ANALYTICS_REPORTING_ENABLED` `false` and
+   `GF_ANALYTICS_CHECK_FOR_UPDATES` `false`, so it doesn't call grafana.com.
+4. **The data source.** In Grafana, **Connections → Data sources → Add → PostgreSQL**: host `essence-postgres:5432`,
+   database `essence`, user `essence_reader` with its password, TLS **disable**. **Save & test**.
+5. **The dashboard.** **Dashboards → New → Import**, upload [deploy/grafana-usage.json](deploy/grafana-usage.json), and
+   pick that data source. A newer version of the file is imported the same way, over the old one.
+
+In Compose, set `ESSENCE_USAGE_PASSWORD` in `.env` to count, and read the tables with
+`docker compose exec postgres psql -U essence_admin essence`.
+
 ## Versions
 
 The app's version is a date: the day the newest change it was built from landed on `main`, counted in Québec time
@@ -1024,6 +1086,8 @@ Every setting can be overridden with environment variables (`Section__Key`).
 | `Clock:Now` | (none) | Development only: the API's clock starts at this moment (ISO 8601 with its offset) and moves on with the real one, to see which stations Best near you and Best on the way leave out at another time of day. Ignored in any other environment. |
 | `Osm:ClientId` | (none) | The client id of the deployment's OpenStreetMap OAuth 2 application ([OpenStreetMap edits](#openstreetmap-edits)), served by `/client-config`. Empty: the apps don't offer to send corrections to OpenStreetMap. |
 | `Osm:AuthUrl` / `ApiUrl` | `https://www.openstreetmap.org` / `https://api.openstreetmap.org` | Where that application signs in and where edits go: `https://master.apis.dev.openstreetmap.org` for both, to test against OpenStreetMap's development server with an application registered there. |
+| `ConnectionStrings:Usage` | (none) | The api's connection as the `essence_usage` role, which writes the usage counts ([Usage](#usage)). Empty: nothing is counted. |
+| `Roles:UsagePassword` | (none) | The migrator's: the `essence_usage` role's password. Empty: no such role is created. |
 | `RateLimiting:PermitLimit` / `WindowSeconds` | 120 / 60 | Requests per client IP and window, the address search's aside. |
 | `RateLimiting:Search:PermitLimit` / `WindowSeconds` | 60 / 60 | `/places/` requests per client IP and window. |
 

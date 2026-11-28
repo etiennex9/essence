@@ -24,6 +24,7 @@ public static class MauiProgram
         services.TryAddSingleton(TimeProvider.System);
         services.AddSingleton(BuildInfo.Current);
         services.AddSingleton<AppHttpHandler>();
+        services.AddSingleton<InstallId>();
         services.AddSingleton<NativeSessionStore>();
         services.AddSingleton<ISessionStore>(sp => sp.GetRequiredService<NativeSessionStore>());
         services.AddSingleton<ServerSettings>();

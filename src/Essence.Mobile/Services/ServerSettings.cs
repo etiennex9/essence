@@ -24,12 +24,14 @@ public sealed class ServerSettings
     private readonly BuildInfo _build;
     private readonly NativeSessionStore _session;
     private readonly AppHttpHandler _handler;
+    private readonly InstallId _installId;
 
-    public ServerSettings(BuildInfo build, NativeSessionStore session, AppHttpHandler handler)
+    public ServerSettings(BuildInfo build, NativeSessionStore session, AppHttpHandler handler, InstallId installId)
     {
         _build = build;
         _session = session;
         _handler = handler;
+        _installId = installId;
         Current = Read();
     }
 
@@ -72,14 +74,22 @@ public sealed class ServerSettings
         }
     }
 
-    /// <summary>A client for the current server's API, one per BlazorWebView scope (MauiProgram).</summary>
+    /// <summary>
+    /// A client for the current server's API, one per BlazorWebView scope (MauiProgram) and for the widgets: the only one
+    /// whose calls carry the <see cref="InstallId"/>.
+    /// </summary>
     public EssenceApiClient CreateApiClient()
     {
         var server = Current ?? throw new InvalidOperationException("No server is chosen yet.");
-        return new EssenceApiClient(new HttpClient(_handler, disposeHandler: false) { BaseAddress = server.Api, Timeout = ApiTimeout });
+        var http = new HttpClient(_handler, disposeHandler: false) { BaseAddress = server.Api, Timeout = ApiTimeout };
+        http.DefaultRequestHeaders.TryAddWithoutValidation(InstallId.Header, _installId.Value);
+        return new EssenceApiClient(http);
     }
 
-    /// <summary>A client without a base address, for <see cref="ServerAddress.ProbeAsync"/> and the widgets' own calls.</summary>
+    /// <summary>
+    /// A client without a base address, for <see cref="ServerAddress.ProbeAsync"/> and GitHub's releases: without the
+    /// <see cref="InstallId"/>.
+    /// </summary>
     public HttpClient CreateProbeClient() => new(_handler, disposeHandler: false) { Timeout = ProbeTimeout };
 
     private static SavedServer? Read()
