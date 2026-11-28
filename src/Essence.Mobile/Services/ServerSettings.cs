@@ -118,12 +118,13 @@ public sealed class ServerSettings
 /// <summary>
 /// Every request the app makes: says which build asks (<c>Essence-Android/2026.11.07.2 (456789)</c>: its version name and
 /// code), so a server can tell an app too old for it with 426, which <see cref="TooOld"/> reports (MobileAppHost tells the
-/// user once).
+/// user once). A server that can't be reached is an <see cref="HttpRequestException"/>, as on the web
+/// (<see cref="NetworkFailureHandler"/>).
 /// </summary>
 public sealed class AppHttpHandler : DelegatingHandler
 {
     public AppHttpHandler()
-        : base(new HttpClientHandler())
+        : base(new NetworkFailureHandler(new HttpClientHandler()))
     {
         UserAgent = $"Essence-Android/{AppInfo.Current.VersionString} ({AppInfo.Current.BuildString})";
     }

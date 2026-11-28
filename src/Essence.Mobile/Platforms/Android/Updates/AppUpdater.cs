@@ -173,8 +173,8 @@ public sealed class AppUpdater
         }
         catch (Exception ex)
         {
-            // Stopped by Android, offline (Android's handler throws WebException), a download that didn't check out, or
-            // Android refused the session. Never thrown on: the job would fail, and Install has nobody to throw to.
+            // Stopped by Android, offline, a download that didn't check out, or Android refused the session. Never thrown
+            // on: the job would fail, and Install has nobody to throw to.
             AndroidLog.Warn(LogTag, $"Build {release.VersionCode}: {ex.GetType().Name}: {ex.Message}");
             Set(interactive ? new AppInstallState(AppInstallStage.Failed) : null);
             return false;
