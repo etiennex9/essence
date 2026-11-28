@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <title>Nos stations</title>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@graph": [
+      { "@type": "WebPage", "@id": "https://example.com/stations/", "name": "Nos stations" },
+      {
+        "@type": "GasStation",
+        "@id": "https://example.com/stations/101",
+        "name": "Exemple Laval",
+        "url": "https://example.com/stations/101",
+        "address": { "@type": "PostalAddress", "streetAddress": "3000 boulevard Exemple", "addressLocality": "Laval", "addressRegion": "QC", "postalCode": "H7P 5P4", "addressCountry": "CA" },
+        "geo": { "@type": "GeoCoordinates", "latitude": 45.5699, "longitude": -73.7469 },
+        "openingHoursSpecification": [
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": ["https://schema.org/Monday", "https://schema.org/Tuesday", "https://schema.org/Wednesday", "https://schema.org/Thursday", "https://schema.org/Friday"], "opens": "06:00:00", "closes": "22:00:00" },
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": ["Saturday", "Sunday"], "opens": "07:00", "closes": "21:00" },
+          { "@type": "OpeningHoursSpecification", "dayOfWeek": "Monday", "opens": "09:00", "closes": "17:00", "validFrom": "2026-12-25", "validThrough": "2026-12-25" }
+        ]
+      },
+      {
+        "@type": "GasStation",
+        "@id": "https://example.com/stations/102",
+        "name": "Exemple Québec",
+        "url": "https://example.com/stations/102",
+        "address": { "@type": "PostalAddress", "streetAddress": "45 rue Exemple", "addressLocality": "Québec", "addressRegion": "QC", "postalCode": "G1V 1A3", "addressCountry": "CA" },
+        "geo": { "@type": "GeoCoordinates", "latitude": "46.7863", "longitude": "-71.3017" },
+        "openingHours": ["Mo-Fr 05:30-23:00", "Sa-Su 07:00-23:00"]
+      }
+    ]
+  }
+  </script>
+</head>
+<body><h1>Nos stations</h1></body>
+</html>

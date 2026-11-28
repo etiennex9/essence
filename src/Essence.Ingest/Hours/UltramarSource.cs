@@ -39,6 +39,7 @@ public sealed class UltramarSource(HoursClient client, IOptions<HoursOptions> op
 
     public string Name => SourceName;
     public bool Enabled => options.Value.Ultramar.Enabled;
+    public Essence.Ranking.HoursSourceProfile Profile => Essence.Ranking.HoursPrecedence.BuiltIn[SourceName];
     public bool ShippedInImage => false;
     public double MatchRadiusM => 150;
     public double? OtherBrandReachM => null;

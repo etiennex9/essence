@@ -1233,6 +1233,9 @@
   <data name="OsmBrandHours" xml:space="preserve">
     <value>These are {0}’s own hours: they go to OpenStreetMap only once you’ve checked them at the station.</value>
   </data>
+  <data name="OsmOpenDataHours" xml:space="preserve">
+    <value>These hours come from {0}: they go to OpenStreetMap only once you’ve checked them at the station.</value>
+  </data>
   <data name="OsmSameHours" xml:space="preserve">
     <value>OpenStreetMap already has these hours: sending them only says when you checked them.</value>
   </data>

@@ -32,9 +32,43 @@ public sealed class StationHoursTests
             StaleAfter);
 
         var chosen = hours[1];
-        Assert.Equal(new StationHours(CostcoRule, "costco", Trusted: true, Confirmed: true, null, "https://example.com/costco"), chosen.Dto);
+        Assert.Equal(
+            new StationHours(CostcoRule, "costco", Trusted: true, Confirmed: true, null, "https://example.com/costco", SourceLabel: "Costco", SourceKind: "brand"), chosen.Dto);
         Assert.Equal(OpeningHours.Parse(CostcoRule), chosen.Hours);
         Assert.Same(QuebecTime.Eastern, chosen.Zone);
+    }
+
+    [Fact]
+    public void A_plugin_s_hours_rank_and_are_named_by_its_stored_profile()
+    {
+        var profiles = new Dictionary<string, HoursSourceProfile>
+        {
+            ["crevier"] = new("Crevier", HoursSourceKind.Brand, 50),
+            ["villedata"] = new("Données de la ville", HoursSourceKind.OpenData, 80),
+        };
+        var fresh = new Dictionary<string, DateTimeOffset> { ["crevier"] = Now, ["osm"] = Now, ["villedata"] = Now };
+
+        var hours = StationSnapshot.ChooseHours(
+            [
+                Row(1, "osm", "Mo-Su 07:00-21:00"), Row(1, "crevier", "Mo-Su 06:00-22:00"), Row(2, "osm", "24/7"), Row(2, "villedata", "Mo-Su 05:00-23:00"),
+                Row(3, "villedata", "Mo-Su 05:00-23:00"),
+            ],
+            fresh,
+            Now,
+            StaleAfter,
+            profiles);
+
+        Assert.Equal(("crevier", "Crevier", "brand", true), (hours[1].Dto.Source, hours[1].Dto.SourceLabel, hours[1].Dto.SourceKind, hours[1].Dto.Trusted));
+        Assert.Equal(("osm", "OpenStreetMap", "osm", false), (hours[2].Dto.Source, hours[2].Dto.SourceLabel, hours[2].Dto.SourceKind, hours[2].Dto.Trusted));
+        Assert.Equal(("villedata", "Données de la ville", "open-data", false), (hours[3].Dto.Source, hours[3].Dto.SourceLabel, hours[3].Dto.SourceKind, hours[3].Dto.Trusted));
+    }
+
+    [Fact]
+    public void A_source_known_from_nowhere_is_served_by_its_name_without_a_label()
+    {
+        var hours = StationSnapshot.ChooseHours([Row(1, "acme", "24/7")], new Dictionary<string, DateTimeOffset> { ["acme"] = Now }, Now, StaleAfter);
+
+        Assert.Equal(("acme", null, null, false), (hours[1].Dto.Source, hours[1].Dto.SourceLabel, hours[1].Dto.SourceKind, hours[1].Dto.Trusted));
     }
 
     [Fact]

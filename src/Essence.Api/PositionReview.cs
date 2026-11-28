@@ -43,12 +43,15 @@ public static class PositionReview
             .Where(s => keys.Contains(s.NaturalKey) || ids.Contains(s.Id))
             .Select(s => new ReviewStation(s.Id, s.NaturalKey, s.Name, s.Address, s.Brand, s.IsActive, s.Latitude, s.Longitude))
             .ToListAsync(cancellationToken);
-        return Build(corrections, stations, candidates, today);
+        var labels = (await StationSnapshot.ProfilesAsync(db, cancellationToken)).ToDictionary(p => p.Key, p => p.Value.Label, StringComparer.Ordinal);
+        return Build(corrections, stations, candidates, today, labels);
     }
 
     /// <param name="stations">The stations with a correction's natural key, and the candidates' stations.</param>
+    /// <param name="labels">How the sources added as plugins are named, by source (<c>hours_sources</c>).</param>
     public static StationPositions Build(
-        PositionCorrections corrections, IReadOnlyList<ReviewStation> stations, IReadOnlyList<PositionCandidate> candidates, DateOnly today)
+        PositionCorrections corrections, IReadOnlyList<ReviewStation> stations, IReadOnlyList<PositionCandidate> candidates, DateOnly today,
+        IReadOnlyDictionary<string, string>? labels = null)
     {
         var byKey = stations.ToLookup(s => s.NaturalKey, StringComparer.Ordinal);
         var byId = stations.ToDictionary(s => s.Id);
@@ -103,7 +106,7 @@ public static class PositionReview
                 [.. evidence.Select(e => new PositionEvidenceDto(e.Kind, e.Ref, e.Latitude, e.Longitude, e.DistanceM))],
                 new PositionEntry(
                     candidate.NaturalKey, candidate.Latitude, candidate.Longitude, candidate.FeedLatitude, candidate.FeedLongitude, Day(today),
-                    Note(evidence, candidate.DistanceM)),
+                    Note(evidence, candidate.DistanceM, labels)),
                 candidate.FoundAt));
         }
 
@@ -114,12 +117,14 @@ public static class PositionReview
     /// The evidence in a sentence, for the entry's note: "OpenStreetMap node/5312347403 and the address node/1234 (Photon)
     /// agree within 4 m, 653 m from the Régie's point." Element and store ids only: never a name, which can be a person's.
     /// </summary>
-    public static string Note(IReadOnlyList<PositionEvidence> evidence, int distanceM)
+    /// <param name="labels">How the sources added as plugins are named, by source: "Crevier's locator".</param>
+    public static string Note(IReadOnlyList<PositionEvidence> evidence, int distanceM, IReadOnlyDictionary<string, string>? labels = null)
     {
         var named = evidence.Select(e => e.Kind switch
         {
             PositionCandidate.FromOsm => $"OpenStreetMap {e.Ref}",
-            PositionCandidate.FromLocator when e.Ref.Split('/', 2) is [var source, var id] => $"{Locators.GetValueOrDefault(source, source)}'s locator ({id})",
+            PositionCandidate.FromLocator when e.Ref.Split('/', 2) is [var source, var id] =>
+                $"{Locators.GetValueOrDefault(source) ?? labels?.GetValueOrDefault(source) ?? source}'s locator ({id})",
             PositionCandidate.FromPhoton => $"the address {e.Ref} (Photon)",
             _ => $"{e.Kind} {e.Ref}",
         }).ToList();

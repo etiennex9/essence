@@ -229,6 +229,20 @@ public class HoursDraftTests
     }
 
     [Fact]
+    public void Open_data_s_hours_are_named_as_theirs_and_like_a_brand_s_go_only_once_checked_at_the_station()
+    {
+        // Another's open data, whose terms may not be OpenStreetMap's: not "Crevier's own hours", but sent no more freely.
+        var openData = new StationHours(CostcoRule, "villedata", Trusted: false, Confirmed: true, null, null, SourceLabel: "Données de la ville", SourceKind: "open-data");
+        var edited = OpeningHours.Parse(CostcoRule);
+
+        Assert.True(HoursDraft.IsOpenData(openData));
+        Assert.False(HoursDraft.IsOpenData(Hours(CostcoRule, "costco")));
+        Assert.False(HoursDraft.IsOpenData(Hours(CostcoRule, "a-source-from-an-older-api")));
+        Assert.Equal((false, false), HoursDraft.OsmChoice(openData, edited, surveyed: false));
+        Assert.Equal((true, true), HoursDraft.OsmChoice(openData, edited, surveyed: true));
+    }
+
+    [Fact]
     public void OpenStreetMap_s_own_hours_unchanged_start_unticked_unless_checked()
     {
         var edited = OpeningHours.Parse(CostcoRule);

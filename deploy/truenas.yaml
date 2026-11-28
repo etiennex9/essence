@@ -1,13 +1,19 @@
 # Essence on TrueNAS: Apps → Discover Apps → ⋮ → Install via YAML, app name "essence".
 #
 # Before pasting, replace:
-#   - every CHANGE_ME_..._PASSWORD (each appears twice). Use letters and digits only: they go into connection strings.
+#   - every CHANGE_ME_..._PASSWORD, with the same value wherever the same one appears. Use letters and digits only: they
+#     go into connection strings.
 #   - POOL in the host paths, and create them first:
 #     - postgres: its own dataset with the Generic preset (POSIX permissions), owned by 999:999, mode 700. Postgres won't
 #       start in a folder that inherits NFSv4 ACLs (the Apps preset).
 #     - data: owned by 1654:1654 (ingest), which creates the archive and hours subfolders in it. NFSv4 ACLs are fine here.
+#       To add an hours source without a new image, put its plugin spec (a .json file) in its hours-plugins folder and
+#       restart the app (README → Opening hours; src/Essence.Ingest/Hours/Plugins/README.md).
 #   - 30180, if that port is taken. Point the reverse proxy for <your domain> at http://<NAS address>:30180:
 #     it serves the map and, under /api/, the API.
+# And create the essence-db network once, which a Grafana app joins to read the usage counts (README → Usage): in System
+# → Shell, `sudo docker network create essence-db`. The app doesn't start without it; to do without, remove postgres's
+# networks and the networks at the end.
 #
 # The images come from the GitHub Container Registry, published by .github/workflows/publish.yml on every push to main.
 # TrueNAS offers Update once a day when one changed. To roll out each push within about 10 minutes instead, run
@@ -39,9 +45,16 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    networks:
+      default:
+      # Shared with a Grafana app (README → Usage), which reads the database there as essence-postgres:5432. Neither app
+      # owns it, so either stops without taking it away from the other; no port is published.
+      essence-db:
+        aliases: [essence-postgres]
     restart: unless-stopped
 
-  # One-shot: applies migrations, then creates the essence_writer and essence_reader roles (or updates their passwords).
+  # One-shot: applies migrations, then creates the essence_writer, essence_reader and essence_usage roles (or updates their
+  # passwords).
   migrate:
     image: ghcr.io/etiennex9/essence-migrator:latest
     environment:
@@ -50,6 +63,8 @@ services:
       ConnectionStrings__Admin: Host=postgres;Database=essence;Username=essence_admin;Password=CHANGE_ME_ADMIN_PASSWORD;GSS Encryption Mode=Disable
       Roles__WriterPassword: CHANGE_ME_WRITER_PASSWORD
       Roles__ReaderPassword: CHANGE_ME_READER_PASSWORD
+      # The api's role for the usage counts (README → Usage), which writes them and nothing else. Empty: none.
+      Roles__UsagePassword: CHANGE_ME_USAGE_PASSWORD
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,6 +99,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       TZ: UTC
       ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_reader;Password=CHANGE_ME_READER_PASSWORD;GSS Encryption Mode=Disable
+      # Who uses the apps (README → Usage): installations per version, and web visitors per day. Empty: nothing is counted.
+      ConnectionStrings__Usage: Host=postgres;Database=essence;Username=essence_usage;Password=CHANGE_ME_USAGE_PASSWORD;GSS Encryption Mode=Disable
       # Optional: the client id of the OpenStreetMap OAuth 2 application registered for <your domain> (README → Deploy →
       # OpenStreetMap edits), so users can send their hours corrections to OpenStreetMap with their own account. Empty:
       # the apps don't offer it.
@@ -155,3 +172,8 @@ services:
 volumes:
   routing:
   geocoding:
+
+# Created by hand (see the top), for a Grafana app to read the usage counts.
+networks:
+  essence-db:
+    external: true

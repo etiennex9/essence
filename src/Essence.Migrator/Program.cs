@@ -11,6 +11,8 @@ var builder = Host.CreateApplicationBuilder(args);
 var adminConnectionString = builder.Configuration.GetConnectionString("Admin");
 var writerPassword = builder.Configuration["Roles:WriterPassword"];
 var readerPassword = builder.Configuration["Roles:ReaderPassword"];
+// Optional: the API's role for the usage counts (README → Usage).
+var usagePassword = builder.Configuration["Roles:UsagePassword"];
 if (string.IsNullOrWhiteSpace(adminConnectionString) || string.IsNullOrWhiteSpace(writerPassword) || string.IsNullOrWhiteSpace(readerPassword))
 {
     Console.Error.WriteLine("ConnectionStrings:Admin, Roles:WriterPassword and Roles:ReaderPassword are required.");
@@ -33,7 +35,7 @@ try
         await db.Database.MigrateAsync(stopping);
     }
 
-    await RoleProvisioner.ProvisionAsync(adminConnectionString, writerPassword, readerPassword, logger, stopping);
+    await RoleProvisioner.ProvisionAsync(adminConnectionString, writerPassword, readerPassword, usagePassword, logger, stopping);
     logger.LogInformation("Database is up to date.");
     return 0;
 }
