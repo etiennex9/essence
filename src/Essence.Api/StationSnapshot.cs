@@ -186,7 +186,8 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
                     h.MatchedBy,
                     h.SourceBrand))
                 .ToListAsync(cancellationToken);
-            var hours = ChooseHours(Correct(hourRows, corrected), lastSuccesses, now, _staleAfter);
+            var profiles = await ProfilesAsync(db, cancellationToken);
+            var hours = ChooseHours(Correct(hourRows, corrected), lastSuccesses, now, _staleAfter, profiles);
             return _current = new Snapshot(
                 version,
                 stations,
@@ -279,9 +280,16 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
         }
     }
 
-    /// <summary>Each station's hours as served: <see cref="HoursPrecedence.Choose"/>'s, in the contract's shape, in its zone.</summary>
+    /// <summary>
+    /// Each station's hours as served: <see cref="HoursPrecedence.Choose"/>'s by the sources' <paramref name="profiles"/>, in
+    /// the contract's shape, named as their source's profile names it, in its zone.
+    /// </summary>
     public static IReadOnlyDictionary<long, SnapshotHours> ChooseHours(
-        IReadOnlyCollection<SnapshotHoursRow> rows, IReadOnlyDictionary<string, DateTimeOffset> lastSuccesses, DateTimeOffset now, TimeSpan staleAfter)
+        IReadOnlyCollection<SnapshotHoursRow> rows,
+        IReadOnlyDictionary<string, DateTimeOffset> lastSuccesses,
+        DateTimeOffset now,
+        TimeSpan staleAfter,
+        IReadOnlyDictionary<string, HoursSourceProfile>? profiles = null)
     {
         var where = new Dictionary<long, (double? Latitude, double? Longitude)>(rows.Count);
         foreach (var row in rows)
@@ -289,14 +297,17 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
             where[row.Row.StationId] = (row.Latitude, row.Longitude);
         }
 
-        return HoursPrecedence.Choose(rows.Select(r => r.Row), lastSuccesses, now, staleAfter).ToDictionary(
+        return HoursPrecedence.Choose(rows.Select(r => r.Row), lastSuccesses, now, staleAfter, profiles).ToDictionary(
             c => c.Key,
             c =>
             {
                 var (row, hours, trusted) = c.Value;
                 var (latitude, longitude) = where[c.Key];
+                var profile = HoursPrecedence.ProfileOf(row.Source, profiles);
                 return new SnapshotHours(
-                    new StationHours(hours.ToRule(), row.Source, trusted, row.Confirmed, row.CheckedAt, row.Link, row.TemporarilyClosed),
+                    new StationHours(
+                        hours.ToRule(), row.Source, trusted, row.Confirmed, row.CheckedAt, row.Link, row.TemporarilyClosed,
+                        profile?.Label, profile is null ? null : HoursSourceKinds.Name(profile.Kind)),
                     hours,
                     QuebecTime.ZoneFor(latitude, longitude));
             });
@@ -336,6 +347,24 @@ public sealed class StationSnapshot(TimeProvider timeProvider, IConfiguration co
     public static DateTimeOffset? HoursChangedAt(
         DateTimeOffset? hoursVersion, IReadOnlyDictionary<string, DateTimeOffset> lastSuccesses, DateTimeOffset now, TimeSpan staleAfter) =>
         HoursPrecedence.StaleSince(lastSuccesses, now, staleAfter) is { } stale && !(hoursVersion >= stale) ? stale : hoursVersion;
+
+    /// <summary>
+    /// The hours sources' profiles as the ingest stored them (<c>hours_sources</c>): a kind this API doesn't know is left
+    /// out, and its source ranked as one it knows nothing of.
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, HoursSourceProfile>> ProfilesAsync(EssenceDbContext db, CancellationToken cancellationToken)
+    {
+        var profiles = new Dictionary<string, HoursSourceProfile>(StringComparer.Ordinal);
+        foreach (var source in await db.HoursSources.AsNoTracking().ToListAsync(cancellationToken))
+        {
+            if (HoursSourceKinds.TryParse(source.Kind, out var kind))
+            {
+                profiles[source.Source] = new HoursSourceProfile(source.Label, kind, source.Rank);
+            }
+        }
+
+        return profiles;
+    }
 
     /// <summary>When each hours source last succeeded (<see cref="HoursHistory"/>), those turned off left out: they have no rows.</summary>
     private static async Task<IReadOnlyDictionary<string, DateTimeOffset>> LastSuccessesAsync(EssenceDbContext db, CancellationToken cancellationToken) =>

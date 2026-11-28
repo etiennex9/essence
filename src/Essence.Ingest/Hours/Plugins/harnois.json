@@ -1,0 +1,14 @@
+{
+  // Harnois Énergies' stations (Harnois, Pétro-T, and the Esso stations it supplies): its locator's list, one request,
+  // about 410 in Québec in November 2026. It gives no hours, only a "24hrs" service on the stations open all day and
+  // night (81 then): those get 24/7, the others no hours. robots.txt doesn't cover the API. Its records' own id is
+  // harnoisID (ID is the website's page number).
+  "name": "harnois",
+  "label": "Harnois Énergies",
+  "kind": "brand",
+  "link": "https://harnoisenergies.com/fr/trouvez-station-service/",
+  "url": "https://harnoisenergies.com/fr/wp-json/mxo-stationlocator/v1/stores?lang=fr&cardlocks=0&gzip=1",
+  "province": "QC",
+  "matchRadiusM": 150,
+  "fields": { "id": "harnoisID" }
+}

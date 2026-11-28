@@ -1,0 +1,680 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_ESSENCE",
+      "label": "Essence",
+      "description": "Essence's PostgreSQL, read as essence_reader",
+      "type": "datasource",
+      "pluginId": "grafana-postgresql-datasource",
+      "pluginName": "PostgreSQL"
+    }
+  ],
+  "__requires": [
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "11.0.0"
+    },
+    {
+      "type": "datasource",
+      "id": "grafana-postgresql-datasource",
+      "name": "PostgreSQL",
+      "version": "1.0.0"
+    }
+  ],
+  "uid": "essence-usage",
+  "title": "Essence usage",
+  "description": "Who uses the Android app and the web app, from the API's usage counts (README → Usage). Days are Québec's.",
+  "tags": [
+    "essence"
+  ],
+  "timezone": "utc",
+  "editable": true,
+  "graphTooltip": 1,
+  "refresh": "5m",
+  "schemaVersion": 41,
+  "version": 1,
+  "time": {
+    "from": "now-90d",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "1m",
+      "5m",
+      "15m",
+      "1h"
+    ]
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "version",
+        "label": "Version",
+        "type": "query",
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "${DS_ESSENCE}"
+        },
+        "query": "SELECT version FROM usage_android GROUP BY version ORDER BY max(version_code) DESC",
+        "definition": "SELECT version FROM usage_android GROUP BY version ORDER BY max(version_code) DESC",
+        "refresh": 2,
+        "multi": true,
+        "includeAll": true,
+        "current": {
+          "text": [
+            "All"
+          ],
+          "value": [
+            "$__all"
+          ]
+        },
+        "sort": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "row",
+      "title": "Android app",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Installations",
+      "description": "Active today: installations that called the server today, from the app or a widget. Active, 7 days: at least once in the last 7 days. Newest build: the highest version code that called the server. On newest: of those active in the last 7 days, the share whose latest build is the newest one. New, 30 days: first seen in the last 30 days; counting started with the build of 2026-11-22, so every installation updated to it shows as new at first. Gone quiet: last seen 14 days ago or more, most likely uninstalled or not opened since (a placed widget calls the server every 30 minutes).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ESSENCE}"
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/.*/",
+          "values": false
+        },
+        "orientation": "vertical",
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value_and_name",
+        "justifyMode": "center",
+        "wideLayout": true,
+        "showPercentChange": false
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "noValue": "–"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "On newest"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(DISTINCT install) AS \"Active today\"\nFROM usage_android\nWHERE day = (now() AT TIME ZONE 'America/Toronto')::date"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(DISTINCT install) AS \"Active, 7 days\"\nFROM usage_android\nWHERE day > (now() AT TIME ZONE 'America/Toronto')::date - 7"
+        },
+        {
+          "refId": "C",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT version AS \"Newest build\"\nFROM usage_android\nORDER BY version_code DESC\nLIMIT 1"
+        },
+        {
+          "refId": "D",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH latest AS (\n  SELECT install, max(version_code) AS code\n  FROM usage_android\n  WHERE day > (now() AT TIME ZONE 'America/Toronto')::date - 7\n  GROUP BY install\n)\nSELECT 100.0 * count(*) FILTER (WHERE code = (SELECT max(version_code) FROM usage_android)) / NULLIF(count(*), 0) AS \"On newest\"\nFROM latest"
+        },
+        {
+          "refId": "E",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) AS \"New, 30 days\"\nFROM (SELECT install, min(day) AS first FROM usage_android GROUP BY install) f\nWHERE first > (now() AT TIME ZONE 'America/Toronto')::date - 30"
+        },
+        {
+          "refId": "F",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) AS \"Gone quiet\"\nFROM (SELECT install, max(day) AS last FROM usage_android GROUP BY install) l\nWHERE last <= (now() AT TIME ZONE 'America/Toronto')::date - 14"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Active installs per day, by version",
+      "description": "An installation that updated during a day counts under both builds that day.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ESSENCE}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 14,
+        "x": 0,
+        "y": 6
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT day::timestamp AS time, version AS metric, count(DISTINCT install) AS value\nFROM usage_android\nWHERE $__timeFilter(day) AND version IN ($version)\nGROUP BY day, version\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "title": "Versions in use, last 7 days",
+      "description": "Each installation active in the last 7 days under the latest build it ran.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ESSENCE}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 10,
+        "x": 14,
+        "y": 6
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "minWidth": 60
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "WITH latest AS (\n  SELECT DISTINCT ON (install) install, version_code, version\n  FROM usage_android\n  WHERE day > (now() AT TIME ZONE 'America/Toronto')::date - 7\n  ORDER BY install, version_code DESC\n),\nfirst_seen AS (\n  SELECT version_code, min(day) AS first_day FROM usage_android GROUP BY version_code\n)\nSELECT l.version AS \"Version\", count(*) AS \"Installs\",\n  round(100.0 * count(*) / sum(count(*)) OVER (), 0) AS \"Share %\",\n  to_char(f.first_day, 'YYYY-MM-DD') AS \"First seen\"\nFROM latest l JOIN first_seen f USING (version_code)\nGROUP BY l.version, l.version_code, f.first_day\nORDER BY l.version_code DESC"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Active installs per day",
+      "description": "Installations that called the server each day, whatever their version.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ESSENCE}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepAfter",
+            "fillOpacity": 15,
+            "lineWidth": 2,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT day::timestamp AS time, count(DISTINCT install) AS \"Active installs\"\nFROM usage_android\nWHERE $__timeFilter(day)\nGROUP BY day\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "New installs per week",
+      "description": "Installations by the week they were first seen (weeks start on Monday).",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ESSENCE}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "barAlignment": -1,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT date_trunc('week', first)::timestamp AS time, count(*) AS \"New installs\"\nFROM (SELECT install, min(day) AS first FROM usage_android GROUP BY install) f\nWHERE $__timeFilter(first)\nGROUP BY 1\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Web app",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 23
+      },
+      "panels": []
+    },
+    {
+      "type": "stat",
+      "title": "Visitors today",
+      "description": "Browsers that used the web app today. A browser is told apart by its address and User-Agent, hashed with a secret that changes every day, so the same browser is a new visitor each day.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ESSENCE}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 24
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) AS \"Visitors\"\nFROM usage_web\nWHERE day = (now() AT TIME ZONE 'America/Toronto')::date"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Visitors per day, last 7 days",
+      "description": "The average of the last 7 days, today included.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ESSENCE}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 8,
+        "y": 24
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) / 7.0 AS \"Visitors per day\"\nFROM usage_web\nWHERE day > (now() AT TIME ZONE 'America/Toronto')::date - 7"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Visitors per day, last 30 days",
+      "description": "The average of the last 30 days, today included.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ESSENCE}"
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 24
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "colorMode": "none",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 1
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT count(*) / 30.0 AS \"Visitors per day\"\nFROM usage_web\nWHERE day > (now() AT TIME ZONE 'America/Toronto')::date - 30"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Visitors per day, by system",
+      "description": "The operating system each browser's User-Agent names. An iPad asking for desktop sites counts as macos.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ESSENCE}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 16,
+        "x": 0,
+        "y": 28
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "min": 0,
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "barAlignment": 0,
+            "stacking": {
+              "mode": "normal",
+              "group": "A"
+            },
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "time_series",
+          "rawSql": "SELECT day::timestamp AS time, os AS metric, count(*) AS value\nFROM usage_web\nWHERE $__timeFilter(day)\nGROUP BY day, os\nORDER BY 1"
+        }
+      ]
+    },
+    {
+      "type": "bargauge",
+      "title": "Systems, last 30 days",
+      "description": "Visitors per operating system, each day's visitors added up.",
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "${DS_ESSENCE}"
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 8,
+        "x": 16,
+        "y": 28
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "basic",
+        "showUnfilled": true,
+        "valueMode": "color",
+        "namePlacement": "left",
+        "reduceOptions": {
+          "calcs": [],
+          "fields": "/^Visitors$/",
+          "values": true
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "decimals": 0,
+          "min": 0,
+          "color": {
+            "mode": "fixed",
+            "fixedColor": "blue"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "${DS_ESSENCE}"
+          },
+          "editorMode": "code",
+          "rawQuery": true,
+          "format": "table",
+          "rawSql": "SELECT os AS \"System\", count(*) AS \"Visitors\"\nFROM usage_web\nWHERE day > (now() AT TIME ZONE 'America/Toronto')::date - 30\nGROUP BY os\nORDER BY 2 DESC"
+        }
+      ]
+    }
+  ]
+}

@@ -4,6 +4,7 @@ using Essence.Ingest;
 using Essence.Ingest.Backfill;
 using Essence.Ingest.Feed;
 using Essence.Ingest.Hours;
+using Essence.Ingest.Hours.Plugins;
 using Essence.Ingest.Positions;
 using Essence.Ingest.Scheduling;
 using Essence.Ingest.Storage;
@@ -11,6 +12,14 @@ using Essence.Ranking;
 using Microsoft.Extensions.Options;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+// "--try-hours-plugin <spec.json | name>": try a plugin's spec against its source, without the database (HoursPluginTry).
+if (args is [HoursPluginTry.Argument, var tried, ..])
+{
+    var tryOptions = builder.Configuration.GetSection(HoursOptions.SectionName).Get<HoursOptions>() ?? new HoursOptions();
+    Environment.ExitCode = await HoursPluginTry.RunAsync(tried, tryOptions, Console.Out, CancellationToken.None);
+    return;
+}
 
 var connectionString = builder.Configuration.GetConnectionString("Essence");
 if (string.IsNullOrWhiteSpace(connectionString))
@@ -85,12 +94,29 @@ builder.Services.AddSingleton(provider => new HoursPacer(
     provider.GetRequiredService<IOptions<HoursOptions>>(), provider.GetRequiredService<TimeProvider>(), Random.Shared));
 builder.Services.AddScoped<HoursWriter>();
 builder.Services.AddScoped<IHoursStations>(provider => provider.GetRequiredService<HoursWriter>());
+// The plugins: the specs shipped in the image and those of the server's folder (Hours:PluginsPath), read once here. A
+// spec that can't be read is left out and logged by HoursWorker, never stopping the ingest.
+var plugins = HoursPluginCatalog.Load(
+    hours.PluginsPath,
+    new HashSet<string>(StringComparer.Ordinal)
+    {
+        CuratedHoursSource.SourceName, CostcoSource.SourceName, UltramarSource.SourceName, CircleKSource.SourceName,
+        OverpassSource.SourceName, ShellSource.SourceName,
+    });
+builder.Services.AddSingleton(plugins);
+
 // In the order of their first runs after a start, a minute apart (HoursSchedule.Stagger): Shell's, the longest, last.
 builder.Services.AddTransient<IHoursSource, CuratedHoursSource>();
 builder.Services.AddTransient<IHoursSource, CostcoSource>();
 builder.Services.AddTransient<IHoursSource, UltramarSource>();
 builder.Services.AddTransient<IHoursSource, CircleKSource>();
 builder.Services.AddTransient<IHoursSource, OverpassSource>();
+foreach (var spec in plugins.Specs)
+{
+    builder.Services.AddTransient<IHoursSource>(provider => new HoursPluginSource(
+        spec, provider.GetRequiredService<HoursClient>(), provider.GetRequiredService<HoursPacer>(), provider.GetRequiredService<IOptions<HoursOptions>>()));
+}
+
 builder.Services.AddTransient<IHoursSource, ShellSource>();
 
 AddHoursClient(builder.Services.AddHttpClient<HoursClient>(), hours.RequestTimeout);

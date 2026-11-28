@@ -33,6 +33,8 @@ services:
       ConnectionStrings__Admin: Host=postgres;Database=essence;Username=${POSTGRES_USER:-essence_admin};Password=${POSTGRES_PASSWORD};GSS Encryption Mode=Disable
       Roles__WriterPassword: ${ESSENCE_WRITER_PASSWORD:?Set ESSENCE_WRITER_PASSWORD in .env}
       Roles__ReaderPassword: ${ESSENCE_READER_PASSWORD:?Set ESSENCE_READER_PASSWORD in .env}
+      # The api's role for the usage counts (README → Usage). Empty: none, and nothing is counted.
+      Roles__UsagePassword: ${ESSENCE_USAGE_PASSWORD:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,6 +66,7 @@ services:
       <<: *dotnet-env
       ASPNETCORE_ENVIRONMENT: Production
       ConnectionStrings__Essence: Host=postgres;Database=essence;Username=essence_reader;Password=${ESSENCE_READER_PASSWORD};GSS Encryption Mode=Disable
+      ConnectionStrings__Usage: ${ESSENCE_USAGE_PASSWORD:+Host=postgres;Database=essence;Username=essence_usage;Password=${ESSENCE_USAGE_PASSWORD};GSS Encryption Mode=Disable}
       Cors__AllowedOrigins__0: ${CORS_ORIGIN:-http://localhost:5173}
       # The OpenStreetMap OAuth 2 application users link their own account with (README → Deploy → OpenStreetMap edits),
       # and where it signs in and edits: OSM_AUTH_URL and OSM_API_URL to OpenStreetMap's development server for tests.

@@ -476,9 +476,10 @@ public sealed class StationHoursView(IStringLocalizer<Strings> l, StationHoursOv
     }
 
     /// <summary>
-    /// "Costco", "Checked by Essence, November 11", "OpenStreetMap, checked 2025", "Your hours": a brand's name, the day
-    /// Essence checked its rule (its month and year when it's not this year), the year a mapper last checked OpenStreetMap's
-    /// hours (<c>check_date:opening_hours</c>, else <c>check_date</c>), or the user's own correction.
+    /// "Costco", "Checked by Essence, November 11", "OpenStreetMap, checked 2025", "Your hours": a brand's name (as the
+    /// server names its source, else as this app knows it), the day Essence checked its rule (its month and year when it's
+    /// not this year), the year a mapper last checked OpenStreetMap's hours (<c>check_date:opening_hours</c>, else
+    /// <c>check_date</c>), or the user's own correction.
     /// </summary>
     private string SourceOf(StationHours hours, TimeZoneInfo zone, DateTimeOffset now, CultureInfo culture) => hours.Source switch
     {
@@ -489,7 +490,7 @@ public sealed class StationHoursView(IStringLocalizer<Strings> l, StationHoursOv
         "curated" => l["HoursFromEssence"],
         "osm" when hours.CheckedAt is { } at => l["HoursFromOsm", Year(at, zone).ToString(culture)],
         "osm" => l["HoursFromBrand", "OpenStreetMap"],
-        _ => l["HoursFromBrand", Brands.GetValueOrDefault(hours.Source, hours.Source)],
+        _ => l["HoursFromBrand", hours.SourceLabel is { Length: > 0 } label ? label : Brands.GetValueOrDefault(hours.Source, hours.Source)],
     };
 
     private static int Year(DateTimeOffset at, TimeZoneInfo zone) => TimeZoneInfo.ConvertTime(at, zone).Year;

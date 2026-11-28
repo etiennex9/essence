@@ -7,7 +7,9 @@ The Android app: a .NET MAUI Blazor Hybrid app that hosts `Essence.UI`, the same
 - three home-screen widgets: Best near where you are (or a place you choose), your favorite stations' prices, and Best on
   a route you drive often, which can follow where you are ([below](#widgets-that-follow-where-you-are));
 - API calls through .NET's `HttpClient`, so no CORS entry is needed, each saying which build asks
-  (`Essence-Android/<version name> (<version code>)`, see [API compatibility](../../README.md#api-compatibility));
+  (`Essence-Android/<version name> (<version code>)`, see [API compatibility](../../README.md#api-compatibility)), and
+  to the Essence server only, the installation's random id (`Essence-Install`, `Services/InstallId.cs`), by which the
+  server counts installations per version ([Usage](../../README.md#usage));
 - updates from the GitHub releases of the repository that built it, which it downloads and installs itself
   ([below](#updates)).
 

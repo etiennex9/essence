@@ -1233,6 +1233,9 @@
   <data name="OsmBrandHours" xml:space="preserve">
     <value>Ce sont les heures de {0} : elles ne vont à OpenStreetMap qu’une fois vérifiées sur place.</value>
   </data>
+  <data name="OsmOpenDataHours" xml:space="preserve">
+    <value>Ces heures viennent de {0} : elles ne vont à OpenStreetMap qu’une fois vérifiées sur place.</value>
+  </data>
   <data name="OsmSameHours" xml:space="preserve">
     <value>OpenStreetMap a déjà ces heures : les envoyer dit seulement quand vous les avez vérifiées.</value>
   </data>
