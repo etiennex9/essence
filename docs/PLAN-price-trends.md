@@ -4,8 +4,8 @@ The plan of the price trends (`/stations/trends`, Best near you's area card, the
 tags, the Android alerts), with the owner's decisions and the figures the rules were set on. Settled: change a rule only
 with new measurements.
 
-> **Status (2026-11-26):** phase A is built (see "Phase A as built"); phases B to D aren't. Work in phase order: each
-> phase ships on its own. To resume: tell Claude *"Implement docs/PLAN-price-trends.md, phase B"*.
+> **Status (2026-11-27):** phases A and B are built (see "Phase A as built" and "Phase B as built"); C and D aren't.
+> Work in phase order: each phase ships on its own. To resume: tell Claude *"Implement docs/PLAN-price-trends.md, phase C"*.
 
 ## Context
 The owner wants to see price trends, not just "the lowest in the area in the last 24 h". Some of the ten ideas discussed
@@ -283,6 +283,28 @@ each simulated every 5 minutes with the rules below. The local DB covers only ab
   - About 27 strings in `Strings.resx` / `Strings.fr.resx`, with typographic ’
   - `changelog/price-trends.json`
   - The README's UI-tests row
+
+### Phase B as built
+- **One rise line, no "went up":** the card and the tags say a rise is going on until its `Until`, then stop with no
+  new answer (the pane renders again then); a rise that's over isn't told.
+- **No sentence ends on a clock time in English** ("12:05 a.m.." would read the period twice): "Prices have been going
+  up since 12:05 a.m.: …", "Around 11:45 p.m., prices here usually go up.", "Lowest in 24 h: 139.9 at Esso (until
+  12:10 a.m.)." A no-break space comes before ¢.
+- **The cheapest days are a sentence of their own**: "They’re usually lowest on Thursdays and Fridays.", or "Here,
+  prices are usually lowest on …" when the pattern says nothing else.
+- **Asked in turn** (review fixes): the first request asks the server whether it has the trends without the point
+  (`GET /stations/trends`: 400 when it has, 404 when it's older), since an older server's web container would log the
+  point; a request dropped when the pane closes is asked again when it opens; an answer more than 30 minutes old isn't
+  shown; a failure is tried again 30 seconds later at the earliest, not at each tap.
+- **Shorter figure labels:** "Yesterday" / "Last week" ("Hier" / "7 jours"), with what they compare in their tooltip:
+  "Since yesterday" was cut off in the desktop panel's 400 px.
+- **The parts of the day** are 5: at night (0–5), in the morning (5–11), around noon (11–14), in the afternoon (14–17),
+  in the evening (17–24), by the middle of the lowest hours (Montréal's 18–24 is "in the evening").
+- **Checked in the preview** against the worktree's API at a simulated 00:20 (`Clock:Now`, `?now=`): the card under the
+  tiles, the rise line, the figures, the 24-hour line, the low and the pattern; at 360×640 and 360×740, light and dark,
+  the tiles' place unchanged, the tags on one line on all three tiles and in the rows (the tags forced by a test patch
+  of the answer, since `/stations/best` reads today's prices while the trends read the simulated night), and the French
+  labels measured to fit.
 
 ### Phase C: the "Usually cheap" badge (API + UI; Android release)
 - **`src/Essence.Ranking/CheapStations.cs`:**

@@ -108,6 +108,47 @@ public static class HistorySeries
         return merged;
     }
 
+    /// <summary>
+    /// The area's lowest and median prices over the last 24 hours (<see cref="PriceTrends.Last24h"/>), for the trends card's
+    /// line: each sample holds until the next, the last until <paramref name="asOf"/>, and a gap in the data is a gap. A
+    /// series without any price is left out.
+    /// </summary>
+    public static PriceChartData Area(AreaSeries series, DateTimeOffset asOf)
+    {
+        var step = TimeSpan.FromMinutes(series.StepMinutes);
+        IReadOnlyList<PriceStep> Steps(IReadOnlyList<decimal?> samples)
+        {
+            var steps = new List<PriceStep>();
+            for (var k = 0; k < samples.Count; k++)
+            {
+                var from = series.From + k * step;
+                var to = Min(from + step, asOf);
+                if (samples[k] is not { } price || to <= from)
+                {
+                    continue;
+                }
+
+                if (steps.Count > 0 && steps[^1].To == from && steps[^1].PriceCents == price)
+                {
+                    steps[^1] = steps[^1] with { To = to };
+                }
+                else
+                {
+                    steps.Add(new PriceStep(from, to, price));
+                }
+            }
+
+            return steps;
+        }
+
+        PriceSeries[] all =
+        [
+            new("median", "median", 1, Steps(series.MedianCents)),
+            new("lowest", "lowest", 0, Steps(series.LowestCents)),
+        ];
+        return new PriceChartData(series.From, Max(asOf, series.From.AddMinutes(1)), [.. all.Where(s => s.Steps.Count > 0)]);
+    }
+
     private static DateTimeOffset Max(DateTimeOffset a, DateTimeOffset b) => a > b ? a : b;
 
     private static DateTimeOffset Min(DateTimeOffset a, DateTimeOffset b) => a < b ? a : b;

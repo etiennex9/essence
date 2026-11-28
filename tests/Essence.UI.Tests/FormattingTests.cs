@@ -6,6 +6,14 @@ namespace Essence.UI.Tests;
 public class FormattingTests
 {
     [Theory]
+    [InlineData("en-CA", 8, "+8.0")]
+    [InlineData("en-CA", -3, "\u22123.0")]
+    [InlineData("fr-CA", -2.5, "\u22122,5")]
+    [InlineData("en-CA", 0, "0.0")]
+    public void A_change_has_its_sign(string culture, double cents, string expected) =>
+        Assert.Equal(expected, Formatting.Change((decimal)cents, CultureInfo.GetCultureInfo(culture)));
+
+    [Theory]
     [InlineData("en-CA", "164.9")]
     [InlineData("fr-CA", "164,9")]
     public void Price_uses_the_culture_decimal_separator(string culture, string expected) =>

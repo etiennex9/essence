@@ -1,0 +1,84 @@
+@inject IStringLocalizer<Strings> L
+
+@* How prices move around where Best near you ranks from (AreaTrends, /stations/trends), under its tiles: a rise going on,
+   the lowest and median now and against yesterday and a week ago, the last 24 hours as a small line, the lowest of them,
+   and when prices usually go up and are lowest there. Never above the tiles: on a phone the sheet shows them under the
+   hero only just. *@
+<section class="trends" aria-labelledby="ess-trends-title">
+    <h3 class="trends-title" id="ess-trends-title">@L["TrendsTitle"]</h3>
+    @if (View.JumpText(Trends.Jump, Now, Zone) is { } jump)
+    {
+        <p class="jump">@jump</p>
+    }
+    <dl class="figures">
+        <div>
+            <dt>@L["TrendsLowest"]</dt>
+            <dd>@Formatting.Price(Trends.Now?.LowestCents, CultureInfo.CurrentCulture)</dd>
+        </div>
+        <div title="@L["TrendsMedianHelp"]">
+            <dt>@L["TrendsMedian"]</dt>
+            <dd>@Formatting.Price(Trends.Now?.MedianCents, CultureInfo.CurrentCulture)</dd>
+        </div>
+        <div title="@L["TrendsSinceYesterdayHelp"]">
+            <dt>@L["TrendsSinceYesterday"]</dt>
+            <dd class="@AreaTrendsView.ChangeTone(Trends.Yesterday)">@AreaTrendsView.Change(Trends.Yesterday)</dd>
+        </div>
+        <div title="@L["TrendsSinceLastWeekHelp"]">
+            <dt>@L["TrendsSinceLastWeek"]</dt>
+            <dd class="@AreaTrendsView.ChangeTone(Trends.LastWeek)">@AreaTrendsView.Change(Trends.LastWeek)</dd>
+        </div>
+    </dl>
+    @if (Chart is { IsEmpty: false } chart && Scale is { } scale)
+    {
+        <svg class="spark" viewBox="0 0 @Width @Height" preserveAspectRatio="none" role="img" aria-label="@L["TrendsChartLabel"]">
+            @foreach (var series in chart.Series)
+            {
+                <path class="@series.Key" d="@scale.Path(series)" vector-effect="non-scaling-stroke" />
+            }
+        </svg>
+        <p class="legend" aria-hidden="true">
+            <span><i class="swatch median"></i>@L["TrendsMedian"]</span>
+            <span><i class="swatch lowest"></i>@L["TrendsLowest"]</span>
+            <span class="span">@L["TrendsLast24h"]</span>
+        </p>
+    }
+    @if (Trends.Low is { } low)
+    {
+        <p class="low">@View.LowText(low, NameOf(low.Brand), Now, Zone)</p>
+    }
+    @if (View.PatternText(Trends.Pattern) is { } pattern)
+    {
+        <p class="pattern">@pattern</p>
+    }
+</section>
+
+@code {
+    private const double Width = 300;
+    private const double Height = 36;
+
+    [Parameter, EditorRequired]
+    public PriceTrends Trends { get; set; } = null!;
+
+    /// <summary>The area's time zone: its clock times are on it.</summary>
+    [Parameter, EditorRequired]
+    public TimeZoneInfo Zone { get; set; } = null!;
+
+    [Parameter, EditorRequired]
+    public DateTimeOffset Now { get; set; }
+
+    private AreaTrendsView View => _view ??= new AreaTrendsView(L);
+
+    private AreaTrendsView? _view;
+
+    private PriceChartData? Chart { get; set; }
+
+    private ChartScale? Scale { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        Chart = Trends is { Last24h: { } series, AsOf: { } asOf } ? HistorySeries.Area(series, asOf) : null;
+        Scale = Chart is { IsEmpty: false } chart ? new ChartScale(chart, Width, Height, 3, 3) : null;
+    }
+
+    private string NameOf(string? brand) => BrandCatalog.For(brand).Name ?? L["Independent"];
+}

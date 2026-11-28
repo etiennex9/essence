@@ -1,5 +1,7 @@
 @implements IAsyncDisposable
+@using Essence.Hours
 @inject BestNearYou Best
+@inject AreaTrends Area
 @inject CarProfiles Cars
 @inject TripState Trips
 @inject SavedPlaces Places
@@ -15,7 +17,9 @@
    where to stop, and the stations along the route. The tiles and rows choose the station the hero shows (StationChoice),
    whose Details open it. In the header, the car menu switches cars, and the info bubble says what it was all worked out
    for (essencePopup.js places, focuses and closes them). The rankings are the API's (/stations/best, /trips/best);
-   BestNearYou and TripState keep the latest, and the station chosen. *@
+   BestNearYou and TripState keep the latest, and the station chosen. Under Best near you's tiles, how prices move around
+   (AreaTrendsCard, from AreaTrends while the pane shows it), and on tiles and rows "Not up yet" while a rise goes through
+   the area. *@
 <Pane @ref="_pane" TitleId="ess-best-title" OnClose="OnClose">
     <Header>
         <h2 id="ess-best-title" class="title">@(Trip ? L["BestOnTheWay"] : L["BestNearYou"])</h2>
@@ -265,18 +269,18 @@
                             var cheapest = stations.Where(s => s.Reachable).OrderBy(s => s.PriceCents).ThenBy(s => s.CostDollars).First();
                             <div class="tiles" role="group" aria-label="@L["StationShownLabel"]">
                                 @Tile(plan.ReferenceOnTheWay ? L["NoDetour"] : L["SmallestDetour"], reference.Id, reference.Brand, reference.PriceCents,
-                                    reference.Id == shown?.Id, TripSub(reference), tag: Arrival(reference).Tag)
-                                @Tile(L["BestValue"], pick.Id, pick.Brand, pick.PriceCents, pick.Id == shown?.Id, TripSub(pick), tag: Arrival(pick).Tag)
+                                    reference.Id == shown?.Id, TripSub(reference), tag: HoursOnly(Arrival(reference).Tag))
+                                @Tile(L["BestValue"], pick.Id, pick.Brand, pick.PriceCents, pick.Id == shown?.Id, TripSub(pick), tag: HoursOnly(Arrival(pick).Tag))
                                 @if (third is not null)
                                 {
                                     @Tile(L["BiggestSaving"], third.Id, third.Brand, third.PriceCents, third.Id == shown?.Id, TripSub(third),
                                         third.OverDetourLimit ? L["OverMinutes", query.MaxDetourMinutes] : L["Saves", Money(third.SavesDollars)],
-                                        Arrival(third).Tag)
+                                        HoursOnly(Arrival(third).Tag))
                                 }
                                 else
                                 {
                                     @Tile(L["Cheapest"], cheapest.Id, cheapest.Brand, cheapest.PriceCents, cheapest.Id == shown?.Id,
-                                        cheapest.Id == pick.Id ? L["SameAsBest"] : TripSub(cheapest), tag: Arrival(cheapest).Tag)
+                                        cheapest.Id == pick.Id ? L["SameAsBest"] : TripSub(cheapest), tag: HoursOnly(Arrival(cheapest).Tag))
                                 }
                             </div>
                         }
@@ -467,16 +471,22 @@
                             </div>
                         </section>
 
+                        var trends = TrendsFor(query);
                         @if (result.Stations.Count > 1)
                         {
                             <div class="tiles" role="group" aria-label="@L["StationShownLabel"]">
                                 @Tile(L["Closest"], reference.Id, reference.Brand, reference.PriceCents, reference.Id == shown.Id, NearSub(reference),
-                                    tag: Arrival(reference).Tag)
+                                    tag: TagOf(reference, trends))
                                 @Tile(L["BestValue"], pick.Id, pick.Brand, pick.PriceCents, pick.Id == shown.Id,
-                                    pick.Id == reference.Id ? L["SameAsClosest"] : NearSub(pick), tag: Arrival(pick).Tag)
+                                    pick.Id == reference.Id ? L["SameAsClosest"] : NearSub(pick), tag: TagOf(pick, trends))
                                 @Tile(L["Cheapest"], cheapest.Id, cheapest.Brand, cheapest.PriceCents, cheapest.Id == shown.Id,
-                                    cheapest.Id == pick.Id ? L["SameAsBest"] : NearSub(cheapest), tag: Arrival(cheapest).Tag)
+                                    cheapest.Id == pick.Id ? L["SameAsBest"] : NearSub(cheapest), tag: TagOf(cheapest, trends))
                             </div>
+                        }
+
+                        @if (AreaTrendsView.Shows(trends))
+                        {
+                            <AreaTrendsCard Trends="trends!" Zone="QuebecTime.ZoneFor(query.Latitude, query.Longitude)" Now="Time.GetUtcNow()" />
                         }
 
                         var others = StationChoice.Others(result, pick);
@@ -497,7 +507,7 @@
                                                 {
                                                     <span class="tag">@L["Members"]</span>
                                                 }
-                                                @HoursTag(Arrival(station))
+                                                @StationTag(TagOf(station, trends))
                                             </span>
                                             <span class="address">@station.Address · @Away(station)</span>
                                             <span class="price">@Price(station.PriceCents)</span>
@@ -688,6 +698,7 @@
     protected override async Task OnInitializedAsync()
     {
         Best.Changed += OnChanged;
+        Area.Changed += OnChanged;
         Cars.Changed += OnChanged;
         Trips.Changed += OnChanged;
         Places.Changed += OnChanged;
@@ -719,6 +730,7 @@
         // Back from a station's details, or in a restored tab, too: the list is open when the station chosen is in it rather
         // than the pick.
         _shownTrip = Trip;
+        FollowTrends(!Trip);
         _editingRange = false;
         _allStations = Trip && Trips.SelectedId is not null;
         _announcement = null;
@@ -1006,6 +1018,55 @@
         ? _ => { }
         : @<span class="tag">@tag</span>;
 
+    /// <summary>A tile's or row's tag (<see cref="TagOf"/>): amber for its hours, green for "Not up yet".</summary>
+    private static RenderFragment StationTag((string Text, bool Good)? tag) => tag is not { } shown
+        ? _ => { }
+        : @<span class="tag @(shown.Good ? "is-good" : null)" title="@(shown.Good ? null : shown.Text)">@shown.Text</span>;
+
+    /// <summary>A trip station's tag: only its hours, rises aren't told on a trip.</summary>
+    private static (string Text, bool Good)? HoursOnly(string? hours) => hours is { } text ? (text, false) : null;
+
+    /// <summary>
+    /// A station's tag: its hours when the driver gets there ("Closes 9:30 p.m.", "Closed"), which say whether to go at all,
+    /// else "Not up yet" while a rise goes through the area and it hasn't followed; null for neither.
+    /// </summary>
+    private (string Text, bool Good)? TagOf(RankedStation station, PriceTrends? trends) =>
+        Arrival(station).Tag is { } hours ? (hours, false)
+        : AreaTrendsView.HasntGoneUp(trends, station.Id, station.PriceCents, Time.GetUtcNow()) ? (L["NotUpYet"], true)
+        : null;
+
+    /// <summary>
+    /// The trends for Best near you's answer, when they're for its area: the pane renders again when a rise going on ends
+    /// (<see cref="_refreshAt"/>), so its tags and line go away then though nothing else renders it.
+    /// </summary>
+    private PriceTrends? TrendsFor(BestQuery query)
+    {
+        var trends = Area.For(query);
+        _refreshAt = ArrivalView.Earliest(_refreshAt, AreaTrendsView.ChangesAt(trends, Time.GetUtcNow()));
+        return trends;
+    }
+
+    /// <summary>Whether the trends follow Best near you's answers: while the pane shows it, not a trip.</summary>
+    private void FollowTrends(bool follow)
+    {
+        if (follow == _followingTrends)
+        {
+            return;
+        }
+
+        _followingTrends = follow;
+        if (follow)
+        {
+            Area.Attach();
+        }
+        else
+        {
+            Area.Detach();
+        }
+    }
+
+    private bool _followingTrends;
+
     /// <summary>
     /// The stations the ranking left out for their hours, cheaper than the pick: one muted line at the end, never above the
     /// tiles. "Costco left out: closed by the time you’d get there (closes 9:30 p.m.)." Two stations of a brand left out for
@@ -1181,8 +1242,8 @@
 
     /// <summary>A tile: it puts its station on top, and it's pressed while that station is there.</summary>
     /// <param name="note">A last line, for what makes the station stand out: what it saves, or that it's past the longest detour.</param>
-    /// <param name="tag">The station's hours when the driver gets there, as rows have them: "Closes 9:30 p.m.", "Closed".</param>
-    private RenderFragment Tile(string label, long id, string? brand, decimal priceCents, bool on, string sub, string? note = null, string? tag = null) =>
+    /// <param name="tag">As rows have it (<see cref="TagOf"/>): the station's hours when the driver gets there, or "Not up yet".</param>
+    private RenderFragment Tile(string label, long id, string? brand, decimal priceCents, bool on, string sub, string? note = null, (string Text, bool Good)? tag = null) =>
         @<button type="button" class="tile @(on ? "is-on" : null)" aria-pressed="@(on ? "true" : "false")" @onclick="() => SelectAsync(id)">
             <span class="label">@label</span>
             <span class="name">@($"{NameOf(brand)} {Price(priceCents)}")</span>
@@ -1191,10 +1252,7 @@
             {
                 <span class="note">@note</span>
             }
-            @if (tag is not null)
-            {
-                <span class="tag">@tag</span>
-            }
+            @StationTag(tag)
         </button>;
 
     /// <summary>A near-you tile's line under the name: the distance and the fill-up's cost.</summary>
@@ -1257,6 +1315,8 @@
     {
         _disposed = true;
         Best.Changed -= OnChanged;
+        Area.Changed -= OnChanged;
+        FollowTrends(false);
         Cars.Changed -= OnChanged;
         Trips.Changed -= OnChanged;
         Places.Changed -= OnChanged;

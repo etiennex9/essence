@@ -1,0 +1,112 @@
+/* How prices move around: under Best near you's tiles, before Also worth it, as far below as the pane's other sections. */
+
+/* As Also worth it's title (BestPanel.razor.css), which doesn't reach in here; above the pane's own h3 rule. */
+.trends h3.trends-title {
+    margin: 0 0 6px;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+}
+
+.jump {
+    margin: 0 0 8px;
+    padding: 6px 8px;
+    border-radius: 8px;
+    background: var(--ess-warning-bg);
+    color: var(--ess-warning-text);
+    font-size: 12.5px;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.figures {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin: 0;
+}
+
+.figures div {
+    min-width: 0;
+}
+
+.figures dt {
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: var(--ess-text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.figures dd {
+    margin: 2px 0 0;
+    font-size: 14px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.figures dd.is-up {
+    color: var(--ess-warning-text);
+}
+
+.figures dd.is-down {
+    color: var(--ess-good);
+}
+
+.spark {
+    display: block;
+    width: 100%;
+    height: 36px;
+    margin-top: 8px;
+    overflow: visible;
+}
+
+.spark path {
+    fill: none;
+    stroke-width: 1.6;
+}
+
+.spark path.median,
+.swatch.median {
+    stroke: var(--ess-accent);
+    background: var(--ess-accent);
+}
+
+.spark path.lowest,
+.swatch.lowest {
+    stroke: var(--ess-good);
+    background: var(--ess-good);
+}
+
+.legend {
+    display: flex;
+    gap: 10px;
+    margin: 2px 0 0;
+    font-size: 11px;
+    color: var(--ess-text-muted);
+}
+
+.legend .span {
+    margin-left: auto;
+}
+
+.swatch {
+    display: inline-block;
+    width: 10px;
+    height: 2px;
+    margin: 0 4px 3px 0;
+    vertical-align: middle;
+}
+
+.low,
+.pattern {
+    margin: 6px 0 0;
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--ess-text-muted);
+}

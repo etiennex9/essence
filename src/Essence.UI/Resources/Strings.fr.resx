@@ -1326,4 +1326,103 @@
   <data name="OsmBrandFirstHand" xml:space="preserve">
     <value>Seulement pour ce que vous savez de première main : OpenStreetMap n’accepte ni Google Maps ni Street View comme source.</value>
   </data>
+  <data name="TrendsTitle" xml:space="preserve">
+    <value>Les prix dans le secteur</value>
+  </data>
+  <data name="TrendsLowest" xml:space="preserve">
+    <value>Le plus bas</value>
+  </data>
+  <data name="TrendsMedian" xml:space="preserve">
+    <value>Médian</value>
+  </data>
+  <data name="TrendsMedianHelp" xml:space="preserve">
+    <value>La moitié des stations sont à ce prix ou moins</value>
+  </data>
+  <data name="TrendsSinceYesterday" xml:space="preserve">
+    <value>Hier</value>
+  </data>
+  <data name="TrendsSinceLastWeek" xml:space="preserve">
+    <value>7 jours</value>
+  </data>
+  <data name="TrendsSinceYesterdayHelp" xml:space="preserve">
+    <value>Le prix médian maintenant, comparé à hier à la même heure</value>
+  </data>
+  <data name="TrendsSinceLastWeekHelp" xml:space="preserve">
+    <value>Le prix médian maintenant, comparé à il y a une semaine à la même heure</value>
+  </data>
+  <data name="TrendsChartLabel" xml:space="preserve">
+    <value>Prix le plus bas et prix médian, dernières 24 heures</value>
+  </data>
+  <data name="TrendsLast24h" xml:space="preserve">
+    <value>Dernières 24 h</value>
+  </data>
+  <data name="TrendsLow" xml:space="preserve">
+    <value>Le plus bas en 24 h : {0} chez {1}.</value>
+  </data>
+  <data name="TrendsLowNow" xml:space="preserve">
+    <value>Le plus bas en 24 h : {0} chez {1}, encore maintenant.</value>
+  </data>
+  <data name="TrendsLowUntil" xml:space="preserve">
+    <value>Le plus bas en 24 h : {0} chez {1} (jusqu’à {2}).</value>
+  </data>
+  <data name="TrendsLowUntilYesterday" xml:space="preserve">
+    <value>Le plus bas en 24 h : {0} chez {1} (jusqu’à hier à {2}).</value>
+  </data>
+  <data name="TrendsJump" xml:space="preserve">
+    <value>Les prix montent depuis {3} : {0} stations sur {1} ont augmenté d’environ {2} ¢.</value>
+  </data>
+  <data name="TrendsPatternBoth" xml:space="preserve">
+    <value>Ici, les prix montent habituellement vers {0} et sont au plus bas {1}.</value>
+  </data>
+  <data name="TrendsPatternJump" xml:space="preserve">
+    <value>Ici, les prix montent habituellement vers {0}.</value>
+  </data>
+  <data name="TrendsPatternLowest" xml:space="preserve">
+    <value>Ici, les prix sont habituellement au plus bas {0}.</value>
+  </data>
+  <data name="TrendsPatternDays" xml:space="preserve">
+    <value>Ils sont habituellement au plus bas le {0} et le {1}.</value>
+  </data>
+  <data name="TrendsPatternDaysOnly" xml:space="preserve">
+    <value>Ici, les prix sont habituellement au plus bas le {0} et le {1}.</value>
+  </data>
+  <data name="DayPartNight" xml:space="preserve">
+    <value>la nuit</value>
+  </data>
+  <data name="DayPartMorning" xml:space="preserve">
+    <value>le matin</value>
+  </data>
+  <data name="DayPartMidday" xml:space="preserve">
+    <value>vers midi</value>
+  </data>
+  <data name="DayPartAfternoon" xml:space="preserve">
+    <value>l’après-midi</value>
+  </data>
+  <data name="DayPartEvening" xml:space="preserve">
+    <value>en soirée</value>
+  </data>
+  <data name="Weekday1" xml:space="preserve">
+    <value>lundi</value>
+  </data>
+  <data name="Weekday2" xml:space="preserve">
+    <value>mardi</value>
+  </data>
+  <data name="Weekday3" xml:space="preserve">
+    <value>mercredi</value>
+  </data>
+  <data name="Weekday4" xml:space="preserve">
+    <value>jeudi</value>
+  </data>
+  <data name="Weekday5" xml:space="preserve">
+    <value>vendredi</value>
+  </data>
+  <data name="Weekday6" xml:space="preserve">
+    <value>samedi</value>
+  </data>
+  <data name="Weekday7" xml:space="preserve">
+    <value>dimanche</value>
+  </data>
+  <data name="NotUpYet" xml:space="preserve">
+    <value>Pas encore monté</value>
+  </data>
 </root>

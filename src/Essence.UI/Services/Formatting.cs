@@ -15,6 +15,14 @@ public static class Formatting
     /// <summary>Cents per litre with one decimal in the culture's style ("164.9", "164,9"), or a dash when there's no price.</summary>
     public static string Price(decimal? cents, IFormatProvider culture) => cents is { } c ? c.ToString("0.0", culture) : "—";
 
+    /// <summary>A change in cents per litre with its sign, one decimal: "+8.0", "−3.0" (a minus sign, not a hyphen), "0.0".</summary>
+    public static string Change(decimal cents, IFormatProvider culture) => cents switch
+    {
+        > 0 => "+" + cents.ToString("0.0", culture),
+        < 0 => "−" + (-cents).ToString("0.0", culture),
+        _ => 0m.ToString("0.0", culture),
+    };
+
     /// <summary>
     /// Dollars to the cent in the culture's style, with the dollar sign where the culture puts its currency symbol: "$64.75",
     /// "64,75 $". Plain "C" would show £ or € to a browser set to British English or France's French.
