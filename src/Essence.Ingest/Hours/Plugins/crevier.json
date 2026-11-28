@@ -1,0 +1,14 @@
+{
+  // Crevier's stations: Pétroles Crevier was sold to Parkland in 2021, whose journie.ca locator (Ultramar's too) lists
+  // them, about 80, 79 in Québec in November 2026. One request; robots.txt allows everything. Its forecourt's hours come
+  // first; the locator writes 00:00 to 12:00 on days it doesn't say (as Ultramar's), which leaves the station out.
+  "name": "crevier",
+  "label": "Crevier",
+  "kind": "brand",
+  "brand": "Crevier",
+  "link": "https://journie.ca/ultramar/qc-fr",
+  "url": "https://journie.ca/ultramar/api/locations/nearest?country=CA&pageSize=1000&lat=46.8&lon=-71.3&range=100000000&brand=Crevier",
+  "province": "QC",
+  "matchRadiusM": 150,
+  "hours": { "unknown": [ "00:00-12:00" ] }
+}

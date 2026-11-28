@@ -260,6 +260,18 @@ public sealed class StationHoursViewTests : IDisposable
     }
 
     [Theory]
+    [InlineData("crevier", "Crevier", "en-CA", "Crevier")]
+    [InlineData("harnois", "Harnois Énergies", "fr-CA", "Harnois Énergies")]
+    [InlineData("circlek", "Couche-Tard", "en-CA", "Couche-Tard")]
+    [InlineData("crevier", null, "en-CA", "crevier")]
+    public void A_source_is_named_as_the_server_names_it(string source, string? label, string culture, string expected)
+    {
+        Culture(culture);
+
+        Assert.Equal(expected, Describe(Costco() with { Source = source, SourceLabel = label }, At(12, 0)).Source);
+    }
+
+    [Theory]
     [InlineData("https://www.costco.ca/w/-/qc/laval/1182", true)]
     [InlineData("javascript:alert(1)", false)]
     [InlineData("costco.ca", false)]

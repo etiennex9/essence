@@ -1,9 +1,11 @@
+using Essence.Ranking;
+
 namespace Essence.Ingest.Hours;
 
 /// <summary>
-/// Where stations' opening hours come from: a brand's locator, OpenStreetMap, or rules written by hand. Fetching and
-/// reading are apart, so the last download kept on disk (<see cref="HoursCache"/>) can be read and matched again
-/// without the network.
+/// Where stations' opening hours come from: a brand's locator, OpenStreetMap, rules written by hand, or a plugin
+/// (<see cref="Plugins.HoursPluginSource"/>). Fetching and reading are apart, so the last download kept on disk
+/// (<see cref="HoursCache"/>) can be read and matched again without the network.
 /// </summary>
 public interface IHoursSource
 {
@@ -11,6 +13,12 @@ public interface IHoursSource
     string Name { get; }
 
     bool Enabled { get; }
+
+    /// <summary>
+    /// How the source's hours rank, whether they're trusted, and how the app names it: stored in <c>hours_sources</c> on
+    /// each start, for the API. The sources written in code give <see cref="HoursPrecedence.BuiltIn"/>'s.
+    /// </summary>
+    HoursSourceProfile Profile { get; }
 
     /// <summary>
     /// The source's rules come with the image, written by hand: nothing is downloaded. It runs on each start, whatever the
@@ -44,6 +52,36 @@ public interface IHoursSource
     /// </summary>
     /// <exception cref="HoursFormatException">The download isn't what the source sends.</exception>
     HoursParse Parse(byte[] raw);
+
+    /// <summary>
+    /// Whether the download kept on disk was made as the source makes one now. A plugin's isn't once its spec changed what's
+    /// asked or kept (<see cref="Plugins.HoursPluginSource.Fingerprint"/>), or when the plugin took over a source in code
+    /// and finds its download: it isn't matched again, and the source runs as the worker starts rather than at its next
+    /// turn, up to a week away.
+    /// </summary>
+    DownloadKept Kept(byte[] raw) => DownloadKept.Current;
+
+    /// <summary>
+    /// What of a plugin's spec makes its downloads (<see cref="Plugins.HoursPluginSource.Fingerprint"/>), kept with its last
+    /// good run (<c>hours_sources.good_spec</c>): a run under another is gated as a new source's. Null for a source in code.
+    /// </summary>
+    string? SpecFingerprint => null;
+}
+
+/// <summary>What a download kept on disk is to its source now (<see cref="IHoursSource.Kept"/>).</summary>
+public enum DownloadKept
+{
+    /// <summary>Made as the source makes one now.</summary>
+    Current,
+
+    /// <summary>A plugin's, made under another version of its spec: the owner changed what it asks or keeps.</summary>
+    OtherSpec,
+
+    /// <summary>A plugin's, made under its spec by another version of the engine (<see cref="Plugins.HoursPluginSource.Engine"/>).</summary>
+    OtherEngine,
+
+    /// <summary>Not one the source makes at all: another source's of the same name (a source in code a plugin took over).</summary>
+    OtherFormat,
 }
 
 public abstract record HoursFetch

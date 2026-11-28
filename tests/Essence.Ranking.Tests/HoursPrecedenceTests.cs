@@ -205,4 +205,119 @@ public class HoursPrecedenceTests
         Assert.Equal(Now.AddDays(-2), HoursPrecedence.StaleSince(lastSuccesses, Now.AddDays(-2).AddTicks(1)));
         Assert.Null(HoursPrecedence.StaleSince(new Dictionary<string, DateTimeOffset> { [HoursPrecedence.Curated] = Now.AddDays(-90) }, Now));
     }
+
+    private static readonly Dictionary<string, HoursSourceProfile> Plugins = new()
+    {
+        ["crevier"] = new("Crevier", HoursSourceKind.Brand, HoursSourceProfile.DefaultBrandRank),
+        ["villedata"] = new("Données de la ville", HoursSourceKind.OpenData, HoursSourceProfile.DefaultOpenDataRank),
+    };
+
+    private static Dictionary<string, DateTimeOffset> WithPlugins(int daysAgo = 1) =>
+        new(Fresh) { ["crevier"] = Now.AddDays(-daysAgo), ["villedata"] = Now.AddDays(-daysAgo) };
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(3)]
+    [InlineData(4)]
+    [InlineData(5)]
+    [InlineData(6)]
+    public void A_brand_s_plugin_comes_after_the_brands_in_code_and_before_OpenStreetMap_and_open_data_after_it(int index)
+    {
+        HoursRow[] ranked =
+        [
+            Row(HoursPrecedence.CircleK), Row("crevier"), Row(HoursPrecedence.Osm, confirmed: true), Row(HoursPrecedence.Osm, confirmed: false),
+            Row("villedata", confirmed: true), Row("villedata", confirmed: false), Row("acme"),
+        ];
+
+        var chosen = HoursPrecedence.Choose(ranked[index..].Reverse(), WithPlugins(), Now, profiles: Plugins)[Laval];
+
+        Assert.Same(ranked[index], chosen.Row);
+    }
+
+    [Theory]
+    [InlineData("crevier", true)]
+    [InlineData("villedata", false)]
+    public void A_brand_s_plugin_is_trusted_and_open_data_only_shown(string source, bool trusted) =>
+        Assert.Equal(trusted, HoursPrecedence.Choose([Row(source)], WithPlugins(), Now, profiles: Plugins)[Laval].Trusted);
+
+    [Fact]
+    public void A_stale_plugin_falls_behind_fresh_OpenStreetMap_and_isn_t_trusted()
+    {
+        var chosen = HoursPrecedence.Choose(
+            [Row("crevier"), Row(HoursPrecedence.Osm, confirmed: false)], WithPlugins(daysAgo: 30), Now, profiles: Plugins)[Laval];
+
+        Assert.Equal((HoursPrecedence.Osm, false), (chosen.Row.Source, chosen.Trusted));
+    }
+
+    [Fact]
+    public void A_plugin_s_spec_may_rank_it_anywhere_and_one_taking_a_built_in_s_name_and_rank_ranks_as_it_did()
+    {
+        var first = new Dictionary<string, HoursSourceProfile> { ["crevier"] = new("Crevier", HoursSourceKind.Brand, 5) };
+        Assert.Equal("crevier", HoursPrecedence.Choose([Row(HoursPrecedence.Costco), Row("crevier")], WithPlugins(), Now, profiles: first)[Laval].Row.Source);
+
+        // Ultramar's locator as a plugin, stored with Ultramar's name and rank: still after the curated rules, before Shell.
+        var converted = new Dictionary<string, HoursSourceProfile> { [HoursPrecedence.Ultramar] = new("Ultramar", HoursSourceKind.Brand, 30) };
+        Assert.Equal(
+            HoursPrecedence.Curated,
+            HoursPrecedence.Choose([Row(HoursPrecedence.Ultramar), Row(HoursPrecedence.Curated)], Fresh, Now, profiles: converted)[Laval].Row.Source);
+        Assert.Equal(
+            HoursPrecedence.Ultramar,
+            HoursPrecedence.Choose([Row(HoursPrecedence.Shell), Row(HoursPrecedence.Ultramar)], Fresh, Now, profiles: converted)[Laval].Row.Source);
+    }
+
+    [Fact]
+    public void The_sources_in_code_keep_their_order_as_profiles_with_the_plugins_defaults_between()
+    {
+        var ranks = new[] { HoursPrecedence.Costco, HoursPrecedence.Curated, HoursPrecedence.Ultramar, HoursPrecedence.Shell, HoursPrecedence.CircleK, HoursPrecedence.Osm }
+            .Select(s => HoursPrecedence.BuiltIn[s].Rank)
+            .ToList();
+
+        Assert.Equal(ranks.Order(), ranks);
+        Assert.InRange(HoursSourceProfile.DefaultBrandRank, HoursPrecedence.BuiltIn[HoursPrecedence.CircleK].Rank + 1, HoursPrecedence.BuiltIn[HoursPrecedence.Osm].Rank - 1);
+        Assert.True(HoursSourceProfile.DefaultOpenDataRank > HoursPrecedence.BuiltIn[HoursPrecedence.Osm].Rank + 1);
+    }
+
+    [Fact]
+    public void The_ranks_stored_are_these_exactly()
+    {
+        // Stored in hours_sources and documented (README, Hours/Plugins/README.md): a plugin that takes over a source's name
+        // takes its rank, so a change here is a change of the served order, not a detail.
+        Assert.Equal(
+            [
+                ("costco", "Costco", HoursSourceKind.Brand, 10), ("curated", "Essence", HoursSourceKind.Curated, 20),
+                ("ultramar", "Ultramar", HoursSourceKind.Brand, 30), ("shell", "Shell", HoursSourceKind.Brand, 31),
+                ("circlek", "Couche-Tard", HoursSourceKind.Brand, 40), ("osm", "OpenStreetMap", HoursSourceKind.Osm, 60),
+            ],
+            HoursPrecedence.BuiltIn.OrderBy(p => p.Value.Rank).Select(p => (p.Key, p.Value.Label, p.Value.Kind, p.Value.Rank)));
+        Assert.Equal((50, 80, 90), (HoursSourceProfile.DefaultBrandRank, HoursSourceProfile.DefaultOpenDataRank, HoursPrecedence.UnknownRank));
+    }
+
+    [Theory]
+    [InlineData(60, true, "acme")]
+    [InlineData(61, true, HoursPrecedence.Osm)]
+    [InlineData(61, false, "acme")]
+    [InlineData(62, false, HoursPrecedence.Osm)]
+    public void OpenStreetMap_ranks_60_confirmed_and_61_not(int rank, bool confirmed, string expected)
+    {
+        // "acme" sorts before "osm": at the same rank it's chosen, so the rank at which it stops being chosen is OSM's.
+        var profiles = new Dictionary<string, HoursSourceProfile> { ["acme"] = new("Acme", HoursSourceKind.Brand, rank) };
+
+        var chosen = HoursPrecedence.Choose([Row(HoursPrecedence.Osm, confirmed: confirmed), Row("acme")], Fresh, Now, profiles: profiles);
+
+        Assert.Equal(expected, chosen[Laval].Row.Source);
+    }
+
+    [Theory]
+    [InlineData(HoursSourceKind.Brand, "brand")]
+    [InlineData(HoursSourceKind.Curated, "curated")]
+    [InlineData(HoursSourceKind.Osm, "osm")]
+    [InlineData(HoursSourceKind.OpenData, "open-data")]
+    public void Kinds_are_stored_by_name(HoursSourceKind kind, string name)
+    {
+        Assert.Equal(name, HoursSourceKinds.Name(kind));
+        Assert.True(HoursSourceKinds.TryParse(name.ToUpperInvariant(), out var parsed));
+        Assert.Equal(kind, parsed);
+    }
 }

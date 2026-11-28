@@ -50,6 +50,7 @@ public sealed class ShellSource(HoursClient client, HoursPacer pacer, IHoursStat
 
     public string Name => SourceName;
     public bool Enabled => options.Value.Shell.Enabled;
+    public Essence.Ranking.HoursSourceProfile Profile => Essence.Ranking.HoursPrecedence.BuiltIn[SourceName];
     public bool ShippedInImage => false;
     public double MatchRadiusM => 150;
     public double? OtherBrandReachM => null;

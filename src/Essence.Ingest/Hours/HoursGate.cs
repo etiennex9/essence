@@ -17,6 +17,19 @@ public static class HoursGate
             ? CheckShipped(parsed.Warnings.Count)
             : Check(parsed.Records.Count, matched, lastGoodMatched, minShareOfLastGood);
 
+    /// <summary>
+    /// What a run of <paramref name="source"/> is checked against: the last good run's matches, unless that run was made
+    /// under another version of the plugin's spec (<paramref name="goodSpec"/>, <see cref="IHoursSource.SpecFingerprint"/>).
+    /// That change is the owner's, so the run is checked as a new source's: a spec narrowed on purpose (a filter, another
+    /// province) isn't rejected for matching fewer stations, though one that gives no records still is. A new version of
+    /// the engine isn't the owner's, and isn't a change of spec. Nor is a plugin that took over a source in code, whose
+    /// last good run has no spec: it's checked against that source's, so a conversion that reads less is rejected and the
+    /// class's rows keep serving.
+    /// </summary>
+    /// <param name="goodSpec">The spec the last good run was made under (<c>hours_sources.good_spec</c>); null for none, or a source in code's.</param>
+    public static int? Baseline(IHoursSource source, string? goodSpec, int? lastGoodMatched) =>
+        source.SpecFingerprint is { } spec && goodSpec is not null && goodSpec != spec ? null : lastGoodMatched;
+
     /// <summary>A source that downloads its records.</summary>
     /// <param name="matched">
     /// The stations matched but for those matched by location only (<see cref="MatchResult.Counted"/>), as

@@ -13,6 +13,15 @@ public sealed class HoursOptions
     /// <summary>Where each source's last good download is kept (<c>&lt;source&gt;/latest.raw</c>), to match it again without the network.</summary>
     public string CachePath { get; set; } = "/data/hours";
 
+    /// <summary>
+    /// A folder of hours plugins' specs (<c>*.json</c>) to run besides those shipped in the image, read on each start: one
+    /// named as a shipped one replaces it. Empty, or a folder that isn't there: only the shipped ones.
+    /// </summary>
+    public string PluginsPath { get; set; } = "/data/hours-plugins";
+
+    /// <summary><c>Hours:Plugins:&lt;name&gt;:Enabled</c>: a plugin turned off here isn't run, whatever its spec says.</summary>
+    public Dictionary<string, HoursSourceOptions> Plugins { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>Sent with every request. Overpass refuses generic ones; a contact URL can be added in parentheses.</summary>
     public string UserAgent { get; set; } = "Essence-Ingest/1.0 (station hours)";
 

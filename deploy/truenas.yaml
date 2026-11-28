@@ -7,6 +7,8 @@
 #     - postgres: its own dataset with the Generic preset (POSIX permissions), owned by 999:999, mode 700. Postgres won't
 #       start in a folder that inherits NFSv4 ACLs (the Apps preset).
 #     - data: owned by 1654:1654 (ingest), which creates the archive and hours subfolders in it. NFSv4 ACLs are fine here.
+#       To add an hours source without a new image, put its plugin spec (a .json file) in its hours-plugins folder and
+#       restart the app (README → Opening hours; src/Essence.Ingest/Hours/Plugins/README.md).
 #   - 30180, if that port is taken. Point the reverse proxy for <your domain> at http://<NAS address>:30180:
 #     it serves the map and, under /api/, the API.
 # And create the essence-db network once, which a Grafana app joins to read the usage counts (README → Usage): in System

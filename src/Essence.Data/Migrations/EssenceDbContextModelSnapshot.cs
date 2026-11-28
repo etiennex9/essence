@@ -172,6 +172,40 @@ namespace Essence.Data.Migrations
                     b.ToTable("hours_imports", (string)null);
                 });
 
+            modelBuilder.Entity("Essence.Data.Entities.HoursSourceEntry", b =>
+                {
+                    b.Property<string>("Source")
+                        .HasColumnType("text")
+                        .HasColumnName("source");
+
+                    b.Property<string>("GoodSpec")
+                        .HasColumnType("text")
+                        .HasColumnName("good_spec");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Label")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("label");
+
+                    b.Property<int>("Rank")
+                        .HasColumnType("integer")
+                        .HasColumnName("rank");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Source")
+                        .HasName("pk_hours_sources");
+
+                    b.ToTable("hours_sources", (string)null);
+                });
+
             modelBuilder.Entity("Essence.Data.Entities.Import", b =>
                 {
                     b.Property<long>("Id")

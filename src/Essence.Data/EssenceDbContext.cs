@@ -20,6 +20,7 @@ public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options)
     public DbSet<Import> Imports => Set<Import>();
     public DbSet<StationHoursEntry> StationHours => Set<StationHoursEntry>();
     public DbSet<HoursImport> HoursImports => Set<HoursImport>();
+    public DbSet<HoursSourceEntry> HoursSources => Set<HoursSourceEntry>();
     public DbSet<PositionCandidate> PositionCandidates => Set<PositionCandidate>();
     public DbSet<AndroidUsage> AndroidUsage => Set<AndroidUsage>();
     public DbSet<WebUsage> WebUsage => Set<WebUsage>();
@@ -104,6 +105,8 @@ public sealed class EssenceDbContext(DbContextOptions<EssenceDbContext> options)
             // Each source's latest runs: its last success, and the failures since.
             e.HasIndex(x => new { x.Source, x.FinishedAt });
         });
+
+        modelBuilder.Entity<HoursSourceEntry>(e => e.HasKey(x => x.Source));
 
         modelBuilder.Entity<PositionCandidate>(e =>
         {
