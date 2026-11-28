@@ -29,6 +29,16 @@ public static class TrendEndpoints
         + "on 75 % of the weeks, over 6 weeks at least of the history kept). No 304 once the data is more than 10 minutes "
         + "old: the answer depends on the time.";
 
+    internal const string UsuallyCheapDescription =
+        "The stations whose price for the fuel is usually among the cheapest around them. Every half-hour of the last 30 "
+        + "days that the data covers, each operating station's price is ranked among those of the operating stations within "
+        + "10 km (Costco, members only, aside; those at the same price count half), when 4 of them at least had one. It's "
+        + "usually cheap when it was in the cheapest fifth at 40 % of those moments, with a week of them at least. Computed "
+        + "once a day for each fuel, from the price history read as `/stations/trends` reads it. A usually cheap station is "
+        + "left out while it's dear: at the latest import, more of those stations with a price were cheaper than dearer "
+        + "(4 of them at least). No 304 once the data is more than 10 minutes old: a new day's stations may come with no "
+        + "new data.";
+
     public static IEndpointRouteBuilder MapTrendEndpoints(this IEndpointRouteBuilder app)
     {
         var group = app.MapGroup("/stations").WithTags("Stations").RequireRateLimiting(RateLimiting.PolicyName);
@@ -36,7 +46,36 @@ public static class TrendEndpoints
             .WithSummary("How prices are moving around a point")
             .WithDescription(TrendsDescription + " " + StationEndpoints.PositionDescription)
             .WithDataVersion(clockDependent: true);
+        group.MapGet("/usually-cheap", UsuallyCheap)
+            .WithSummary("The stations usually among the cheapest around them")
+            .WithDescription(UsuallyCheapDescription)
+            .WithDataVersion(clockDependent: true);
         return app;
+    }
+
+    private static async Task<Results<Ok<UsuallyCheapStations>, ValidationProblem>> UsuallyCheap(
+        EssenceDbContext db,
+        StationSnapshot snapshot,
+        PriceTimeline timeline,
+        UsuallyCheapCache cheap,
+        TimeProvider time,
+        CancellationToken cancellationToken,
+        [Description("Régulier, Super or Diesel (accents optional). Required.")] string? fuel = null)
+    {
+        var errors = new QueryErrors().Require(!string.IsNullOrWhiteSpace(fuel), nameof(fuel), "Required.");
+        var fuelType = await StationEndpoints.ResolveFuelAsync(db, fuel, errors, cancellationToken);
+        if (errors.Any || fuelType is null)
+        {
+            return errors.ToProblem();
+        }
+
+        var current = await snapshot.GetAsync(db, cancellationToken);
+        var window = await timeline.GetAsync(db, current.Version, cancellationToken);
+        var found = await cheap.GetAsync(fuelType.Id, current, window, cancellationToken);
+        var ids = found is null
+            ? []
+            : CheapStations.NotDearNow(found, id => window.Of(id, fuelType.Id), window.Coverage, time.GetUtcNow());
+        return TypedResults.Ok(new UsuallyCheapStations(fuelType.Code, found?.AsOf, found?.Days ?? 0, ids));
     }
 
     private static async Task<Results<Ok<PriceTrends>, ValidationProblem>> Trends(

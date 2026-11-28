@@ -40,7 +40,7 @@
     background: #fff;
 }
 
-.name,
+.name .brand,
 .address {
     min-width: 0;
     overflow: hidden;
@@ -48,10 +48,37 @@
     white-space: nowrap;
 }
 
+/*
+ * The name stays on one line: the tag goes under it when it doesn't fit beside it, and one wider than the column (in
+ * French) reaches under the price, which is on the line above.
+ */
 .name {
     grid-area: name;
+    min-width: 0;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 3px 6px;
     font-size: 15px;
     font-weight: 500;
+}
+
+.name .brand {
+    max-width: 100%;
+}
+
+/* Usually cheap: good news, in green, as Best near you's tags. */
+.tag {
+    flex: none;
+    white-space: nowrap;
+    padding: 3px 5px;
+    border-radius: 4px;
+    font: 600 10px/1 var(--ess-font);
+}
+
+.tag.is-good {
+    background: var(--ess-good-bg);
+    color: var(--ess-good);
 }
 
 .address {

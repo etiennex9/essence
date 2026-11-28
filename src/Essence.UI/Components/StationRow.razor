@@ -1,6 +1,7 @@
 @implements IDisposable
 @inject StationHoursView HoursViews
 @inject StationHoursOverrides Overrides
+@inject UsuallyCheap Cheap
 @inject IStringLocalizer<Strings> L
 
 @* A station in the favorites or the comparison: the row's main button, which opens its details. The parent puts it in a
@@ -16,7 +17,13 @@
             @_brand.Monogram
         }
     </span>
-    <span class="name">@Name</span>
+    <span class="name">
+        <span class="brand">@Name</span>
+        @if (IsUsuallyCheap)
+        {
+            <span class="tag is-good" title="@L["UsuallyCheapHelp"]">@L["UsuallyCheap"]</span>
+        }
+    </span>
     @if (Error == ApiError.NotFound)
     {
         <span class="address is-gone">@L["Inactive"]</span>
@@ -100,11 +107,18 @@
 
     private string Name => NameOf(Station, L);
 
+    /// <summary>Usually among the cheapest around it for the fuel shown: said only while its price is.</summary>
+    private bool IsUsuallyCheap => Error != ApiError.NotFound && Price is { IsAvailable: true } price && Cheap.Is(Station.Id, price.Fuel);
+
     private string Distance => (UserLocation, Station) is ({ } user, { Latitude: { } lat, Longitude: { } lon })
         ? $" · {Geo.DistanceKm(user, new GeoPoint(lat, lon)).ToString("0.0", CultureInfo.CurrentCulture)} km"
         : "";
 
-    protected override void OnInitialized() => Overrides.Changed += OnHoursCorrected;
+    protected override void OnInitialized()
+    {
+        Overrides.Changed += OnHoursCorrected;
+        Cheap.Changed += OnCheapChanged;
+    }
 
     protected override void OnParametersSet()
     {
@@ -122,5 +136,11 @@
         StateHasChanged();
     });
 
-    public void Dispose() => Overrides.Changed -= OnHoursCorrected;
+    private void OnCheapChanged() => _ = InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        Overrides.Changed -= OnHoursCorrected;
+        Cheap.Changed -= OnCheapChanged;
+    }
 }

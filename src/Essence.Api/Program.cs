@@ -23,6 +23,7 @@ builder.Services.AddSingleton<StationSnapshot>();
 // The trends' price history and area patterns, in memory: one copy shared by every request (PriceTimeline).
 builder.Services.AddSingleton<PriceTimeline>();
 builder.Services.AddSingleton<TrendPatterns>();
+builder.Services.AddSingleton<UsuallyCheapCache>();
 builder.Services.AddOsrmRouting(builder.Configuration);
 builder.Services.AddPhotonGeocoding(builder.Configuration);
 builder.Services.AddDataServiceMonitor(

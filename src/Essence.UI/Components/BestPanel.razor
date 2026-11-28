@@ -2,6 +2,7 @@
 @using Essence.Hours
 @inject BestNearYou Best
 @inject AreaTrends Area
+@inject UsuallyCheap Cheap
 @inject CarProfiles Cars
 @inject TripState Trips
 @inject SavedPlaces Places
@@ -307,12 +308,12 @@
                                                 </span>
                                                 @Logo(station.Brand, "logo small")
                                                 <span class="name">
-                                                    @NameOf(station.Brand)
+                                                    <span class="brand">@NameOf(station.Brand)</span>
                                                     @if (station.MembersOnly)
                                                     {
                                                         <span class="tag">@L["Members"]</span>
                                                     }
-                                                    @HoursTag(Arrival(station))
+                                                    @RowTag(HoursOnly(Arrival(station).Tag), station.Id, query.Fuel)
                                                 </span>
                                                 <span class="address">@station.Address</span>
                                                 <span class="price">@Price(station.PriceCents)</span>
@@ -502,12 +503,12 @@
                                                 @onclick="() => SelectAsync(station.Id)">
                                             @Logo(station.Brand, "logo small")
                                             <span class="name">
-                                                @NameOf(station.Brand)
+                                                <span class="brand">@NameOf(station.Brand)</span>
                                                 @if (station.MembersOnly)
                                                 {
                                                     <span class="tag">@L["Members"]</span>
                                                 }
-                                                @StationTag(TagOf(station, trends))
+                                                @RowTag(TagOf(station, trends), station.Id, query.Fuel)
                                             </span>
                                             <span class="address">@station.Address · @Away(station)</span>
                                             <span class="price">@Price(station.PriceCents)</span>
@@ -699,6 +700,7 @@
     {
         Best.Changed += OnChanged;
         Area.Changed += OnChanged;
+        Cheap.Changed += OnChanged;
         Cars.Changed += OnChanged;
         Trips.Changed += OnChanged;
         Places.Changed += OnChanged;
@@ -1013,15 +1015,19 @@
         ? _ => { }
         : @<span>@(" · ")<span class="closes">@suffix</span></span>;
 
-    /// <summary>A row's tag, beside Members: "Closes 9:30 p.m." or "Closed" when the driver gets there.</summary>
-    private static RenderFragment HoursTag(ArrivalView arrival) => arrival.Tag is not { } tag
-        ? _ => { }
-        : @<span class="tag">@tag</span>;
-
     /// <summary>A tile's or row's tag (<see cref="TagOf"/>): amber for its hours, green for "Not up yet".</summary>
     private static RenderFragment StationTag((string Text, bool Good)? tag) => tag is not { } shown
         ? _ => { }
         : @<span class="tag @(shown.Good ? "is-good" : null)" title="@(shown.Good ? null : shown.Text)">@shown.Text</span>;
+
+    /// <summary>
+    /// A row's tag, beside Members: as a tile's (<paramref name="tag"/>), else "Usually cheap" when the station usually is
+    /// among the cheapest around it for the fuel. Tiles have no room for that one, and the hero none at all.
+    /// </summary>
+    private RenderFragment RowTag((string Text, bool Good)? tag, long stationId, string fuel) =>
+        tag is not null ? StationTag(tag)
+        : Cheap.Is(stationId, fuel) ? @<span class="tag is-good" title="@L["UsuallyCheapHelp"]">@L["UsuallyCheap"]</span>
+        : _ => { };
 
     /// <summary>A trip station's tag: only its hours, rises aren't told on a trip.</summary>
     private static (string Text, bool Good)? HoursOnly(string? hours) => hours is { } text ? (text, false) : null;
@@ -1316,6 +1322,7 @@
         _disposed = true;
         Best.Changed -= OnChanged;
         Area.Changed -= OnChanged;
+        Cheap.Changed -= OnChanged;
         FollowTrends(false);
         Cars.Changed -= OnChanged;
         Trips.Changed -= OnChanged;

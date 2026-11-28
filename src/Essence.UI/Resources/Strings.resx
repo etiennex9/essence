@@ -1425,4 +1425,10 @@
   <data name="NotUpYet" xml:space="preserve">
     <value>Not up yet</value>
   </data>
+  <data name="UsuallyCheap" xml:space="preserve">
+    <value>Usually cheap</value>
+  </data>
+  <data name="UsuallyCheapHelp" xml:space="preserve">
+    <value>Among the cheapest fifth of the stations within 10 km at least 40 % of the time over the last 30 days, and not dearer than most of them now</value>
+  </data>
 </root>

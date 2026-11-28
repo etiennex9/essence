@@ -524,14 +524,23 @@
     align-self: center;
 }
 
+/* The name stays on one line: its tags go under it when they don't fit beside it. */
 .row .name {
     grid-area: name;
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 6px;
+    gap: 3px 6px;
     min-width: 0;
     font-size: 14px;
     font-weight: 500;
+}
+
+.row .name .brand {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .row .address {
